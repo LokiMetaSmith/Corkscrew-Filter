@@ -23,16 +23,16 @@
 
 
 // Params (mm), degrees 
-filter_height_mm = 30;
+filter_height_mm = 40;
 // filter_twist_degrees = 360*6;
-number_of_complete_revolutions = 4;
+number_of_complete_revolutions = 6;
 filter_twist_degrees = 360*number_of_complete_revolutions;
 screw_OD_mm = 2;
 screw_ID_mm = 1;
-slit_axial_length_mm = 2;
+slit_axial_length_mm = 0.75;
 cell_wall_mm = 1;
 hex_cell_diam_mm = 10;
-FN_RES = 40;
+FN_RES = 30;
 bin_height_z_mm = 30;
 num_screws = 1;
 num_bins = 3;
@@ -41,15 +41,26 @@ bin_breadth_x_mm = (num_screws -1) * screw_center_separation_mm + screw_center_s
 
 pitch_mm = filter_height_mm / number_of_complete_revolutions; // Is the the axial distance in mm per degree
 
+scale_ratio = 1.4; // This is used to acheive a more circular air path
+
 
 bin_wall_thickness_mm = 1;
 
 // CONTROL_VARIABLES
 USE_SCREW_ONLY          = 0;
+USE_VOIDLESS_SCREW      = 0;
 USE_FULL_BINS           = 1;
-USE_KNIFE_THRU_SCREWS   = 1;
+USE_KNIFE_THRU_SCREWS   = 0;
 USE_KNIFE_LOW           = 0;
+USE_KNIFE_SIDE          = 1;
 USE_SCREW_KNIFE         = 0;
+USE_BINCAP              = 1;
+
+if (USE_BINCAP) {
+    translate([0,0,-bin_height_z_mm+5])
+    BinCap(filter_height_mm,num_bins,bin_height_z_mm,bin_breadth_x_mm, screw_center_separation_mm);
+}
+
 
 // coordinate system: Gravity points in the -Z direction. +Z is up.abs
 // The left-right dimentions is considered X. Air flow is in the positive Y
@@ -59,6 +70,7 @@ module Corkscrew(h,twist) {
     rotate([90,0,0])
     linear_extrude(height = h, center = true, convexity = 10, twist = twist, $fn = FN_RES)
     translate([screw_OD_mm, 0, 0])
+    scale([1,scale_ratio])
     circle(r = screw_OD_mm);
 }
 
@@ -101,18 +113,23 @@ module CorkscrewWithVoid(h,twist) {
     linear_extrude(height = h, center = true, convexity = 10, twist = twist, $fn = FN_RES)
     translate([screw_OD_mm, 0, 0])
     difference() {
+        scale([1,scale_ratio])
         circle(r = screw_OD_mm);
+        scale([1,scale_ratio])
         circle(r = screw_ID_mm);
     }
 }
 
 module CorkscrewWithoutVoid(h,twist) {
+    echo("CorkscrewWithoutTwist");
+    echo(scale_ratio);
     rotate([90,0,0])
     linear_extrude(height = h, center = true, convexity = 10, twist = twist, $fn = FN_RES)
     translate([screw_OD_mm, 0, 0])
-    difference() {
+ //   difference() {
+        scale([1,scale_ratio])
         circle(r = screw_OD_mm);
-    }
+ //   }
 }
 
 
@@ -164,8 +181,20 @@ module Bins(depth,numbins,height,width,height_above_port_line) {
         translate([0,0,height_above_port_line - height/2])
         difference() {
             cube([width,de,height],center = true);
-            cube([width-b,de-b,height-b],center=true);
+            // I want the bottom to be opened and then "capped"
+            translate([0,0,-(b+1)])
+            cube([width-b,de-b,height-bin_wall_thickness_mm],center=true);
         } 
+    }
+}
+
+module BinCap(depth,numbins,height,width,height_above_port_line) {
+    binCapLip = 3;
+    b = bin_wall_thickness_mm*2;
+    difference() {
+        cube([width+b,depth+b,3],center=true);
+        translate([0,0,bin_wall_thickness_mm])
+        cube([width,depth,3],center=true);
     }
 }
 
@@ -221,6 +250,12 @@ if (USE_FULL_BINS) {
             translate([0,0,-50+-10])
             cube([100,100,100],center = true);
         }
+        if (USE_KNIFE_SIDE) {
+            translate([50+5,0,0])
+            cube([100,100,100],center = true);
+            translate([-(50+5),0,0])
+            cube([100,100,100],center = true);
+        }
     }
 }
 
@@ -229,4 +264,7 @@ if (USE_SCREW_ONLY) {
 }
 if (USE_SCREW_KNIFE) {
     ScrewsKnife(num_screws,num_bins,filter_height_mm);
+}
+if (USE_VOIDLESS_SCREW) {
+    CorkscrewWithoutVoid(filter_height_mm,filter_twist_degrees);
 }
