@@ -21,6 +21,8 @@
 // Should the ports have barbs?
 // Should the ouutput ports have barb?
 
+use <BarbGenerator-v3.scad>;
+
 
 // Params (mm), degrees 
 filter_height_mm = 40;
@@ -29,7 +31,9 @@ number_of_complete_revolutions = 6;
 filter_twist_degrees = 360*number_of_complete_revolutions;
 screw_OD_mm = 2;
 screw_ID_mm = 1;
-slit_axial_length_mm = 0.75;
+cell_wall_mm = 1;
+slit_axial_open_length_mm = 0.5;
+slit_axial_length_mm = cell_wall_mm + slit_axial_open_length_mm;
 cell_wall_mm = 1;
 hex_cell_diam_mm = 10;
 FN_RES = 30;
@@ -52,12 +56,31 @@ USE_VOIDLESS_SCREW      = 0;
 USE_FULL_BINS           = 1;
 USE_KNIFE_THRU_SCREWS   = 0;
 USE_KNIFE_LOW           = 0;
-USE_KNIFE_SIDE          = 1;
+USE_KNIFE_SIDE          = 0;
 USE_SCREW_KNIFE         = 0;
-USE_BINCAP              = 1;
+USE_BINCAP              = 0;
+
+USE_BARB                = 0;
+
+
+module Barb(input_diameter,output_diameter) {
+   jheight = -6;
+   output_barb( input_diameter, output_diameter, jheight );
+}
+
+
+if (USE_BARB) {
+    input_diameter = 2;
+    output_diameter = 4;
+    jheight = 0;
+ //   input_barb( input_diameter );
+    
+ //   output_barb( input_diameter, output_diameter, jheight );
+    Barb(input_diameter,output_diameter);
+}
 
 if (USE_BINCAP) {
-    translate([0,0,-bin_height_z_mm+5])
+    translate([0,0,-bin_height_z_mm+8])
     BinCap(filter_height_mm,num_bins,bin_height_z_mm,bin_breadth_x_mm, screw_center_separation_mm);
 }
 
@@ -174,17 +197,26 @@ module Bins(depth,numbins,height,width,height_above_port_line) {
     // These will be cubes; orifices will have to be cut
     // in them later.
     de = depth/numbins; // w = width of one bin
-
+    input_diameter = 1;
+    output_diameter = 2;
     for(i = [0:numbins -1]) {
         j = -(numbins-1)/2 + i;
         translate([0,j*de,0])
         translate([0,0,height_above_port_line - height/2])
-        difference() {
-            cube([width,de,height],center = true);
-            // I want the bottom to be opened and then "capped"
-            translate([0,0,-(b+1)])
-            cube([width-b,de-b,height-bin_wall_thickness_mm],center=true);
-        } 
+        union() {
+            difference() {
+                cube([width,de,height],center = true);
+                // I want the bottom to be opened and then "capped"
+                translate([0,0,-(b+1)])
+                cube([width-b,de-b,height-bin_wall_thickness_mm],center=true);
+                translate([width/2,0,0])
+                rotate([0,90,0])
+                cylinder(b,input_diameter,input_diameter,center=true);
+            } 
+            translate([width/2,0,0])
+            rotate([0,90,0])
+            Barb(input_diameter,output_diameter);
+        }   
     }
 }
 
