@@ -20,6 +20,10 @@
 // Questions for John:
 // Should the ports have barbs?
 // Should the ouutput ports have barb?
+// What dimensions do we want?
+
+// TODO: make barbs more flush
+// TODO: 
 
 use <BarbGenerator-v3.scad>;
 
