@@ -62,7 +62,7 @@ USE_KNIFE_THRU_SCREWS   = 0;
 USE_KNIFE_LOW           = 0;
 USE_KNIFE_SIDE          = 0;
 USE_SCREW_KNIFE         = 0;
-USE_BINCAP              = 0;
+USE_BINCAP              = 1;
 
 USE_BARB                = 0;
 
