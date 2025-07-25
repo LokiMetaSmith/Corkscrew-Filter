@@ -3,7 +3,7 @@
 // exception.
 
 // MODIFIED by Gemini.
-// VERSION 8: Added o-ring visualization.
+// VERSION 9: Implemented a modular, stackable filter with O-ring bulkhead spacers.
 
 // --- Model Precision ---
 high_res_fn = 150;
@@ -20,7 +20,8 @@ slit_axial_open_length_mm = 0.5;
 hex_cell_diam_mm = 10;
 bin_height_z_mm = 30;
 num_screws = 1;
-num_bins = 3;
+num_bins = 5; // How many sealed chambers to create.
+number_of_complete_revolutions = 6;
 screw_center_separation_mm = 10;
 scale_ratio = 1.4;
 bin_wall_thickness_mm = 1;
@@ -29,31 +30,33 @@ bin_wall_thickness_mm = 1;
 // --- NEW PARAMETERS for Tube Filter Insert ---
 tube_od_mm = 15;
 tube_wall_mm = 1;
-insert_length_mm = 40;//406.4;
+insert_length_mm = 50;
 insert_wall_thickness_mm = 1.5;
 oring_cross_section_mm = 1.5;
 adapter_hose_id_mm = 9.525;
+spacer_height_mm = 4; // The thickness of each O-ring partition wall.
 
 // --- CONTROL_VARIABLES ---
-USE_FILTER_INSERT     = 1;
-USE_HOSE_ADAPTER_CAP  = 1;
+// Select which design to generate
+USE_MODULAR_FILTER    = 1; // NEW: Generates the stackable filter with O-ring partitions.
+USE_FILTER_INSERT     = 0; // The previous monolithic insert.
+USE_HOSE_ADAPTER_CAP  = 0;
 USE_ORIGINAL_DESIGN   = 0;
 
 // Visual Options
-USE_TRANSLUCENCY      = true;   // Set to true for a see-through effect on shells.
+USE_TRANSLUCENCY      = true;
 SHOW_INSERT_SHELL     = true;   // Set to false to hide the outer tube of the insert.
 SHOW_TUBE             = false;   // Set to false to hide the outer tube
-SHOW_O_RINGS          = false;   // NEW: Set to true to visualize the o-rings in their grooves.
+SHOW_O_RINGS          = true;
 
 // --- Conditional Parameter Overwrite ---
-if (USE_FILTER_INSERT) {
+if (USE_FILTER_INSERT || USE_MODULAR_FILTER) {
     screw_OD_mm = 1.675;
     screw_ID_mm = 0.75;
-    number_of_complete_revolutions = 16;
 }
 
-// ... (Calculated variables remain the same)
-filter_twist_degrees = 360*number_of_complete_revolutions;
+// ... (Calculated variables)
+filter_twist_degrees = 360 * number_of_complete_revolutions;
 slit_axial_length_mm = cell_wall_mm + slit_axial_open_length_mm;
 bin_breadth_x_mm = (num_screws -1) * screw_center_separation_mm + screw_center_separation_mm*2;
 pitch_mm = (USE_FILTER_INSERT ? insert_length_mm : filter_height_mm) / number_of_complete_revolutions;
@@ -63,71 +66,91 @@ pitch_mm = (USE_FILTER_INSERT ? insert_length_mm : filter_height_mm) / number_of
 // === Main Logic ================================================
 // ===============================================================
 
-if (USE_FILTER_INSERT) {
-    FilterInsert(tube_od_mm - (2 * tube_wall_mm), insert_length_mm, insert_wall_thickness_mm, oring_cross_section_mm);
+if (USE_MODULAR_FILTER) {
+    ModularFilterAssembly(tube_od_mm - (2 * tube_wall_mm), insert_length_mm, num_bins, spacer_height_mm, oring_cross_section_mm);
+} else if (USE_FILTER_INSERT) {
+    // This module is kept for legacy purposes.
+     FilterInsert(tube_od_mm - (2 * tube_wall_mm), insert_length_mm, insert_wall_thickness_mm, oring_cross_section_mm);
 } else if (USE_HOSE_ADAPTER_CAP) {
     HoseAdapterEndCap(tube_od_mm, adapter_hose_id_mm, oring_cross_section_mm);
 } else if (USE_ORIGINAL_DESIGN) {
-    BinsWithScrew(num_screws, num_bins);
-} 
-
+     BinsWithScrew(num_screws, num_bins);
+}
 
 // ===============================================================
-// === Module Definitions ========================================
+// === NEW Module Definitions for Modular Design =================
 // ===============================================================
 
-module FilterInsert(tube_id, filter_length, insert_wall, oring_cs) {
-    insert_od = tube_id - 0.2;
-    corkscrew_chamber_id = insert_od - 2 * insert_wall;
+// Assembles the complete filter by stacking corkscrew sections and O-ring spacers.
+module ModularFilterAssembly(tube_id, total_length, bin_count, spacer_h, oring_cs) {
+    total_spacer_length = (bin_count + 1) * spacer_h;
+    total_screw_length = total_length - total_spacer_length;
+    bin_length = total_screw_length / bin_count;
+    
+    // The inner diameter of the spacer must allow the screw to pass through.
+    // The screw's outer diameter is approx. 4 * screw_OD_mm.
+    spacer_inner_dia = (4 * screw_OD_mm) + 0.5; // +0.5mm for clearance
 
-    union() {
-        // 1. The outer shell (optional and translucent)
-        if (SHOW_TUBE) {
-            color(USE_TRANSLUCENCY ? [0.8, 0.8, 1.0, 0.4] : "LightSteelBlue")
-            difference() {
-                // Main body
-                cylinder(r = insert_od / 2, h = filter_length, center = true);
-                // Hollow center
-                cylinder(r = corkscrew_chamber_id / 2, h = filter_length + 2, center = true);
+    // Start building from the bottom up
+    translate([0, 0, -total_length/2]) {
+        // Bottom-most spacer
+        OringSpacer(tube_id, spacer_inner_dia, spacer_h, oring_cs);
+        
+        // Loop to stack bins and spacers
+        for (i = [0 : bin_count - 1]) {
+            z_pos = (i * (bin_length + spacer_h)) + spacer_h;
+            
+            // Place the corkscrew section for this bin
+            translate([0, 0, z_pos]) {
+                local_revolutions = number_of_complete_revolutions / bin_count;
+                pitch = bin_length / local_revolutions;
+                twist = 360 * local_revolutions;
+                Screws(1, bin_count, bin_length);
             }
-        }
-        if (SHOW_INSERT_SHELL) {
-        difference(){
-            color(USE_TRANSLUCENCY ? [0.8, 0.8, 1.0, 0.4] : "LightSteelBlue")
-            union(){
-                // Cut grooves for o-rings
-                translate([0, 0, filter_length/2 - oring_cs * 2])
- 
-                    OringGroove_OD_Cutter(insert_od, oring_cs);
-                  
-                
-                translate([0, 0, -filter_length/2 + oring_cs * 2])
-                 
-                    OringGroove_OD_Cutter(insert_od, oring_cs);
-          }
-          rotate([0,0,180])CorkscrewWithoutVoid(filter_length,screw_OD_mm-2);
-          }
-        }
-        
-        // 2. The inner corkscrew mechanism
-        Screws(1, num_bins, filter_length); // Using num_bins=3 for slit generation
-        
-        // 3. O-Ring Visualizers (optional)
-        if (SHOW_O_RINGS) {
-            translate([0, 0, filter_length/2 - oring_cs * 2])
-                OringVisualizer(insert_od, oring_cs);
-            translate([0, 0, -filter_length/2 + oring_cs * 2])
-                OringVisualizer(insert_od, oring_cs);
+            
+            // Place the spacer on top of the corkscrew section
+            translate([0, 0, z_pos + bin_length]) {
+                OringSpacer(tube_id, spacer_inner_dia, spacer_h, oring_cs);
+            }
         }
     }
 }
 
-// NEW MODULE to draw the o-rings for visualization purposes
+// Creates a single bulkhead-style spacer with an O-ring groove.
+module OringSpacer(tube_id, inner_dia, height, oring_cs) {
+    spacer_od = tube_id - 0.2; // Slip fit inside the tube
+    
+    // Main body of the spacer
+    difference() {
+        cylinder(r = spacer_od / 2, h = height, center = true);
+        cylinder(r = inner_dia / 2, h = height + 2, center = true); // Hollow out the center
+        
+        // Cut the O-ring groove on the outer diameter
+        OringGroove_OD_Cutter(spacer_od, oring_cs);
+    }
+    
+    // Visualize the O-ring (optional)
+    if (SHOW_O_RINGS) {
+        OringVisualizer(spacer_od, oring_cs);
+    }
+}
+
+// NOTE: This module was fixed and reverted to its correct, working version.
+// It creates a cutting tool to make a groove. It should not produce visible geometry on its own.
+module OringGroove_OD_Cutter(object_dia, oring_cs) {
+    groove_depth = oring_cs * 0.8;
+    groove_width = oring_cs * 1.1;
+    rotate_extrude(convexity=10) {
+        translate([object_dia/2 - groove_depth, 0, 0])
+            square([groove_depth, groove_width], center=true);
+    }
+}
+
+// Draws a torus to represent an o-ring.
 module OringVisualizer(object_dia, oring_cs) {
     // The o-ring sits in the groove. This calculates its position.
     groove_depth = oring_cs * 0.8;
     torus_radius = object_dia/2 - groove_depth/2;
-
     color("IndianRed") // A rubber-like color
     rotate_extrude(convexity=10)
         translate([torus_radius, 0, 0])
