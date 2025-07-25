@@ -11,7 +11,7 @@ low_res_fn = 30;
 $fn = $preview ? low_res_fn : high_res_fn;
 
 // --- Main Parameters (mm, degrees) ---
-filter_height_mm = 40;
+filter_height_mm = 50;
 number_of_complete_revolutions = 6;
 screw_OD_mm = 2;
 screw_ID_mm = 1;
@@ -29,7 +29,7 @@ bin_wall_thickness_mm = 1;
 // --- NEW PARAMETERS for Tube Filter Insert ---
 tube_od_mm = 15;
 tube_wall_mm = 1;
-insert_length_mm = 50;//406.4;
+insert_length_mm = 40;//406.4;
 insert_wall_thickness_mm = 1.5;
 oring_cross_section_mm = 1.5;
 adapter_hose_id_mm = 9.525;
@@ -92,8 +92,9 @@ module FilterInsert(tube_id, filter_length, insert_wall, oring_cs) {
             }
         }
         if (SHOW_INSERT_SHELL) {
+        difference(){
             color(USE_TRANSLUCENCY ? [0.8, 0.8, 1.0, 0.4] : "LightSteelBlue")
-            
+            union(){
                 // Cut grooves for o-rings
                 translate([0, 0, filter_length/2 - oring_cs * 2])
  
@@ -103,11 +104,13 @@ module FilterInsert(tube_id, filter_length, insert_wall, oring_cs) {
                 translate([0, 0, -filter_length/2 + oring_cs * 2])
                  
                     OringGroove_OD_Cutter(insert_od, oring_cs);
-          
+          }
+          rotate([0,0,180])CorkscrewWithoutVoid(filter_length,screw_OD_mm-2);
+          }
         }
         
         // 2. The inner corkscrew mechanism
-        Screws(1, 3, filter_length); // Using num_bins=3 for slit generation
+        Screws(1, num_bins, filter_length); // Using num_bins=3 for slit generation
         
         // 3. O-Ring Visualizers (optional)
         if (SHOW_O_RINGS) {
