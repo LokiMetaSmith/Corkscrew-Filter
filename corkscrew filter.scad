@@ -20,7 +20,7 @@ slit_axial_open_length_mm = 0.5;
 hex_cell_diam_mm = 10;
 bin_height_z_mm = 30;
 num_screws = 1;
-num_bins = 5; // How many sealed chambers to create.
+num_bins = 2; // How many sealed chambers to create.
 number_of_complete_revolutions = 6;
 screw_center_separation_mm = 10;
 scale_ratio = 1.4;
@@ -30,7 +30,7 @@ bin_wall_thickness_mm = 1;
 // --- NEW PARAMETERS for Tube Filter Insert ---
 tube_od_mm = 15;
 tube_wall_mm = 1;
-insert_length_mm = 50;
+insert_length_mm = 90;
 insert_wall_thickness_mm = 1.5;
 oring_cross_section_mm = 1.5;
 adapter_hose_id_mm = 9.525;
@@ -46,7 +46,7 @@ USE_ORIGINAL_DESIGN   = 0;
 // Visual Options
 USE_TRANSLUCENCY      = true;
 SHOW_INSERT_SHELL     = true;   // Set to false to hide the outer tube of the insert.
-SHOW_TUBE             = false;   // Set to false to hide the outer tube
+SHOW_TUBE             = true;   // Set to false to hide the outer tube
 SHOW_O_RINGS          = true;
 
 // --- Conditional Parameter Overwrite ---
@@ -92,16 +92,16 @@ module ModularFilterAssembly(tube_id, total_length, bin_count, spacer_h, oring_c
     spacer_inner_dia = (4 * screw_OD_mm) + 0.5; // +0.5mm for clearance
 
     // Start building from the bottom up
-    translate([0, 0, -total_length/2]) {
+    translate([0, 0, spacer_height_mm/2]) {
         // Bottom-most spacer
         OringSpacer(tube_id, spacer_inner_dia, spacer_h, oring_cs);
         
         // Loop to stack bins and spacers
         for (i = [0 : bin_count - 1]) {
-            z_pos = (i * (bin_length + spacer_h)) + spacer_h;
+            z_pos = (i * (bin_length ));
             
             // Place the corkscrew section for this bin
-            translate([0, 0, z_pos]) {
+            translate([0, 0, z_pos+ bin_length/2]) {
                 local_revolutions = number_of_complete_revolutions / bin_count;
                 pitch = bin_length / local_revolutions;
                 twist = 360 * local_revolutions;
