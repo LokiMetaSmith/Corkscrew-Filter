@@ -47,7 +47,7 @@ USE_ORIGINAL_DESIGN   = 0;
 USE_TRANSLUCENCY      = true;
 SHOW_INSERT_SHELL     = true;   // Set to false to hide the outer tube of the insert.
 SHOW_TUBE             = true;   // Set to false to hide the outer tube
-SHOW_O_RINGS          = true;
+SHOW_O_RINGS          = false;
 
 // --- Conditional Parameter Overwrite ---
 if (USE_FILTER_INSERT || USE_MODULAR_FILTER) {
@@ -122,8 +122,8 @@ module OringSpacer(tube_id, inner_dia, height, oring_cs) {
     
     // Main body of the spacer
     difference() {
-        cylinder(r = spacer_od / 2, h = height, center = true);
-        cylinder(r = inner_dia / 2, h = height + 2, center = true); // Hollow out the center
+        cylinder(d = spacer_od , h = height, center = true);
+        cylinder(d = inner_dia , h = height + 2, center = true); // Hollow out the center
         
         // Cut the O-ring groove on the outer diameter
         OringGroove_OD_Cutter(spacer_od, oring_cs);
