@@ -73,102 +73,83 @@ module CorkscrewSolid(h, twist) {
     }
 }
 
-// Takes the assembled parts as children() and subtracts the helical channel.
-// This version creates a set of disconnected void segments that perfectly
-// match the solid screw segments.
-module ApplyHelicalCut(total_length, bin_count, spacer_h, bin_length, twist_rate) {
-    difference() {
-        // The solid assembly is passed as a child
-        children();
-
-        // --- Create the segmented void cutter ---
-        // The void segments must be placed in the exact same positions as the solid screws.
-        for (i = [0 : bin_count - 1]) {
-            screw_twist = twist_rate * bin_length;
-            start_rotation = i * screw_twist;
-            // The Z position must be identical to the solid screw's Z position.
-            z_pos_screw = -total_length/2 + spacer_h + i * (bin_length + spacer_h) + bin_length/2;
-
-            rotate([0,0,start_rotation]) {
-                translate([0, 0, z_pos_screw])
-                    CorkscrewVoid(bin_length + 0.2, screw_twist); // Add tolerance
-            }
-        }
-    }
-}
-
-
 // Assembles the complete filter by stacking corkscrew sections and Capture Spacers.
 module ModularFilterAssembly(tube_id, total_length, bin_count, spacer_h, oring_cs) {
     total_spacer_length = (bin_count + 1) * spacer_h;
     total_screw_length = total_length - total_spacer_length;
     bin_length = total_screw_length / bin_count;
-    twist_rate = (360 * number_of_complete_revolutions) / total_screw_length;
+    // The twist is now continuous over the entire length of the assembly.
+    twist_rate = (360 * number_of_complete_revolutions) / total_length;
 
-    ApplyHelicalCut(total_length, bin_count, spacer_h, bin_length, twist_rate) {
-        // Center the whole assembly vertically
-        translate([0, 0, -total_length/2]) {
+    // Center the whole assembly vertically
+    translate([0, 0, -total_length/2]) {
 
-            // Initial spacer at the bottom.
-            translate([0, 0, spacer_h/2])
-                CaptureSpacer(tube_id, spacer_h, oring_cs, bin_length, is_base = true);
+        // Initial spacer at the bottom.
+        z_pos_base_spacer = spacer_h/2;
+        translate([0,0,z_pos_base_spacer])
+            rotate([0,0, twist_rate * z_pos_base_spacer])
+                CaptureSpacer(tube_id, spacer_h, oring_cs, bin_length, twist_rate, is_base = true);
 
-            // Loop to stack SOLID screw bins and spacers
-            for (i = [0 : bin_count - 1]) {
-                screw_twist = twist_rate * bin_length;
-                start_rotation = i * screw_twist;
+        // Loop to stack SOLID screw bins and spacers
+        for (i = [0 : bin_count - 1]) {
+            // Calculate Z position for the screw segment
+            z_pos_screw = spacer_h + i * (bin_length + spacer_h) + bin_length/2;
 
-                // Z position for the screw segment
-                z_pos_screw = spacer_h + i * (bin_length + spacer_h) + bin_length/2;
+            // The rotation of the screw is determined by its Z position.
+            screw_rot = twist_rate * z_pos_screw;
+            // The twist of the screw segment itself is based on its own height.
+            screw_twist = twist_rate * bin_length;
 
-                // Rotate the coordinate system, then place the screw.
-                rotate([0,0,start_rotation]) {
-                    translate([0, 0, z_pos_screw])
-                        FlatEndScrew(h = bin_length, twist = screw_twist, num_bins = bin_count);
-                }
+            // Translate to position, then rotate.
+            translate([0, 0, z_pos_screw])
+                rotate([0,0,screw_rot])
+                    FlatEndScrew(h = bin_length, twist = screw_twist, num_bins = bin_count);
 
-                // Z position for the spacer that sits on TOP of the screw
-                z_pos_spacer = z_pos_screw + bin_length/2 + spacer_h/2;
+            // Z position for the spacer that sits on TOP of the screw
+            z_pos_spacer = z_pos_screw + bin_length/2 + spacer_h/2;
 
-                // The spacer must be rotated to match the end rotation of the screw it sits on.
-                rotate([0,0,start_rotation + screw_twist]) {
-                    translate([0, 0, z_pos_spacer])
-                        CaptureSpacer(tube_id, spacer_h, oring_cs, bin_length, is_top = (i == bin_count-1), is_base = false);
-                }
-            }
+            // The spacer must also be rotated to match the helix at its Z-position.
+            spacer_rot = twist_rate * z_pos_spacer;
+
+            translate([0, 0, z_pos_spacer])
+                rotate([0,0,spacer_rot])
+                    CaptureSpacer(tube_id, spacer_h, oring_cs, bin_length, twist_rate, is_top = (i == bin_count-1), is_base = false);
         }
     }
 }
 
 
 // Creates a bulkhead that captures the end of a screw section.
-// It now accepts bin_length to correctly size the helical supports.
-module CaptureSpacer(tube_id, height, oring_cs, bin_length, is_base=false, is_top=false) {
+// It now accepts a twist_rate to cut the helical profile through itself.
+module CaptureSpacer(tube_id, height, oring_cs, bin_length, twist_rate, is_base=false, is_top=false) {
     spacer_od = tube_id - 0.2;
     screw_flight_od = 4 * screw_OD_mm;
     socket_depth = height / 2;
 
-    union() {
-        difference() {
-            cylinder(d = spacer_od, h = height, center = true);
-            
-            // O-ring groove on the outside, centered on the spacer's height
-            OringGroove_OD_Cutter(spacer_od, oring_cs);
-            
-            // Socket for the screw head, cut from the bottom of the spacer.
-            // This should only apply to spacers that sit on top of a screw.
-            // The base spacer does not, and the top spacer acts as a cap.
-            if (!is_base && !is_top) {
-                translate([0, 0, -height/2])
-                    cylinder(d = screw_flight_od + 0.4, h = socket_depth + 0.1);
-            }
+    difference() {
+        // Main spacer body
+        cylinder(d = spacer_od, h = height, center = true);
+
+        // Cut the helical profile for the screw flights to pass through.
+        // We use CorkscrewSolid as the cutting tool.
+        CorkscrewSolid(h + 0.2, twist_rate * (height + 0.2));
+
+        // O-ring groove on the outside
+        OringGroove_OD_Cutter(spacer_od, oring_cs);
+
+        // Socket for the screw head, cut from the bottom of the spacer.
+        if (!is_base && !is_top) {
+            translate([0, 0, -height/2])
+                cylinder(d = screw_flight_od + 0.4, h = socket_depth + 0.1);
         }
+    }
+
+    // These parts are not differenced.
+    union() {
         if (SHOW_O_RINGS) {
             OringVisualizer(spacer_od, oring_cs);
         }
-        // Add the helical support for all spacers except the one at the very top.
         if (ADD_HELICAL_SUPPORT && !is_top) {
-            // The support starts from the top of the spacer and extends upwards.
             translate([0,0,height/2])
                 HelicalOuterSupport(spacer_od, bin_length, support_rib_thickness_mm, support_revolutions);
         }
@@ -182,8 +163,8 @@ module FlatEndScrew(h, twist, num_bins) {
     
     intersection() {
         difference() {
-            // Create the main helical body
-            CorkscrewSolid(h, twist);
+            // Create the main helical body, add a small tolerance
+            CorkscrewSolid(h + 0.5, twist);
             // Cut slits into the helix to separate the bins
             CorkscrewSlitKnife(twist, h, num_bins);
         }
