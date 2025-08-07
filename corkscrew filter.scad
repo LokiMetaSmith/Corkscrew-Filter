@@ -26,6 +26,7 @@ spacer_height_mm = 5;
 adapter_hose_id_mm = 30;
 support_rib_thickness_mm = 1.5;
 support_revolutions = 0.25;
+support_density = 4; // NEW: Number of support bundles around the circumference
 
 // --- CONTROL_VARIABLES ---
 USE_MODULAR_FILTER    = 1;
@@ -117,9 +118,9 @@ module CaptureSpacer(tube_id, height, oring_cs, bin_length, is_base=false, is_to
         if (SHOW_O_RINGS) {
             OringVisualizer(spacer_od, oring_cs);
         }
-        // Add the helical support, but not for the very top or base spacer
-        if (ADD_HELICAL_SUPPORT && !is_top && !is_base) {
-            // The support starts from the top of the spacer and extends upwards
+        // Add the helical support for all spacers except the one at the very top.
+        if (ADD_HELICAL_SUPPORT && !is_top) {
+            // The support starts from the top of the spacer and extends upwards.
             translate([0,0,height/2])
                 HelicalOuterSupport(spacer_od, bin_length, support_rib_thickness_mm, support_revolutions);
         }
@@ -144,11 +145,33 @@ module FlatEndScrew(h, twist, num_bins) {
 }
 
 // ... (Rest of modules are unchanged and included for completeness) ...
+// This module creates the helical support structure between spacers.
+// It is now fully parameterized based on the main filter settings.
 module HelicalOuterSupport(target_dia, target_height, rib_thickness, revolutions) {
     twist_angle = 360 * revolutions;
-    linear_extrude(height = target_height, twist = twist_angle, center = true) {
-        translate([target_dia / 2 - rib_thickness, 0, 0]) {
-            circle(d = rib_thickness);
+    radius = target_dia / 2 - rib_thickness;
+
+    // The for-loop creates rotational symmetry based on support_density
+    for( i = [0:1:support_density-1]){
+        rotate([0,0,i*(360/support_density)]) {
+            // This union creates a bundle of 3 struts at different angles
+            union() {
+                // Left-handed helix
+                linear_extrude(height = target_height, center = false, convexity = 10, twist = -twist_angle)
+                    rotate([0,0,0])
+                        translate([radius,0,0])
+                            circle(d=rib_thickness);
+                // Right-handed helix
+                linear_extrude(height = target_height, center = false, convexity = 10, twist = twist_angle)
+                    rotate([0,0,120])
+                        translate([radius,0,0])
+                            circle(d=rib_thickness);
+                // Straight strut
+                linear_extrude(height = target_height, center = false, convexity = 10, twist = 0)
+                    rotate([0,0,240])
+                        translate([radius,0,0])
+                            circle(d=rib_thickness);
+            }
         }
     }
 }
