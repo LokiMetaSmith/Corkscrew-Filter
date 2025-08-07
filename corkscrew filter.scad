@@ -51,57 +51,90 @@ if (USE_MODULAR_FILTER) {
 // === Module Definitions ========================================
 // ===============================================================
 
-// This module creates the fundamental helical screw shape with a concentric void.
-module CorkscrewWithVoid(h, twist) {
+// Creates the helical cutting tool for the void.
+module CorkscrewVoid(h, twist) {
     linear_extrude(height = h, center = true, convexity = 10, twist = twist) {
         translate([screw_OD_mm, 0, 0]) {
-            difference() {
-                scale([1,scale_ratio]) circle(r = screw_OD_mm);
-                scale([1,scale_ratio]) circle(r = screw_ID_mm);
+            scale([1, scale_ratio]) {
+                circle(r = screw_ID_mm);
             }
         }
     }
 }
+
+// This module creates the solid part of the helical screw.
+module CorkscrewSolid(h, twist) {
+    linear_extrude(height = h, center = true, convexity = 10, twist = twist) {
+        translate([screw_OD_mm, 0, 0]) {
+            scale([1, scale_ratio]) {
+                circle(r = screw_OD_mm);
+            }
+        }
+    }
+}
+
+// Takes the assembled parts as children() and subtracts the helical channel.
+// This version creates a set of disconnected void segments that perfectly
+// match the solid screw segments.
+module ApplyHelicalCut(total_length, bin_count, spacer_h, bin_length, twist_rate) {
+    difference() {
+        // The solid assembly is passed as a child
+        children();
+
+        // --- Create the segmented void cutter ---
+        // The void segments must be placed in the exact same positions as the solid screws.
+        for (i = [0 : bin_count - 1]) {
+            screw_twist = twist_rate * bin_length;
+            start_rotation = i * screw_twist;
+            // The Z position must be identical to the solid screw's Z position.
+            z_pos_screw = -total_length/2 + spacer_h + i * (bin_length + spacer_h) + bin_length/2;
+
+            rotate([0,0,start_rotation]) {
+                translate([0, 0, z_pos_screw])
+                    CorkscrewVoid(bin_length + 0.2, screw_twist); // Add tolerance
+            }
+        }
+    }
+}
+
 
 // Assembles the complete filter by stacking corkscrew sections and Capture Spacers.
 module ModularFilterAssembly(tube_id, total_length, bin_count, spacer_h, oring_cs) {
     total_spacer_length = (bin_count + 1) * spacer_h;
     total_screw_length = total_length - total_spacer_length;
     bin_length = total_screw_length / bin_count;
-    // Calculate the twist rate once for the entire screw assembly length.
     twist_rate = (360 * number_of_complete_revolutions) / total_screw_length;
 
-    // Center the whole assembly vertically
-    translate([0, 0, -total_length/2]) {
+    ApplyHelicalCut(total_length, bin_count, spacer_h, bin_length, twist_rate) {
+        // Center the whole assembly vertically
+        translate([0, 0, -total_length/2]) {
 
-        // Initial spacer at the bottom.
-        translate([0, 0, spacer_h/2])
-            CaptureSpacer(tube_id, spacer_h, oring_cs, bin_length, is_base = true);
+            // Initial spacer at the bottom.
+            translate([0, 0, spacer_h/2])
+                CaptureSpacer(tube_id, spacer_h, oring_cs, bin_length, is_base = true);
 
-        // Loop to stack screw bins and spacers
-        for (i = [0 : bin_count - 1]) {
-            // Each screw segment gets a proportional amount of twist.
-            screw_twist = twist_rate * bin_length;
+            // Loop to stack SOLID screw bins and spacers
+            for (i = [0 : bin_count - 1]) {
+                screw_twist = twist_rate * bin_length;
+                start_rotation = i * screw_twist;
 
-            // The starting rotation for screw 'i' is the sum of twists of all previous screws.
-            start_rotation = i * screw_twist;
+                // Z position for the screw segment
+                z_pos_screw = spacer_h + i * (bin_length + spacer_h) + bin_length/2;
 
-            // Z position for the screw segment
-            z_pos_screw = spacer_h + i * (bin_length + spacer_h) + bin_length/2;
+                // Rotate the coordinate system, then place the screw.
+                rotate([0,0,start_rotation]) {
+                    translate([0, 0, z_pos_screw])
+                        FlatEndScrew(h = bin_length, twist = screw_twist, num_bins = bin_count);
+                }
 
-            // Rotate the coordinate system, then place the screw.
-            rotate([0,0,start_rotation]) {
-                translate([0, 0, z_pos_screw])
-                    FlatEndScrew(h = bin_length, twist = screw_twist, num_bins = bin_count);
-            }
+                // Z position for the spacer that sits on TOP of the screw
+                z_pos_spacer = z_pos_screw + bin_length/2 + spacer_h/2;
 
-            // Z position for the spacer that sits on TOP of the screw
-            z_pos_spacer = z_pos_screw + bin_length/2 + spacer_h/2;
-
-            // The spacer must be rotated to match the end rotation of the screw it sits on.
-            rotate([0,0,start_rotation + screw_twist]) {
-                translate([0, 0, z_pos_spacer])
-                    CaptureSpacer(tube_id, spacer_h, oring_cs, bin_length, is_top = (i == bin_count-1), is_base = false);
+                // The spacer must be rotated to match the end rotation of the screw it sits on.
+                rotate([0,0,start_rotation + screw_twist]) {
+                    translate([0, 0, z_pos_spacer])
+                        CaptureSpacer(tube_id, spacer_h, oring_cs, bin_length, is_top = (i == bin_count-1), is_base = false);
+                }
             }
         }
     }
@@ -150,7 +183,7 @@ module FlatEndScrew(h, twist, num_bins) {
     intersection() {
         difference() {
             // Create the main helical body
-            CorkscrewWithVoid(h, twist);
+            CorkscrewSolid(h, twist);
             // Cut slits into the helix to separate the bins
             CorkscrewSlitKnife(twist, h, num_bins);
         }
