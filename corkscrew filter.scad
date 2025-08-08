@@ -28,6 +28,11 @@ support_rib_thickness_mm = 1.5;
 support_revolutions = 0.25;
 support_density = 4; // NEW: Number of support bundles around the circumference
 
+// --- Tolerances & Fit ---
+// Adjust these values based on your printer's calibration
+tolerance_tube_fit = 0.2;   // Clearance between the spacers and the inner wall of the tube
+tolerance_socket_fit = 0.4; // Clearance between the screw and the spacer socket
+
 // --- CONTROL_VARIABLES ---
 USE_MASTER_HELIX_METHOD = true; // NEW: Switch between assembly strategies
 USE_MODULAR_FILTER    = 1;
@@ -133,7 +138,7 @@ module ModularFilterAssembly(tube_id, total_length, bin_count, spacer_h, oring_c
 
 // This is a new helper module for the Master Helix method to create the spacers.
 module Spacer(tube_id, height, bin_length, is_base, is_top, Cutter) {
-    spacer_od = tube_id - 0.2;
+    spacer_od = tube_id - tolerance_tube_fit;
     screw_flight_od = 4 * screw_OD_mm;
 
     // Union the visual/support parts with the main body
@@ -152,7 +157,7 @@ module Spacer(tube_id, height, bin_length, is_base, is_top, Cutter) {
             // Cut the screw socket if needed
             if (!is_base && !is_top) {
                 translate([0, 0, -height/2])
-                    cylinder(d = screw_flight_od + 0.4, h = height/2 + 0.1);
+                    cylinder(d = screw_flight_od + tolerance_socket_fit, h = height/2 + 0.1);
             }
         }
 
@@ -219,7 +224,7 @@ module ModularFilterAssembly_Rotational(tube_id, total_length, bin_count, spacer
 // Creates a bulkhead that captures the end of a screw section.
 // It now accepts a twist_rate to cut the helical profile through itself.
 module CaptureSpacer(tube_id, height, oring_cs, bin_length, twist_rate, is_base=false, is_top=false) {
-    spacer_od = tube_id - 0.2;
+    spacer_od = tube_id - tolerance_tube_fit;
     screw_flight_od = 4 * screw_OD_mm;
     socket_depth = height / 2;
 
@@ -237,7 +242,7 @@ module CaptureSpacer(tube_id, height, oring_cs, bin_length, twist_rate, is_base=
         // Socket for the screw head, cut from the bottom of the spacer.
         if (!is_base && !is_top) {
             translate([0, 0, -height/2])
-                cylinder(d = screw_flight_od + 0.4, h = socket_depth + 0.1);
+                cylinder(d = screw_flight_od + tolerance_socket_fit, h = socket_depth + 0.1);
         }
     }
 
@@ -332,7 +337,7 @@ module OringGroove_ID_Cutter(object_id, oring_cs) {
 
 // Creates a hose adapter that caps the end of the tube.
 module HoseAdapterEndCap(tube_od, hose_id, oring_cs) {
-    cap_inner_dia = tube_od + 0.2;
+    cap_inner_dia = tube_od + tolerance_tube_fit;
     cap_wall = 3;
     cap_outer_dia = cap_inner_dia + 2 * cap_wall;
     cap_sleeve_height = 20;
