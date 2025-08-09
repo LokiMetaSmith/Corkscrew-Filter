@@ -67,6 +67,7 @@ if (USE_MODULAR_FILTER) {
 // Unified module to generate a helical shape with a given radius.
 // This ensures the solid and void helices are generated with identical logic.
 module HelicalShape(h, twist, r) {
+    echo(str("Generating HelicalShape: r=", r, ", center=[", screw_OD_mm, ", 0, 0]"));
     linear_extrude(height = h, center = true, convexity = 10, twist = twist) {
         translate([screw_OD_mm, 0, 0]) {
             scale([1, scale_ratio]) {
@@ -91,16 +92,20 @@ module ModularFilterAssembly(tube_id, total_length, bin_count, spacer_h, oring_c
     total_spacer_length = (bin_count + 1) * spacer_h;
     total_screw_length = total_length - total_spacer_length;
     bin_length = total_screw_length / bin_count;
-    total_twist = 360 * number_of_complete_revolutions;
+
+    // Calculate an authoritative twist rate in degrees per mm.
+    // Use total_length for the master helix which spans the whole part.
+    twist_rate = (360 * number_of_complete_revolutions) / total_length;
 
     // --- Define Master Helices ---
     // These are the "master tools" from which the entire filter will be carved.
     module MasterSolidHelix() {
         // The master helix needs to be slightly longer for cutting operations
-        CorkscrewSolid(total_length + 2, total_twist);
+        CorkscrewSolid(total_length + 2, twist_rate * (total_length + 2));
     }
     module MasterVoidHelix() {
-        CorkscrewVoid(total_length + 2, total_twist);
+        // The void must have the same twist rate to align perfectly.
+        CorkscrewVoid(total_length + 2, twist_rate * (total_length + 2));
     }
 
     // --- Main Assembly ---
