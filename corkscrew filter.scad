@@ -119,7 +119,8 @@ module ModularFilterAssembly(tube_id, total_length, bin_count, spacer_h, oring_c
                 translate([0, 0, z_pos]) {
                     intersection() {
                         MasterSolidHelix();
-                        cylinder(h = bin_length, d = tube_id * 2, center=true); // d is arbitrary, just needs to be large
+                        // Add a small tolerance to the cylinder height to ensure a clean intersection
+                        cylinder(h = bin_length + 0.1, d = tube_id * 2, center=true);
                     }
                 }
             }
