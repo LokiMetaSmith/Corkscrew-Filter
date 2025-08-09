@@ -32,6 +32,7 @@ support_density = 4; // NEW: Number of support bundles around the circumference
 // Adjust these values based on your printer's calibration
 tolerance_tube_fit = 0.2;   // Clearance between the spacers and the inner wall of the tube
 tolerance_socket_fit = 0.4; // Clearance between the screw and the spacer socket
+tolerance_channel = 0.1;  // Extra clearance for the airflow channel to prevent binding
 
 // --- CONTROL_VARIABLES ---
 USE_MASTER_HELIX_METHOD = true; // NEW: Switch between assembly strategies
@@ -63,26 +64,26 @@ if (USE_MODULAR_FILTER) {
 // === Module Definitions ========================================
 // ===============================================================
 
-// Creates the helical cutting tool for the void.
-module CorkscrewVoid(h, twist) {
+// Unified module to generate a helical shape with a given radius.
+// This ensures the solid and void helices are generated with identical logic.
+module HelicalShape(h, twist, r) {
     linear_extrude(height = h, center = true, convexity = 10, twist = twist) {
         translate([screw_OD_mm, 0, 0]) {
             scale([1, scale_ratio]) {
-                circle(r = screw_ID_mm);
+                circle(r = r);
             }
         }
     }
 }
 
+// Creates the helical cutting tool for the void.
+module CorkscrewVoid(h, twist) {
+    HelicalShape(h, twist, screw_ID_mm + tolerance_channel);
+}
+
 // This module creates the solid part of the helical screw.
 module CorkscrewSolid(h, twist) {
-    linear_extrude(height = h, center = true, convexity = 10, twist = twist) {
-        translate([screw_OD_mm, 0, 0]) {
-            scale([1, scale_ratio]) {
-                circle(r = screw_OD_mm);
-            }
-        }
-    }
+    HelicalShape(h, twist, screw_OD_mm);
 }
 
 // Assembles the complete filter using the "Master Helix" method for robust alignment.
