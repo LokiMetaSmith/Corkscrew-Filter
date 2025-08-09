@@ -124,59 +124,48 @@ module ModularFilterAssembly(tube_id, total_length, bin_count, spacer_h, oring_c
                 }
             }
 
-            // 3. Create the spacers, which are complex parts, at each spacer location.
+            // 3. Create the spacers by building them in place.
             for (i = [0 : bin_count]) { // Note: loop to bin_count to include the top spacer
                 z_pos = -total_length/2 + i * (bin_length + spacer_h) + spacer_h/2;
                 is_base = (i == 0);
                 is_top = (i == bin_count);
+                spacer_od = tube_id - tolerance_tube_fit;
 
                 translate([0, 0, z_pos]) {
-                    // Use a module for clarity
-                    Spacer(tube_id, spacer_h, bin_length, is_base, is_top, MasterSolidHelix);
+                    // Create the main spacer body with all necessary cuts
+                    difference() {
+                        // Start with the solid cylinder
+                        cylinder(d = spacer_od, h = spacer_h, center=true);
+
+                        // Cut the master helix profile
+                        MasterSolidHelix();
+
+                        // Cut the O-ring groove
+                        OringGroove_OD_Cutter(spacer_od, oring_cross_section_mm);
+
+                        // Cut the screw socket if needed
+                        if (!is_base && !is_top) {
+                            translate([0, 0, -spacer_h/2])
+                                cylinder(d = 4 * screw_OD_mm + tolerance_socket_fit, h = spacer_h/2 + 0.1);
+                        }
+                    }
+
+                    // Add the visual-only O-ring
+                    if (SHOW_O_RINGS) {
+                        OringVisualizer(spacer_od, oring_cross_section_mm);
+                    }
+
+                    // Add the helical supports
+                    if (ADD_HELICAL_SUPPORT && !is_top) {
+                        translate([0,0,spacer_h/2])
+                            HelicalOuterSupport(spacer_od, bin_length, support_rib_thickness_mm, support_revolutions);
+                    }
                 }
             }
         } // End of solid union
 
         // 4. Subtract the Master Void from the entire solid assembly.
         MasterVoidHelix();
-    }
-}
-
-// This is a new helper module for the Master Helix method to create the spacers.
-module Spacer(tube_id, height, bin_length, is_base, is_top, Cutter) {
-    spacer_od = tube_id - tolerance_tube_fit;
-    screw_flight_od = 4 * screw_OD_mm;
-
-    // Union the visual/support parts with the main body
-    union() {
-        // Create the main spacer body with all necessary cuts
-        difference() {
-            // Start with the solid cylinder
-            cylinder(d = spacer_od, h = height, center=true);
-
-            // Cut the master helix profile
-            Cutter();
-
-            // Cut the O-ring groove
-            OringGroove_OD_Cutter(spacer_od, oring_cross_section_mm);
-
-            // Cut the screw socket if needed
-            if (!is_base && !is_top) {
-                translate([0, 0, -height/2])
-                    cylinder(d = screw_flight_od + tolerance_socket_fit, h = height/2 + 0.1);
-            }
-        }
-
-        // Add the visual-only O-ring
-        if (SHOW_O_RINGS) {
-            OringVisualizer(spacer_od, oring_cross_section_mm);
-        }
-
-        // Add the helical supports
-        if (ADD_HELICAL_SUPPORT && !is_top) {
-            translate([0,0,height/2])
-                HelicalOuterSupport(spacer_od, bin_length, support_rib_thickness_mm, support_revolutions);
-        }
     }
 }
 
