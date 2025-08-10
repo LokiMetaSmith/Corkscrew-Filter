@@ -36,6 +36,7 @@ tolerance_socket_fit = 0.4; // Clearance between the screw and the spacer socket
 tolerance_channel = 0.1;  // Extra clearance for the airflow channel to prevent binding
 
 // --- CONTROL_VARIABLES ---
+GENERATE_CFD_VOLUME   = false; // NEW: Set to true to generate the internal fluid volume for CFD analysis
 USE_MASTER_HELIX_METHOD = true; // NEW: Switch between assembly strategies
 USE_MODULAR_FILTER    = 1;
 USE_HOSE_ADAPTER_CAP  = 0;
@@ -49,16 +50,28 @@ SHOW_O_RINGS          = true;
 // === Main Logic ================================================
 // ===============================================================
 
-if (USE_MODULAR_FILTER) {
-    if (USE_MASTER_HELIX_METHOD) {
-        // New, more robust assembly method
-        ModularFilterAssembly(tube_od_mm - (2 * tube_wall_mm), insert_length_mm, num_bins, spacer_height_mm, oring_cross_section_mm);
-    } else {
-        // Old method kept for debugging
-        ModularFilterAssembly_Rotational(tube_od_mm - (2 * tube_wall_mm), insert_length_mm, num_bins, spacer_height_mm, oring_cross_section_mm);
+if (GENERATE_CFD_VOLUME) {
+    tube_id = tube_od_mm - (2 * tube_wall_mm);
+    difference() {
+        // 1. Start with a solid cylinder representing the inner volume of the tube
+        cylinder(d = tube_id, h = insert_length_mm, center = true);
+
+        // 2. Subtract the entire filter assembly
+        ModularFilterAssembly(tube_id, insert_length_mm, num_bins, spacer_height_mm, oring_cross_section_mm);
     }
-} else if (USE_HOSE_ADAPTER_CAP) {
-    HoseAdapterEndCap(tube_od_mm, adapter_hose_id_mm, oring_cross_section_mm);
+} else {
+    // Logic to generate the solid parts for printing
+    if (USE_MODULAR_FILTER) {
+        if (USE_MASTER_HELIX_METHOD) {
+            // New, more robust assembly method
+            ModularFilterAssembly(tube_od_mm - (2 * tube_wall_mm), insert_length_mm, num_bins, spacer_height_mm, oring_cross_section_mm);
+        } else {
+            // Old method kept for debugging
+            ModularFilterAssembly_Rotational(tube_od_mm - (2 * tube_wall_mm), insert_length_mm, num_bins, spacer_height_mm, oring_cross_section_mm);
+        }
+    } else if (USE_HOSE_ADAPTER_CAP) {
+        HoseAdapterEndCap(tube_od_mm, adapter_hose_id_mm, oring_cross_section_mm);
+    }
 }
 
 // ===============================================================
