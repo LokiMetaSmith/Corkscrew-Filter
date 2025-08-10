@@ -25,8 +25,9 @@ oring_cross_section_mm = 1.5;
 spacer_height_mm = 5;
 adapter_hose_id_mm = 30;
 support_rib_thickness_mm = 1.5;
-support_revolutions = 0.25;
 support_density = 4; // NEW: Number of support bundles around the circumference
+flange_od = 20;           // Outer diameter of the hose adapter flange
+flange_height = 5;        // Height of the hose adapter flange
 
 // --- Tolerances & Fit ---
 // Adjust these values based on your printer's calibration
@@ -149,7 +150,7 @@ module ModularFilterAssembly(tube_id, total_length, bin_count, spacer_h, oring_c
                         if (ADD_HELICAL_SUPPORT && !is_top) {
                             // The support doesn't need to be rotated because the whole spacer is now rotated.
                             translate([0,0,spacer_h/2])
-                                HelicalOuterSupport(spacer_od, bin_length, support_rib_thickness_mm, support_revolutions);
+                                HelicalOuterSupport(spacer_od, bin_length, support_rib_thickness_mm, twist_rate);
                         }
                     }
                 }
@@ -180,9 +181,9 @@ module FlatEndScrew(h, twist, num_bins) {
 
 // ... (Rest of modules are unchanged and included for completeness) ...
 // This module creates the helical support structure between spacers.
-// It is now fully parameterized based on the main filter settings.
-module HelicalOuterSupport(target_dia, target_height, rib_thickness, revolutions) {
-    twist_angle = 360 * revolutions;
+// It now uses the master twist_rate to ensure its pitch matches the main helix.
+module HelicalOuterSupport(target_dia, target_height, rib_thickness, twist_rate) {
+    twist_angle = twist_rate * target_height;
     radius = target_dia / 2 - rib_thickness;
 
     // The for-loop creates rotational symmetry based on support_density
@@ -252,6 +253,9 @@ module HoseAdapterEndCap(tube_od, hose_id, oring_cs) {
             cylinder(r = cap_outer_dia / 2, h = cap_sleeve_height);
             translate([0,0,cap_sleeve_height])
                 cylinder(r = cap_outer_dia/2, h = cap_end_plate_thick);
+            // Add the new flange for the hose barb
+            translate([0,0,cap_sleeve_height + cap_end_plate_thick])
+                cylinder(d = flange_od, h = flange_height);
         }
         translate([0, 0, -1])
             cylinder(r = cap_inner_dia / 2, h = cap_sleeve_height + 2);
@@ -271,7 +275,8 @@ module CorkscrewSlitKnife(twist,depth,num_bins) {
     yrot = 360*(1 / pitch_mm)*de;
     slit_axial_length_mm = 1 + 0.5;
 
-    for(i = [0:num_bins -1]) {
+    // The user wants only one slit per segment, so we will just run the loop once.
+    for(i = [0:0]) {
         j = -(num_bins-1)/2 + i;
         rotate([0,0,-yrot*(j+1)])
         translate([0,0,(j+1)*de])
