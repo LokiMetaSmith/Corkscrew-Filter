@@ -24,13 +24,24 @@ insert_length_mm = 350/2;
 oring_cross_section_mm = 1.5;
 spacer_height_mm = 5;
 adapter_hose_id_mm = 30;
-support_rib_thickness_mm = 1.5;
+support_rib_thickness_mm = 2.5;
 support_revolutions = 0.25;
 support_density = 4; // NEW: Number of support bundles around the circumference
+flange_od = 20;           // Outer diameter of the hose adapter flange
+flange_height = 5;        // Height of the hose adapter flange
+
+// --- Tolerances & Fit ---
+// Adjust these values based on your printer's calibration
+tolerance_tube_fit = 0.2;   // Clearance between the spacers and the inner wall of the tube
+tolerance_socket_fit = 0.4; // Clearance between the screw and the spacer socket
+tolerance_channel = 0.1;  // Extra clearance for the airflow channel to prevent binding
 
 // --- CONTROL_VARIABLES ---
+GENERATE_CFD_VOLUME   = false; // NEW: Set to true to generate the internal fluid volume for CFD analysis
+USE_MASTER_HELIX_METHOD = true; // NEW: Switch between assembly strategies
 USE_MODULAR_FILTER    = 1;
 USE_HOSE_ADAPTER_CAP  = 0;
+THREADED_INLET        = true ;
 
 // Visual Options
 ADD_HELICAL_SUPPORT   = true;
@@ -41,142 +52,134 @@ SHOW_O_RINGS          = true;
 // === Main Logic ================================================
 // ===============================================================
 
+if (GENERATE_CFD_VOLUME) {
+    tube_id = tube_od_mm - (2 * tube_wall_mm);
+    difference() {
+        // 1. Start with a solid cylinder representing the inner volume of the tube
+        cylinder(d = tube_id, h = insert_length_mm, center = true);
+        
+        // 2. Subtract the entire filter assembly
+        ModularFilterAssembly(tube_id, insert_length_mm, num_bins, spacer_height_mm, oring_cross_section_mm);
+    }
+} else {
+    // Logic to generate the solid parts for printing
 if (USE_MODULAR_FILTER) {
-    ModularFilterAssembly(tube_od_mm - (2 * tube_wall_mm), insert_length_mm, num_bins, spacer_height_mm, oring_cross_section_mm);
+    if (USE_MASTER_HELIX_METHOD) {
+        // New, more robust assembly method
+        ModularFilterAssembly(tube_od_mm - (2 * tube_wall_mm), insert_length_mm, num_bins, spacer_height_mm, oring_cross_section_mm);
+    } else {
+        // Old method kept for debugging
+        ModularFilterAssembly_Rotational(tube_od_mm - (2 * tube_wall_mm), insert_length_mm, num_bins, spacer_height_mm, oring_cross_section_mm);
+    }
 } else if (USE_HOSE_ADAPTER_CAP) {
     HoseAdapterEndCap(tube_od_mm, adapter_hose_id_mm, oring_cross_section_mm);
+}
 }
 
 // ===============================================================
 // === Module Definitions ========================================
 // ===============================================================
 
-// Creates the helical cutting tool for the void.
-module CorkscrewVoid(h, twist) {
+// Unified module to generate a helical shape with a given radius.
+// This ensures the solid and void helices are generated with identical logic.
+module HelicalShape(h, twist, r) {
+
+    echo(str("Generating HelicalShape: r=", r, ", center=[", screw_OD_mm, ", 0, 0]"));
     linear_extrude(height = h, center = true, convexity = 10, twist = twist) {
         translate([screw_OD_mm, 0, 0]) {
             scale([1, scale_ratio]) {
-                circle(r = screw_ID_mm);
+                circle(r = r);
             }
         }
     }
+
+}
+
+// Creates the helical cutting tool for the void.
+module CorkscrewVoid(h, twist) {
+    HelicalShape(h, twist, screw_ID_mm + tolerance_channel);
 }
 
 // This module creates the solid part of the helical screw.
 module CorkscrewSolid(h, twist) {
-    linear_extrude(height = h, center = true, convexity = 10, twist = twist) {
-        translate([screw_OD_mm, 0, 0]) {
-            scale([1, scale_ratio]) {
-                circle(r = screw_OD_mm);
-            }
-        }
-    }
+    HelicalShape(h, twist, screw_OD_mm);
 }
 
-// Takes the assembled parts as children() and subtracts the helical channel.
-// This version creates a set of disconnected void segments that perfectly
-// match the solid screw segments.
-module ApplyHelicalCut(total_length, bin_count, spacer_h, bin_length, twist_rate) {
-    difference() {
-        // The solid assembly is passed as a child
-        children();
-        
-        // --- Create the segmented void cutter ---
-        // The void segments must be placed in the exact same positions as the solid screws.
-        for (i = [0 : bin_count - 1]) {
-            screw_twist = twist_rate * bin_length;
-            start_rotation = i * screw_twist;
-            // The Z position must be identical to the solid screw's Z position.
-            z_pos_screw = -total_length/2 + spacer_h + i * (bin_length + spacer_h) + bin_length/2;
-            
-            rotate([0,0,start_rotation]) {
-                translate([0, 0, z_pos_screw])
-                    CorkscrewVoid(bin_length + 0.2, screw_twist); // Add tolerance
-            }
-        }
-    }
-}
-
-
-// Assembles the complete filter by stacking corkscrew sections and Capture Spacers.
+// Assembles the complete filter using the "Master Helix" method for robust alignment.
 module ModularFilterAssembly(tube_id, total_length, bin_count, spacer_h, oring_cs) {
     total_spacer_length = (bin_count + 1) * spacer_h;
     total_screw_length = total_length - total_spacer_length;
     bin_length = total_screw_length / bin_count;
-    twist_rate = (360 * number_of_complete_revolutions) / (total_screw_length+spacer_h);
-    
-    ApplyHelicalCut(total_length, bin_count, spacer_h, bin_length, twist_rate) {
-        // Center the whole assembly vertically
-        translate([0, 0, -total_length/2]) {
-            
-            // Initial spacer at the bottom.
-            translate([0, 0, spacer_h/2])
-            difference(){
-                #CaptureSpacer(tube_id, spacer_h, oring_cs, bin_length, is_base = true);
-                translate([0,0,0])rotate([0,0,twist_rate*spacer_h])CorkscrewVoid(spacer_h,twist_rate*spacer_h);
-            }
-            // Loop to stack SOLID screw bins and spacers
-            for (i = [0 : bin_count - 1]) {
-                screw_twist = twist_rate * bin_length;
-                start_rotation = i * screw_twist;
+    twist_rate = (360 * number_of_complete_revolutions) / total_length;
 
-                // Z position for the screw segment
-                z_pos_screw = spacer_h + i * (bin_length + spacer_h) + bin_length/2;
-                
-                // Rotate the coordinate system, then place the screw.
-                rotate([0,0,start_rotation]) {
-                    translate([0, 0, z_pos_screw])
-                        FlatEndScrew(h = bin_length, twist = screw_twist, num_bins = bin_count);
-                }
-
-                // Z position for the spacer that sits on TOP of the screw
-                z_pos_spacer = z_pos_screw + bin_length/2 + spacer_h/2;
-                
-                // The spacer must be rotated to match the end rotation of the screw it sits on.
-                rotate([0,0,start_rotation + screw_twist]) {
-                    translate([0, 0, z_pos_spacer])
-                    difference(){
-                        #CaptureSpacer(tube_id, spacer_h, oring_cs, bin_length, is_top = (i == bin_count-1), is_base = false);
-                        translate([0,0,0])rotate([0,0,twist_rate*spacer_h])CorkscrewVoid(spacer_h,twist_rate*spacer_h);
-                }
-            }
-            }
-        }
+    // --- Define Master Helices ---
+    module MasterSolidHelix() {
+        CorkscrewSolid(total_length + 2, twist_rate * (total_length + 2));
     }
-}
+    module MasterVoidHelix() {
+        CorkscrewVoid(total_length + 2, twist_rate * (total_length + 2));
+    }
 
-
-// Creates a bulkhead that captures the end of a screw section.
-// It now accepts bin_length to correctly size the helical supports.
-module CaptureSpacer(tube_id, height, oring_cs, bin_length, is_base=false, is_top=false) {
-    spacer_od = tube_id - 0.2;
-    screw_flight_od = 4 * screw_OD_mm;
-    socket_depth = height / 2;
-
-    union() {
-        difference() {
-            cylinder(d = spacer_od, h = height, center = true);
-            
-            // O-ring groove on the outside, centered on the spacer's height
-            OringGroove_OD_Cutter(spacer_od, oring_cs);
-            
-            // Socket for the screw head, cut from the bottom of the spacer.
-            // This should only apply to spacers that sit on top of a screw.
-            // The base spacer does not, and the top spacer acts as a cap.
-            if (is_base ) {
-                translate([0, 0, -height/2-.001])
-                    cylinder(d = screw_flight_od + 0.4, h = socket_depth + 0.1);
+    // --- Main Assembly ---
+    difference() {
+        // 1. Union all the solid parts together
+        union() {
+            // 2. Create the screw segments
+            for (i = [0 : bin_count - 1]) {
+                z_pos = -total_length/2 + spacer_h + i * (bin_length + spacer_h) + bin_length/2;
+                rot = twist_rate * z_pos;
+                
+                // Create the part at the origin, then move it into place.
+                translate([0, 0, z_pos]) rotate([0,0,rot]) {
+                    intersection() {
+                        // To use the master helix, we must "un-transform" it back to the origin.
+                        rotate([0,0,-rot]) translate([0,0,-z_pos]) MasterSolidHelix();
+                        // This cylinder is at the origin and defines the bin's extent.
+                        cylinder(h = bin_length + 0.1, d = tube_id * 2, center=true);
+                    }
+                }
             }
-        }
-        if (SHOW_O_RINGS) {
-            OringVisualizer(spacer_od, oring_cs);
-        }
-        // Add the helical support for all spacers except the one at the very top.
-        if (ADD_HELICAL_SUPPORT && !is_top) {
-            // The support starts from the top of the spacer and extends upwards.
-            translate([0,0,height/2])
-                HelicalOuterSupport(spacer_od, bin_length, support_rib_thickness_mm, support_revolutions);
-        }
+            
+            // 3. Create the spacers
+            for (i = [0 : bin_count]) {
+                z_pos = -total_length/2 + i * (bin_length + spacer_h) + spacer_h/2;
+                rot = twist_rate * z_pos;
+                is_base = (i == 0);
+                is_top = (i == bin_count);
+                spacer_od = tube_id - tolerance_tube_fit;
+                
+                // Create the part at the origin, then move it into place.
+                translate([0, 0, z_pos]) rotate([0,0,rot]) {
+                    union() {
+                        difference() {
+                            cylinder(d = spacer_od, h = spacer_h, center=true);
+                            // Un-transform the master helix to align with the cylinder at the origin
+                            rotate([0,0,-rot]) translate([0,0,-z_pos]) MasterSolidHelix();
+                            OringGroove_OD_Cutter(spacer_od, oring_cross_section_mm);
+                            if (is_top && THREADED_INLET) {
+                                translate([0, 0, spacer_h/2])
+                                    cylinder(d = 4*screw_OD_mm + tolerance_socket_fit, h = spacer_h/2 + 0.1);
+                            }
+                            if (is_base && THREADED_INLET) {
+                                translate([0, 0, -spacer_h/2])
+                                    cylinder(d = 4*screw_OD_mm + tolerance_socket_fit, h = spacer_h/2 + 0.1);
+                            }
+                        }
+                        if (SHOW_O_RINGS) {
+                            OringVisualizer(spacer_od, oring_cross_section_mm);
+                        }
+                        if (ADD_HELICAL_SUPPORT && !is_top) {
+                            // The support doesn't need to be rotated because the whole spacer is now rotated.
+                            translate([0,0,spacer_h/2])
+                                HelicalOuterSupport(spacer_od, bin_length, support_rib_thickness_mm, twist_rate* support_revolutions);
+                        }
+                    }
+                }
+            }
+        } // End of solid union
+
+        // 4. Subtract the Master Void from the entire solid assembly.
+        MasterVoidHelix();
     }
 }
 
@@ -187,8 +190,8 @@ module FlatEndScrew(h, twist, num_bins) {
     
     intersection() {
         difference() {
-            // Create the main helical body
-            CorkscrewSolid(h+.5, twist);
+            // Create the main helical body, add a small tolerance
+            CorkscrewSolid(h + 0.5, twist);
             // Cut slits into the helix to separate the bins
             CorkscrewSlitKnife(twist, h, num_bins);
         }
@@ -199,9 +202,9 @@ module FlatEndScrew(h, twist, num_bins) {
 
 // ... (Rest of modules are unchanged and included for completeness) ...
 // This module creates the helical support structure between spacers.
-// It is now fully parameterized based on the main filter settings.
-module HelicalOuterSupport(target_dia, target_height, rib_thickness, revolutions) {
-    twist_angle = 360 * revolutions;
+// It now uses the master twist_rate to ensure its pitch matches the main helix.
+module HelicalOuterSupport(target_dia, target_height, rib_thickness, twist_rate) {
+    twist_angle = twist_rate * target_height;
     radius = target_dia / 2 - rib_thickness;
 
     // The for-loop creates rotational symmetry based on support_density
@@ -259,7 +262,7 @@ module OringGroove_ID_Cutter(object_id, oring_cs) {
 
 // Creates a hose adapter that caps the end of the tube.
 module HoseAdapterEndCap(tube_od, hose_id, oring_cs) {
-    cap_inner_dia = tube_od + 0.2;
+    cap_inner_dia = tube_od + tolerance_tube_fit;
     cap_wall = 3;
     cap_outer_dia = cap_inner_dia + 2 * cap_wall;
     cap_sleeve_height = 20;
@@ -271,6 +274,9 @@ module HoseAdapterEndCap(tube_od, hose_id, oring_cs) {
             cylinder(r = cap_outer_dia / 2, h = cap_sleeve_height);
             translate([0,0,cap_sleeve_height])
                 cylinder(r = cap_outer_dia/2, h = cap_end_plate_thick);
+            // Add the new flange for the hose barb
+            translate([0,0,cap_sleeve_height + cap_end_plate_thick])
+                cylinder(d = flange_od, h = flange_height);
         }
         translate([0, 0, -1])
             cylinder(r = cap_inner_dia / 2, h = cap_sleeve_height + 2);
