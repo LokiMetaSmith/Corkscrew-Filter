@@ -35,6 +35,11 @@ tolerance_tube_fit = 0.2;   // Clearance between the spacers and the inner wall 
 tolerance_socket_fit = 0.4; // Clearance between the screw and the spacer socket
 tolerance_channel = 0.1;  // Extra clearance for the airflow channel to prevent binding
 
+// --- Config File ---
+// Include a configuration file to override the default parameters below.
+config_file = "default.scad";
+include <config_file>
+
 // --- CONTROL_VARIABLES ---
 GENERATE_CFD_VOLUME   = false; // NEW: Set to true to generate the internal fluid volume for CFD analysis
 USE_MASTER_HELIX_METHOD = true; // NEW: Switch between assembly strategies
