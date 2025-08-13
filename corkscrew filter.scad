@@ -25,7 +25,7 @@ oring_cross_section_mm = 1.5;
 spacer_height_mm = 5;
 adapter_hose_id_mm = 30;
 support_rib_thickness_mm = 2.5;
-support_revolutions = 0.25;
+support_revolutions = 4;
 support_density = 4; // NEW: Number of support bundles around the circumference
 flange_od = 20;           // Outer diameter of the hose adapter flange
 flange_height = 5;        // Height of the hose adapter flange
@@ -36,12 +36,17 @@ tolerance_tube_fit = 0.2;   // Clearance between the spacers and the inner wall 
 tolerance_socket_fit = 0.4; // Clearance between the screw and the spacer socket
 tolerance_channel = 0.1;  // Extra clearance for the airflow channel to prevent binding
 
+// --- Config File ---
+// Include a configuration file to override the default parameters below.
+config_file = "default.scad";
+include <config_file>
+
 // --- CONTROL_VARIABLES ---
 GENERATE_CFD_VOLUME   = false; // NEW: Set to true to generate the internal fluid volume for CFD analysis
 USE_MASTER_HELIX_METHOD = true; // NEW: Switch between assembly strategies
 USE_MODULAR_FILTER    = 1;
 USE_HOSE_ADAPTER_CAP  = 0;
-THREADED_INLET        = true ;
+THREADED_INLET        = false ;
 
 // Visual Options
 ADD_HELICAL_SUPPORT   = true;
@@ -75,6 +80,7 @@ if (USE_MODULAR_FILTER) {
     HoseAdapterEndCap(tube_od_mm, adapter_hose_id_mm, oring_cross_section_mm);
 }
 }
+
 
 // ===============================================================
 // === Module Definitions ========================================
@@ -171,7 +177,7 @@ module ModularFilterAssembly(tube_id, total_length, bin_count, spacer_h, oring_c
                         if (ADD_HELICAL_SUPPORT && !is_top) {
                             // The support doesn't need to be rotated because the whole spacer is now rotated.
                             translate([0,0,spacer_h/2])
-                                HelicalOuterSupport(spacer_od, bin_length, support_rib_thickness_mm, twist_rate* support_revolutions);
+                                HelicalOuterSupport(spacer_od, bin_length, support_rib_thickness_mm, support_revolutions);
                         }
                     }
                 }
@@ -296,7 +302,8 @@ module CorkscrewSlitKnife(twist,depth,num_bins) {
     yrot = 360*(1 / pitch_mm)*de;
     slit_axial_length_mm = 1 + 0.5;
 
-    for(i = [0:num_bins -1]) {
+    // The user wants only one slit per segment, so we will just run the loop once.
+    for(i = [0:0]) {
         j = -(num_bins-1)/2 + i;
         rotate([0,0,-yrot*(j+1)])
         translate([0,0,(j+1)*de])
