@@ -31,8 +31,8 @@ slit_width_mm = 2;                      // The width of the slit opening.
 hex_array_layers = 1; // 0=1 cell, 1=7 cells, 2=19 cells, etc.
 
 // --- CONTROL_VARIABLES ---
-USE_HEX_ARRAY_FILTER    = 1;
-USE_SINGLE_CELL_FILTER  = 0;
+USE_HEX_ARRAY_FILTER    = true;
+USE_SINGLE_CELL_FILTER  = false;
 
 // ===============================================================
 // === Main Logic ================================================
@@ -96,8 +96,8 @@ module HexArrayLayout(layers, spacing) {
             for (s = [0 : l - 1]) {
                 angle1 = a * 60;
                 angle2 = (a+1) * 60;
-                pos = l * spacing * ([(1-s/l)*cos(angle1) + (s/l)*cos(angle2)],
-                                     [(1-s/l)*sin(angle1) + (s/l)*sin(angle2)]);
+                pos = l * spacing * [(1-s/l)*cos(angle1) + (s/l)*cos(angle2),
+                                     (1-s/l)*sin(angle1) + (s/l)*sin(angle2)];
                 translate(pos) children();
             }
         }
