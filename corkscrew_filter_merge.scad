@@ -91,9 +91,9 @@ module HexArrayLayout(layers, spacing) {
     // Center cell
     children();
     // Rings of cells
-    for (l = 1; l <= layers; l++) {
-        for (a = 0; a < 6; a++) {
-            for (s = 0; s < l; s++) {
+    for (l = [1 : layers]) {
+        for (a = [0 : 5]) {
+            for (s = [0 : l - 1]) {
                 angle1 = a * 60;
                 angle2 = (a+1) * 60;
                 pos = l * spacing * ([(1-s/l)*cos(angle1) + (s/l)*cos(angle2)],
