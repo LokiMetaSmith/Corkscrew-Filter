@@ -96,8 +96,8 @@ module HexArrayLayout(layers, spacing) {
             for (s = [0 : l - 1]) {
                 angle1 = a * 60;
                 angle2 = (a+1) * 60;
-                pos = l * spacing * ([(1-s/l)*cos(angle1) + (s/l)*cos(angle2)],
-                                     [(1-s/l)*sin(angle1) + (s/l)*sin(angle2)]);
+                pos = l * spacing * [(1-s/l)*cos(angle1) + (s/l)*cos(angle2),
+                                     (1-s/l)*sin(angle1) + (s/l)*sin(angle2)];
                 translate(pos) children();
             }
         }
