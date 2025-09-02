@@ -13,7 +13,7 @@ $fn = $preview ? low_res_fn : high_res_fn;
 // --- Main Filter Parameters ---
 cell_diameter = 10;                     // OD of the corkscrew in a single cell.
 cell_length = 100;                      // The total Z-height of a filter cell.
-num_helices = 3;                        // Number of interleaved helices (1, 2, or 3).
+num_helices = 1;                        // Number of interleaved helices (1, 2, or 3).
 ramp_width_degrees = 20;                // Angular width of a single helix ramp.
 total_revolutions = 8;                  // Total turns over the cell_length.
 
@@ -28,7 +28,7 @@ slit_open_length_mm = 10;               // The length of the fully open part of 
 slit_width_mm = 2;                      // The width of the slit opening.
 
 // --- Array Parameters ---
-hex_array_layers = 1; // 0=1 cell, 1=7 cells, 2=19 cells, etc.
+hex_array_layers = 0; // 0=1 cell, 1=7 cells, 2=19 cells, etc.
 
 // --- CONTROL_VARIABLES ---
 USE_HEX_ARRAY_FILTER    = true;
@@ -67,11 +67,11 @@ module SingleCellFilter() {
 // Creates a hexagonal array of filter cells.
 module HexFilterArray(layers) {
     spacing = cell_diameter + 2; // Distance between cell centers
-    hex_radius = layers * spacing + cell_diameter;
+    hex_radius =   sqrt(3)*spacing*(layers+1);
 
     // Create the main hexagonal block and cut empty cells
     difference() {
-        cylinder(h = cell_length, d = hex_radius, center=true, $fn=6);
+        #cylinder(h = cell_length, d = hex_radius, center=true, $fn=6);
         HexArrayLayout(layers, spacing) {
             cylinder(d = cell_diameter + 0.4, h = cell_length + 2, center=true); // Cutter
         }
