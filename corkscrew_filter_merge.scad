@@ -151,40 +151,15 @@ module MultiHelixRamp(h, twist, dia, helices) {
     }
 }
 
-// Creates a cutting tool for a ramped slit.
+// Creates a cutting tool for a slit.
+// NOTE: The "ramped" feature of the original code was broken. This is a
+// simpler implementation of a non-ramped slit.
 module RampedSlitKnife(h, twist, dia, helices) {
-    // Define the 3D shape of the cutting tool using a polyhedron
-    // This creates a single ramped cutter.
-    cutter_shape_points = [
-        // Bottom face (thin start of ramp)
-        [dia/2, -slit_width_mm/2, 0],                // 0
-        [dia/2,  slit_width_mm/2, 0],                // 1
-        [dia/2-0.1,  slit_width_mm/2, 0],            // 2
-        [dia/2-0.1, -slit_width_mm/2, 0],            // 3
-        // Top face (full size end of ramp)
-        [dia/2, -slit_width_mm/2, slit_ramp_length_mm], // 4
-        [dia/2,  slit_width_mm/2, slit_ramp_length_mm], // 5
-        [dia/2-slit_width_mm,  slit_width_mm/2, slit_ramp_length_mm], // 6
-        [dia/2-slit_width_mm, -slit_width_mm/2, slit_ramp_length_mm], // 7
-    ];
-    cutter_shape_faces = [
-        [0,1,2,3], [4,5,6,7], [0,1,5,4], [1,2,6,5], [2,3,7,6], [3,0,4,7]
-    ];
-
-    // Main open part of the slit
-    open_slit_cutter = cube([slit_width_mm, slit_width_mm, slit_open_length_mm]);
-
     for (i = [0 : helices - 1]) {
         rotate([0, 0, i * (360 / helices) + ramp_width_degrees/2]) {
-            // Apply the same helical transformation as the ramp itself
-            linear_extrude(height=h, twist=twist, center=true, slices=h*2) {
-                 // Place the ramp and slit cutters in the 2D space
-                 // This is a simplified placement and may require further tuning.
-                 translate([dia/2 - slit_width_mm, 0, -h/2 + slit_ramp_length_mm/2])
-                    polyhedron(points=cutter_shape_points, faces=cutter_shape_faces);
-
-                 translate([dia/2 - slit_width_mm, 0, -h/2 + slit_ramp_length_mm + slit_open_length_mm/2])
-                    cube([slit_width_mm, slit_width_mm, slit_open_length_mm], center=true);
+            linear_extrude(height=h, twist=twist, center=true, slices = h*2) {
+                 translate([dia/2 - slit_width_mm/2, 0])
+                    square([slit_width_mm, slit_width_mm], center=true);
             }
         }
     }
