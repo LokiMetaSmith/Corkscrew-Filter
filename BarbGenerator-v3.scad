@@ -39,7 +39,7 @@ output_barb_count = 4;
 /* [Hidden] */
 inches_to_mm = 25.400;
 
-make_adapter( input_units == "US" ? input_size * inches_to_mm : input_size, output_units == "US" ? output_size * inches_to_mm : output_size );
+//make_adapter( input_units == "US" ? input_size * inches_to_mm : input_size, output_units == "US" ? output_size * inches_to_mm : output_size );
 
 module make_adapter( input_diameter, output_diameter )
 {
@@ -181,3 +181,4 @@ module vault( input_diameter, jheight, center_width, center_depth, center_vheigh
     }
   }
 }
+
