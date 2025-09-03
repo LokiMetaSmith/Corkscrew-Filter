@@ -34,20 +34,25 @@ use <BarbGenerator-v3.scad>;
 // Params (mm), degrees 
 
 
-filter_height_mm = 40;
-number_of_complete_revolutions = 6;
+num_bins = 3;
+number_of_complete_revolutions = 2*num_bins;
+filter_height_mm = num_bins*40/3;
+// WARNING! Trying to reduce this to one bin seemed to make the slit go away
+
 filter_twist_degrees = 360*number_of_complete_revolutions;
 screw_OD_mm = 2;
 screw_ID_mm = 1;
 cell_wall_mm = 1;
+barb_input_diameter = 1;
+barb_output_diameter = 3;
+
 slit_axial_open_length_mm = 0.5;
 slit_axial_length_mm = cell_wall_mm + slit_axial_open_length_mm;
 hex_cell_diam_mm = 10;
 FN_RES = 30;
 bin_height_z_mm = 20;
 num_screws = 1;
-// WARNING! Trying to reduce this to one bin seemed to make the slit go away
-num_bins = 3;
+
 screw_center_separation_mm = 10;
 bin_breadth_x_mm = (num_screws -1) * screw_center_separation_mm + screw_center_separation_mm*2;
 
@@ -69,8 +74,10 @@ USE_SCREW_KNIFE         = 0;
 
 USE_BINCAP              = 0;
 
-USE_BARB                = 0;
+TEST_BARB                = 0;
 ROBS_ORIGINAL_BARBS = 1;
+
+// Lee says outer barb should be 5mm
 
 
 module Barb(input_diameter,output_diameter) {
@@ -79,7 +86,7 @@ module Barb(input_diameter,output_diameter) {
 }
 
 
-if (USE_BARB) {
+if (TEST_BARB) {
     input_diameter = 3;
     output_diameter = 5;
     jheight = 0;
@@ -193,7 +200,7 @@ module Bins(depth,numbins,height,width,height_above_port_line) {
                 } 
                 // WARNING! This math seems to 
                 // have no rhyme or reason and is just fudged....
-                translate([width/2 -1 ,0,0])
+                translate([width/2+bin_wall_thickness_mm*2,0,0])
                 rotate([0,90,0])
                 Barb(input_diameter,output_diameter);
             } 
@@ -252,6 +259,14 @@ module ScrewsKnife(num_screws,num_bins,depth) {
         }  
      }   
 }
+
+module BarbPort() {
+    translate([0, filter_height_mm/2+bin_wall_thickness_mm*2.5, 0])
+    rotate([0,90,90])
+    Barb(barb_input_diameter,barb_output_diameter);
+}
+
+
 module BinsWithScrew(nums_screws,num_bins) {
     d = (num_screws-1)*screw_center_separation_mm;
     difference() {
@@ -264,6 +279,15 @@ module BinsWithScrew(nums_screws,num_bins) {
         translate([x,0,0])
         CorkscrewWithSlit(filter_height_mm,num_bins);
     }
+    
+    // Outlet
+    translate([screw_OD_mm,0,0])
+    BarbPort();
+    
+    // Inlet
+    translate([screw_OD_mm,0,0])
+    rotate([0,0,180])
+    BarbPort();
 }
 
 if (USE_FULL_BINS) {
@@ -302,152 +326,3 @@ if (USE_VOIDLESS_SCREW) {
 }
 
 
-// --- START: ISO METRIC THREAD LIBRARY ---
-// ISO-standard metric threads, http://en.wikipedia.org/wiki/ISO_metric_screw_thread
-// Copyright 2016 Dan Kirshner - dan_kirshner@yahoo.com, GNU GPLv3
-// Version 2.2
-
-function segments (diameter) = min (50, ceil (diameter*6));
-
-module metric_thread (diameter=8, pitch=1, length=1, internal=true, n_starts=1,
-                      thread_size=-1, groove=false, square=false, rectangle=0,
-                      angle=30, taper=0, leadin=1, leadfac=1.0)
-{
-   local_thread_size = thread_size == -1 ? pitch : thread_size;
-   local_rectangle = rectangle ? rectangle : 1;
-
-   n_segments = segments (diameter);
-   h = (square || rectangle) ? local_thread_size*local_rectangle/2 : local_thread_size / (2 * tan(angle));
-
-   h_fac1 = (square || rectangle) ? 0.90 : 0.625;
-   h_fac2 = (square || rectangle) ? 0.95 : 5.3/8;
-
-   tapered_diameter = diameter - length*taper;
-
-   difference () {
-       union () {
-           if (! groove) {
-               metric_thread_turns (diameter, pitch, length, internal, n_starts,
-                                    local_thread_size, groove, square, rectangle, angle,
-                                    taper);
-           }
-
-           difference () {
-               if (groove) {
-                   cylinder (r1=diameter/2, r2=tapered_diameter/2,
-                             h=length, $fn=n_segments);
-               } else if (internal) {
-                   cylinder (r1=diameter/2 - h*h_fac1, r2=tapered_diameter/2 - h*h_fac1,
-                             h=length, $fn=n_segments);
-               } else {
-                   cylinder (r1=diameter/2 - h*h_fac2, r2=tapered_diameter/2 - h*h_fac2,
-                             h=length, $fn=n_segments);
-               }
-
-               if (groove) {
-                   metric_thread_turns (diameter, pitch, length, internal, n_starts,
-                                        local_thread_size, groove, square, rectangle,
-                                        angle, taper);
-               }
-           }
-       }
-       if (leadin == 2 || leadin == 3) {
-           difference () {
-               cylinder (r=diameter/2 + 1, h=h*h_fac1*leadfac, $fn=n_segments);
-               cylinder (r2=diameter/2, r1=diameter/2 - h*h_fac1*leadfac, h=h*h_fac1*leadfac,
-                         $fn=n_segments);
-           }
-       }
-       if (leadin == 1 || leadin == 2) {
-           translate ([0, 0, length + 0.05 - h*h_fac1*leadfac]) {
-               difference () {
-                   cylinder (r=diameter/2 + 1, h=h*h_fac1*leadfac, $fn=n_segments);
-                   cylinder (r1=tapered_diameter/2, r2=tapered_diameter/2 - h*h_fac1*leadfac, h=h*h_fac1*leadfac,
-                             $fn=n_segments);
-               }
-           }
-       }
-   }
-}
-
-module metric_thread_turns (diameter, pitch, length, internal, n_starts,
-                            thread_size, groove, square, rectangle, angle,
-                            taper)
-{
-   n_turns = floor (length/pitch);
-   intersection () {
-     for (i=[-1*n_starts : n_turns+1]) {
-         translate ([0, 0, i*pitch]) {
-             metric_thread_turn (diameter, pitch, internal, n_starts,
-                                 thread_size, groove, square, rectangle, angle,
-                                 taper, i*pitch);
-         }
-     }
-     translate ([0, 0, length/2]) {
-         cube ([diameter*3, diameter*3, length], center=true);
-     }
-   }
-}
-
-module metric_thread_turn (diameter, pitch, internal, n_starts, thread_size,
-                           groove, square, rectangle, angle, taper, z)
-{
-   n_segments = segments (diameter);
-   fraction_circle = 1.0/n_segments;
-   for (i=[0 : n_segments-1]) {
-     rotate ([0, 0, i*360*fraction_circle]) {
-         translate ([0, 0, i*n_starts*pitch*fraction_circle]) {
-             thread_polyhedron ((diameter - taper*(z + i*n_starts*pitch*fraction_circle))/2,
-                                 pitch, internal, n_starts, thread_size, groove,
-                                 square, rectangle, angle);
-         }
-     }
-   }
-}
-
-module thread_polyhedron (radius, pitch, internal, n_starts, thread_size,
-                           groove, square, rectangle, angle)
-{
-   n_segments = segments (radius*2);
-   fraction_circle = 1.0/n_segments;
-   local_rectangle = rectangle ? rectangle : 1;
-   h = (square || rectangle) ? thread_size*local_rectangle/2 : thread_size / (2 * tan(angle));
-   outer_r = radius + (internal ? h/20 : 0);
-   h_fac1 = (square || rectangle) ? 1.1 : 0.875;
-   inner_r = radius - h*h_fac1;
-   translate_y = groove ? outer_r + inner_r : 0;
-   reflect_x   = groove ? 1 : 0;
-   x_incr_outer = (! groove ? outer_r : inner_r) * fraction_circle * 2 * PI * 1.02;
-   x_incr_inner = (! groove ? inner_r : outer_r) * fraction_circle * 2 * PI * 1.02;
-   z_incr = n_starts * pitch * fraction_circle * 1.005;
-   z0_outer = (outer_r - inner_r) * tan(angle);
-   bottom = internal ? 0.235 : 0.25;
-   top    = internal ? 0.765 : 0.75;
-
-   translate ([0, translate_y, 0]) {
-     mirror ([reflect_x, 0, 0]) {
-         if (square || rectangle) {
-             polyhedron (
-                 points = [
-                     [-x_incr_inner/2, -inner_r, bottom*thread_size],[-x_incr_outer/2, -outer_r, bottom*thread_size],
-                     [x_incr_inner/2, -inner_r, bottom*thread_size + z_incr],[x_incr_outer/2, -outer_r, bottom*thread_size + z_incr],
-                     [x_incr_inner/2, -inner_r, top*thread_size + z_incr],[-x_incr_inner/2, -inner_r, top*thread_size],
-                     [x_incr_outer/2, -outer_r, top*thread_size + z_incr],[-x_incr_outer/2, -outer_r, top*thread_size]
-                 ],
-                 faces = [ [0,5,7,1],[2,3,6,4],[0,2,4,1],[5,0,1,7],[3,2,5,6],[4,6,7,3] ]
-             );
-         } else {
-             polyhedron (
-                 points = [
-                     [-x_incr_inner/2, -inner_r, 0],[-x_incr_outer/2, -outer_r, z0_outer],
-                     [x_incr_inner/2, -inner_r, z_incr],[x_incr_outer/2, -outer_r, z0_outer + z_incr],
-                     [x_incr_inner/2, -inner_r, thread_size + z_incr],[-x_incr_inner/2, -inner_r, thread_size],
-                     [x_incr_outer/2, -outer_r, thread_size - z0_outer + z_incr],[-x_incr_outer/2, -outer_r, thread_size - z0_outer]
-                 ],
-                 faces = [ [0,5,7,1],[2,3,6,4],[0,2,4,1],[5,0,1,7],[3,2,5,6],[4,6,7,3] ]
-             );
-         }
-     }
-   }
-}
-// --- END: ISO METRIC THREAD LIBRARY ---
