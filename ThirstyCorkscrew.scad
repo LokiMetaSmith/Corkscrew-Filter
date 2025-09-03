@@ -33,6 +33,7 @@ use <BarbGenerator-v3.scad>;
 
 // Params (mm), degrees 
 
+
 filter_height_mm = 40;
 number_of_complete_revolutions = 6;
 filter_twist_degrees = 360*number_of_complete_revolutions;
@@ -87,6 +88,7 @@ if (USE_BARB) {
  //   output_barb( input_diameter, output_diameter, jheight );
     Barb(input_diameter,output_diameter);
 }
+
 
 // Standalone BinCap generation
 if (USE_BINCAP) {
@@ -148,7 +150,6 @@ module CorkscrewWithoutVoid(h,twist) {
     circle(r = screw_OD_mm);
 }
 
-
 module CorkscrewWithoutVoidExcess(h,twist) {
     CorkscrewWithoutVoid(h*2,twist*2);
 }
@@ -172,6 +173,7 @@ module Bins(depth,numbins,height,width,height_above_port_line) {
     // TODO: Move these parameters out where they will be more accessible.
     input_diameter = 1;
     output_diameter = 3;
+
 
     for(i = [0:numbins -1]) {
         j = -(numbins-1)/2 + i;
@@ -247,8 +249,8 @@ module ScrewsKnife(num_screws,num_bins,depth) {
              x =  -d/2+ i * screw_center_separation_mm;
              translate([x,0,0])
              CorkscrewWithoutVoidExcess(depth,filter_twist_degrees);
-        } 
-    }      
+        }  
+     }   
 }
 module BinsWithScrew(nums_screws,num_bins) {
     d = (num_screws-1)*screw_center_separation_mm;
