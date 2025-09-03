@@ -25,6 +25,9 @@
 // TODO: make barbs more flush
 // TODO: 
 
+TC_VERSION_NUM = 0.2;
+
+
 use <BarbGenerator-v3.scad>;
 
 
@@ -38,10 +41,9 @@ screw_ID_mm = 1;
 cell_wall_mm = 1;
 slit_axial_open_length_mm = 0.5;
 slit_axial_length_mm = cell_wall_mm + slit_axial_open_length_mm;
-cell_wall_mm = 1;
 hex_cell_diam_mm = 10;
 FN_RES = 30;
-bin_height_z_mm = 30;
+bin_height_z_mm = 20;
 num_screws = 1;
 num_bins = 3;
 screw_center_separation_mm = 10;
@@ -61,6 +63,7 @@ USE_FULL_BINS           = 1;
 USE_KNIFE_THRU_SCREWS   = 0;
 USE_KNIFE_LOW           = 0;
 USE_KNIFE_SIDE          = 0;
+USE_KNIFE_TOP_HALF      = 1;
 USE_SCREW_KNIFE         = 0;
 USE_BINCAP              = 1;
 
@@ -74,8 +77,8 @@ module Barb(input_diameter,output_diameter) {
 
 
 if (USE_BARB) {
-    input_diameter = 2;
-    output_diameter = 4;
+    input_diameter = 3;
+    output_diameter = 5;
     jheight = 0;
  //   input_barb( input_diameter );
     
@@ -159,6 +162,10 @@ module CorkscrewWithoutVoid(h,twist) {
  //   }
 }
 
+module CorkscrewWithoutVoidExcess(h,twist) {
+    CorkscrewWithoutVoid(h*2,twist*2);
+}
+
 
 
 module CorkscrewWithSlit(depth,numbins) {
@@ -201,8 +208,9 @@ module Bins(depth,numbins,height,width,height_above_port_line) {
     // These will be cubes; orifices will have to be cut
     // in them later.
     de = depth/numbins; // w = width of one bin
+    // TODO: Move these parameters out where they will be more accessible.
     input_diameter = 1;
-    output_diameter = 2;
+    output_diameter = 3;
     for(i = [0:numbins -1]) {
         j = -(numbins-1)/2 + i;
         translate([0,j*de,0])
@@ -215,9 +223,11 @@ module Bins(depth,numbins,height,width,height_above_port_line) {
                 cube([width-b,de-b,height-bin_wall_thickness_mm],center=true);
                 translate([width/2,0,0])
                 rotate([0,90,0])
-                cylinder(b,input_diameter,input_diameter,center=true);
+                cylinder(b,input_diameter,input_diameter,center=true,$fn=30);
             } 
-            translate([width/2,0,0])
+            // WARNING! This math seems to 
+            // have no rhyme or reason and is just fudged....
+            translate([width/2 -1 ,0,0])
             rotate([0,90,0])
             Barb(input_diameter,output_diameter);
         }   
@@ -254,7 +264,7 @@ module ScrewsKnife(num_screws,num_bins,depth) {
             for (i = [0:num_screws-1]) {
                 x =  -d/2+ i * screw_center_separation_mm;
                 translate([x,0,0])
-               CorkscrewWithoutVoid(depth,filter_twist_degrees);
+               CorkscrewWithoutVoidExcess(depth,filter_twist_degrees);
             } 
         }      
 }
@@ -265,7 +275,6 @@ module BinsWithScrew(nums_screws,num_bins) {
         ScrewsKnife(num_screws,num_bins,filter_height_mm);    
     } 
 
-    // For cutting holes in outer bin walls.
     for (i = [0:num_screws-1]) {
         x =  -d/2 + i * screw_center_separation_mm;
         echo(filter_height_mm);
@@ -291,8 +300,13 @@ if (USE_FULL_BINS) {
             cube([100,100,100],center = true);
             translate([-(50+5),0,0])
             cube([100,100,100],center = true);
+        }   
+        if (USE_KNIFE_TOP_HALF) {
+            translate([0,0,50])
+            cube([100,100,100],center = true);
         }
     }
+       
 }
 
 if (USE_SCREW_ONLY) {
