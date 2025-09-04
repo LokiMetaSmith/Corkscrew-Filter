@@ -33,7 +33,7 @@ hex_array_layers = 0; // 0=1 cell, 1=7 cells, 2=19 cells, etc.
 // --- CONTROL_VARIABLES ---
 USE_HEX_ARRAY_FILTER    = true;
 USE_SINGLE_CELL_FILTER  = false;
-USE_RAMPED_SLIT         = false;
+USE_RAMPED_SLIT         = true;
 
 // ===============================================================
 // === Main Logic ================================================
