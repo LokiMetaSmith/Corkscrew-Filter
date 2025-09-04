@@ -161,7 +161,7 @@ module HexFilterArray(layers) {
 
     // Create the main hexagonal block and cut empty cells
     difference() {
-        #cylinder(h = cell_length, d = hex_radius, center=true, $fn=6);
+        cylinder(h = cell_length, d = hex_radius, center=true, $fn=6);
         HexArrayLayout(layers, spacing) {
             cylinder(d = cell_diameter + 0.4, h = cell_length + 2, center=true); // Cutter
         }

@@ -2,7 +2,7 @@
 // Although Public Invention does everything open source, this file is an
 // exception.
 
-// MODIFIED and Refactored by Gemini.
+// MODIFIED and Refactored by Gemini.and by Lawrence
 // VERSION DOCUMENTED:
 // - Added comprehensive documentation to all sections, parameters, and modules.
 // - Included inline comments for complex calculations and logic.
@@ -27,7 +27,7 @@
 // --- 1. Model Selection ---
 // This variable controls which component is rendered.
 part_options = ["modular_filter_assembly", "hex_array_filter", "single_cell_filter", "hose_adapter_cap", "flat_end_screw"];
-part_to_generate = part_options[2]; // Change the index (e.g., to part_options[1]) or the string to select a different part.
+part_to_generate = part_options[4]; // Change the index (e.g., to part_options[1]) or the string to select a different part.
 
 // --- 2. Feature Flags ---
 // These flags toggle optional features on the selected model.
@@ -40,7 +40,7 @@ ADD_HELICAL_SUPPORT = true;      // If true, adds a lattice-like support structu
 
 // --- Hex/Single Cell Features ---
 slit_options = ["none", "simple", "ramped"];
-slit_type = slit_options[1];            // Defines the type of slit cut into the helical ramps. ["none", "simple", "ramped"]
+slit_type = slit_options[2];            // Defines the type of slit cut into the helical ramps. ["none", "simple", "ramped"]
 ADD_OUTER_O_RINGS = true;        // If true, adds O-Ring grooves to the outer hexagonal casing.
 
 // --- Visual/Debug Options ---
@@ -113,6 +113,11 @@ slit_depth_mm = 2;               // The depth of the slit cut into the ramp.
 tolerance_tube_fit = 0.2;        // Clearance between the spacers and the inner wall of the main tube.
 tolerance_socket_fit = 0.4;      // Clearance for sockets and recesses, like for the inlet flange.
 tolerance_channel = 0.1;         // Extra clearance for the helical void to prevent binding during assembly.
+
+// --- Config File (Optional Override) ---
+// To use, create a file named "filter_config.scad" with parameter overrides.
+// Example: `num_bins = 5;`
+// include <filter_config.scad>
 
 // =============================================================================
 // --- C. Main Logic ---
@@ -431,7 +436,24 @@ module MultiHelixRamp(h, twist, dia, helices) {
     for (i = [0 : helices - 1]) {
         rotate([0, 0, i * (360 / helices)]) {
             linear_extrude(height = h, twist = twist, center = true, slices = h * 2) {
+                // 2D cross-section of a single flat ramp
+                polygon(points = [
+                    [0, 0],
+                    [dia / 2, 0],
+                    [dia / 2 * cos(ramp_width_degrees), dia / 2 * sin(ramp_width_degrees)]
+                ]);
+            }
+            if (slit_type != "none") { // this needs to be unified with the slip_type global variable
+                 // Note: This is a simple implementation of a slit. The more complex
+                 // `RampedSlitKnife` module was unused and has been commented out.
+                 rotate([0, 0, ramp_width_degrees / 2])
+                 linear_extrude(height = h, twist = twist, center=true, slices = h > 0 ? h*2:1)
+                    translate([dia/2 - slit_depth_mm/2, 0])
+                        square([slit_depth_mm, slit_width_mm], center=true);
+            }
+            else{
                 polygon(points = [ [0, 0], [dia / 2, 0], [dia / 2 * cos(ramp_width_degrees), dia / 2 * sin(ramp_width_degrees)] ]);
+
             }
         }
     }
@@ -447,32 +469,50 @@ module MultiHelixRamp(h, twist, dia, helices) {
  * rib_thickness:   The diameter of the individual support struts.
  * total_twist:     The total twist angle over the height, ensuring it matches the main screw.
  */
-module HelicalOuterSupport(target_dia, target_height, rib_thickness, total_twist) {
+module HelicalOuterSupport(target_dia, target_height, rib_thickness, twist_rate) {
+    twist_angle = twist_rate * target_height;
     radius = target_dia / 2 - rib_thickness;
-    for (i = [0:1:support_density - 1]) {
-        rotate([0, 0, i * (360 / support_density)]) {
+
+    // The for-loop creates rotational symmetry based on support_density
+    for( i = [0:1:support_density-1]){
+        rotate([0,0,i*(360/support_density)]) {
+            // This union creates a bundle of 3 struts at different angles
             union() {
-                linear_extrude(height = target_height, twist = -total_twist) translate([radius, 0, 0]) circle(d = rib_thickness);
-                linear_extrude(height = target_height, twist = total_twist) translate([radius, 0, 0]) circle(d = rib_thickness);
+                // Left-handed helix
+                linear_extrude(height = target_height, center = false, convexity = 10, twist = -twist_angle)
+                    rotate([0,0,0])
+                        translate([radius,0,0])
+                            circle(d=rib_thickness);
+                // Right-handed helix
+                linear_extrude(height = target_height, center = false, convexity = 10, twist = twist_angle)
+                    rotate([0,0,120])
+                        translate([radius,0,0])
+                            circle(d=rib_thickness);
+                // Straight strut
+                linear_extrude(height = target_height, center = false, convexity = 10, twist = 0)
+                    rotate([0,0,240])
+                        translate([radius,0,0])
+                            circle(d=rib_thickness);
             }
         }
     }
 }
-
 /**
  * Module: HexArrayLayout
  * Description: A powerful utility module that arranges any child elements into a hexagonal grid.
- * Arguments:
- * layers:  The number of rings of children to place around the center.
- * spacing: The distance between the centers of adjacent children.
  */
 module HexArrayLayout(layers, spacing) {
-    children();
+    children(); // Center element
     if (layers > 0) {
-        for (l = [1 : layers]) for (a = [0 : 5]) for (s = [0 : l - 1]) {
-            angle1 = a * 60; angle2 = (a + 1) * 60;
+        for (l = [1 : layers]) {
+            for (a = [0 : 5]) {
+                for (s = [0 : l - 1]) {
+                    angle1 = a * 60;
+                    angle2 = (a + 1) * 60;
             pos = (l * spacing) * [(1 - s / l) * cos(angle1) + (s / l) * cos(angle2), (1 - s / l) * sin(angle1) + (s / l) * sin(angle2)];
             translate(pos) children();
+                }
+            }
         }
     }
 }
