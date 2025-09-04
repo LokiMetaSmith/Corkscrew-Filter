@@ -95,7 +95,6 @@ TC_VERSION_NUM = 0.3;
 
 // Params (mm), degrees 
 
-
 num_bins = 1;
 number_of_complete_revolutions = 2*num_bins;
 filter_height_mm = num_bins*40/3;
