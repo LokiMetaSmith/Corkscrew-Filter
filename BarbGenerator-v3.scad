@@ -114,7 +114,8 @@ module solidbarbstack( inside_diameter, count )
       barbnotch( inside_diameter );
 		for (i=[2:count]) 
 		{
-			translate([0,0,(i-1) * inside_diameter * 0.9]) barbnotch( inside_diameter );
+			translate([0,0,(i-1) * inside_diameter * 0.9])
+            barbnotch( inside_diameter );
 		}
 		/***
 		if (count > 1) translate([0,0,1 * inside_diameter * 0.9]) barbnotch( inside_diameter );
@@ -181,4 +182,8 @@ module vault( input_diameter, jheight, center_width, center_depth, center_vheigh
     }
   }
 }
-
+od = 5;
+id = 3;
+x = id + 3 * 0.9;
+translate([0,0,-x])
+output_barb(id,od,0);
