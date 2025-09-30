@@ -87,7 +87,7 @@ module barb(hose_od = 21.5, hose_id = 15, swell = 1, wall_thickness = 1.31, barb
 // TODO: make barbs more flush
 // TODO: 
 
-TC_VERSION_NUM = 0.3;
+TC_VERSION_NUM = 0.4; // printing helix without bins
 
 
 // use <BarbGenerator-v3.scad>;
@@ -101,8 +101,8 @@ filter_height_mm = num_bins*40/3;
 // WARNING! Trying to reduce this to one bin seemed to make the slit go away
 
 filter_twist_degrees = 360*number_of_complete_revolutions;
-screw_OD_mm = 2;
-screw_ID_mm = 1;
+screw_OD_mm = 3.5;
+screw_ID_mm = 2.5;
 cell_wall_mm = 1;
 barb_input_diameter = 2;
 barb_output_diameter = 5;
@@ -340,10 +340,10 @@ module BarbPort() {
 
 module BinsWithScrew(nums_screws,num_bins) {
     d = (num_screws-1)*screw_center_separation_mm;
-    difference() {
-        Bins(filter_height_mm,num_bins,bin_height_z_mm,bin_breadth_x_mm, screw_center_separation_mm);
-        ScrewsKnife(num_screws,num_bins,filter_height_mm);
-    }
+//    difference() {
+//        Bins(filter_height_mm,num_bins,bin_height_z_mm,bin_breadth_x_mm, screw_center_separation_mm);
+//        ScrewsKnife(num_screws,num_bins,filter_height_mm);
+//    }
 
     for (i = [0:num_screws-1]) {
         x =  -d/2 + i * screw_center_separation_mm;
