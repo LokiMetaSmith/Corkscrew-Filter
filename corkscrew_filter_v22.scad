@@ -12,14 +12,14 @@ $fn = $preview ? low_res_fn : high_res_fn;
 
 // --- Main Filter Parameters ---
 cell_diameter = 10;                     // OD of the corkscrew in a single cell.
-cell_length = 100;                      // The total Z-height of a filter cell.
-num_helices = 3;                        // Number of interleaved helices (1, 2, or 3).
-ramp_width_degrees = 20;                // Angular width of a single helix ramp.
-total_revolutions = 8;                  // Total turns over the cell_length.
+cell_length = 15;                      // The total Z-height of a filter cell.
+num_helices = 6;                        // Number of interleaved helices (1, 2, or 3).
+ramp_width_degrees = 10;                // Angular width of a single helix ramp.
+total_revolutions = 0.5;                  // Total turns over the cell_length.
 
 // --- Staging Parameters ---
 // Controls the number of stages and gaps, based on your notes.
-num_stages = 3; // [1, 2, 3]
+num_stages = 1; // [1, 2, 3]
 
 // --- Ramped Slit Parameters ---
 ADD_SLITS = true;                       // Master toggle for adding slits.
@@ -28,11 +28,11 @@ slit_open_length_mm = 10;               // The length of the fully open part of 
 slit_width_mm = 2;                      // The width of the slit opening.
 
 // --- Array Parameters ---
-hex_array_layers = 1; // 0=1 cell, 1=7 cells, 2=19 cells, etc.
+hex_array_layers = 0; // 0=1 cell, 1=7 cells, 2=19 cells, etc.
 
 // --- CONTROL_VARIABLES ---
 USE_HEX_ARRAY_FILTER    = 1;
-USE_SINGLE_CELL_FILTER  = 0;
+USE_SINGLE_CELL_FILTER  = 1;
 
 // ===============================================================
 // === Main Logic ================================================
@@ -72,9 +72,10 @@ module HexFilterArray(layers) {
     // Create the main hexagonal block and cut empty cells
     difference() {
         cylinder(h = cell_length, d = hex_radius, center=true, $fn=6);
-        HexArrayLayout(layers, spacing) {
+        //HexArrayLayout(layers,spacing);
+        //HexArrayLayout(layers, spacing) {
             cylinder(d = cell_diameter + 0.4, h = cell_length + 2, center=true); // Cutter
-        }
+        //}
     }
 
     // Place the filter core into each empty cell
@@ -82,27 +83,76 @@ module HexFilterArray(layers) {
         StagedCorkscrew(cell_length, cell_diameter, num_helices, num_stages);
     }
 }
+// Creates a filled hexagonal grid
+// layers: The "radius" of the grid in number of hexes from the center
+// size: The radius of a single hexagon (distance from center to a point)
+module HexGrid(layers, size) {
+    
+    // Pre-calculate square root of 3
+    sqrt3 = sqrt(3);
 
+    // Loop through the 'q' coordinate (column)
+    for (q = [-layers : layers]) {
+        
+        // Calculate the range for the 'r' coordinate (row)
+        // This math ensures the grid has a hexagonal boundary
+        r_min = max(-layers, -q - layers);
+        r_max = min(layers, -q + layers);
+        
+        for (r = [r_min : r_max]) {
+            
+            // Convert axial (q, r) coords to cartesian (x, y)
+            // This is for "pointy top" hexagons
+            x_pos = size * sqrt3 * (q + r/2);
+            y_pos = size * 3/2 * r;
+            
+            translate([x_pos, y_pos]) {
+                children();
+            }
+        }
+    }
+}
+
+
+// --- EXAMPLE USAGE ---
+// Use $fn=6 to make the cylinders into hexagons
+//HexGrid(layers = 4, size = 10) {
+//    cylinder(r = 10, h = 2, $fn = 6);
+//}
 
 // --- Core Geometry Modules ---
 
-// Arranges children in a hexagonal pattern.
+// Arranges children on the perimeters of concentric hexagons.
 module HexArrayLayout(layers, spacing) {
     // Center cell
     children();
+    
     // Rings of cells
-    for (l = 1; l <= layers; l++) {
-        for (a = 0; a < 6; a++) {
-            for (s = 0; s < l; s++) {
+    for (l = [1 : layers]) {
+        for (a = [0: 5]) {
+            for (s = [0: l-1]) {
+                
                 angle1 = a * 60;
                 angle2 = (a+1) * 60;
-                pos = l * spacing * ([(1-s/l)*cos(angle1) + (s/l)*cos(angle2)],
-                                     [(1-s/l)*sin(angle1) + (s/l)*sin(angle2)]);
+                
+                // Calculate the X and Y components first
+                x_comp = (1-s/l)*cos(angle1) + (s/l)*cos(angle2);
+                y_comp = (1-s/l)*sin(angle1) + (s/l)*sin(angle2);
+                
+                // Define the position vector [x, y]
+                // and multiply it by the scalar (l * spacing)
+                pos = (l * spacing) * [x_comp, y_comp];
+                                     
                 translate(pos) children();
             }
         }
     }
 }
+
+// Example of how to use it:
+//HexArrayLayout(layers = 4, spacing = 20) {
+//    cylinder(r=5, h=2);
+//}
 
 // Creates the staged corkscrew based on the diagrams.
 module StagedCorkscrew(total_h, dia, helices, stages) {
@@ -172,7 +222,7 @@ module RampedSlitKnife(h, twist, dia, helices) {
     ];
 
     // Main open part of the slit
-    open_slit_cutter = cube([slit_width_mm, slit_width_mm, slit_open_length_mm]);
+    cube([slit_width_mm, slit_width_mm, slit_open_length_mm]);
 
     for (i = [0 : helices - 1]) {
         rotate([0, 0, i * (360 / helices) + ramp_width_degrees/2]) {

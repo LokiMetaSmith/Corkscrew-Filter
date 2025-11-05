@@ -11,16 +11,16 @@ low_res_fn = 30;
 $fn = $preview ? low_res_fn : high_res_fn;
 
 // --- Main Parameters ---
-num_bins = 3; 
-number_of_complete_revolutions = 12;
+num_bins = 1; 
+number_of_complete_revolutions = 2;
 screw_OD_mm = 1.8;
 screw_ID_mm = 1;
 scale_ratio = 1.4;
 
 // --- NEW PARAMETERS for Tube Filter ---
 tube_od_mm = 32;
-tube_wall_mm = 1;
-insert_length_mm = 350/2;
+//tube_wall_mm = 1;
+insert_length_mm = 50/2;
 oring_cross_section_mm = 1.5;
 spacer_height_mm = 5;
 adapter_hose_id_mm = 30;
@@ -38,8 +38,9 @@ tolerance_channel = 0.1;  // Extra clearance for the airflow channel to prevent 
 
 // --- Config File ---
 // Include a configuration file to override the default parameters below.
-config_file = "default.scad";
-include <config_file>
+
+include <default.scad>
+//include <your_awesome_parameter_variations.scad>
 
 // --- CONTROL_VARIABLES ---
 GENERATE_CFD_VOLUME   = false; // NEW: Set to true to generate the internal fluid volume for CFD analysis
