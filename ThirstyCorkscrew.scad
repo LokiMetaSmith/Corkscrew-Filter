@@ -89,54 +89,57 @@ module barb(hose_od = 21.5, hose_id = 15, swell = 1, wall_thickness = 1.31, barb
 
 TC_VERSION_NUM = 0.4; // printing helix without bins
 
+//
+//// use <BarbGenerator-v3.scad>;
+//
+//
+//// Params (mm), degrees 
+//
+//num_bins = 3;
+//number_of_complete_revolutions = 2*num_bins;
+//filter_height_mm = num_bins*40/3;
+//// WARNING! Trying to reduce this to one bin seemed to make the slit go away
+//
+//filter_twist_degrees = 360*number_of_complete_revolutions;
+//screw_OD_mm = 3.5;
+//screw_ID_mm = 2.5;
+//cell_wall_mm = 1;
+//barb_input_diameter = 2;
+//barb_output_diameter = 5;
+//barb_wall_thickness = 1;
+//
+//// The slit_axial_open_length_mm is the "length",
+//// in an axial sense of the 
+//slit_axial_open_length_mm = 1;
+//slit_axial_length_mm = cell_wall_mm + slit_axial_open_length_mm;
+//
+//// The "slit_knife" is "radial" in the since that it cuts
+//// a pie-slice shaped slit into the wall of the helix.
+//// The wider the angle, the greater the slit. 180 would
+//// be half the slit. I suggest this be limited to 45 degrees.
+//slit_knife_angle = 45;
+//hex_cell_diam_mm = 10;
+//FN_RES = 60;
+//bin_height_z_mm = 20;
+//num_screws = 1;
+//
+//screw_center_separation_mm = 10;
+//bin_breadth_x_mm = (num_screws -1) * screw_center_separation_mm + screw_center_separation_mm*2;
+//
+//pitch_mm = filter_height_mm / number_of_complete_revolutions;
+//
+//scale_ratio = 1.4; // This is used to acheive a more circular air path
+//
+//bin_wall_thickness_mm = 1;
 
-// use <BarbGenerator-v3.scad>;
 
-
-// Params (mm), degrees 
-
-num_bins = 3;
-number_of_complete_revolutions = 2*num_bins;
-filter_height_mm = num_bins*40/3;
-// WARNING! Trying to reduce this to one bin seemed to make the slit go away
-
-filter_twist_degrees = 360*number_of_complete_revolutions;
-screw_OD_mm = 3.5;
-screw_ID_mm = 2.5;
-cell_wall_mm = 1;
-barb_input_diameter = 2;
-barb_output_diameter = 5;
-barb_wall_thickness = 1;
-
-// The slit_axial_open_length_mm is the "length",
-// in an axial sense of the 
-slit_axial_open_length_mm = 1;
-slit_axial_length_mm = cell_wall_mm + slit_axial_open_length_mm;
-
-// The "slit_knife" is "radial" in the since that it cuts
-// a pie-slice shaped slit into the wall of the helix.
-// The wider the angle, the greater the slit. 180 would
-// be half the slit. I suggest this be limited to 45 degrees.
-slit_knife_angle = 45;
-hex_cell_diam_mm = 10;
-FN_RES = 60;
-bin_height_z_mm = 20;
-num_screws = 1;
-
-screw_center_separation_mm = 10;
-bin_breadth_x_mm = (num_screws -1) * screw_center_separation_mm + screw_center_separation_mm*2;
-
-pitch_mm = filter_height_mm / number_of_complete_revolutions;
-
-scale_ratio = 1.4; // This is used to acheive a more circular air path
-
-bin_wall_thickness_mm = 1;
+include <default.scad>
 
 
 // CONTROL_VARIABLES
 USE_SCREW_ONLY          = 0;
 USE_VOIDLESS_SCREW      = 0;
-USE_FULL_BINS           = 1;
+USE_FULL_BINS           = 0;
 USE_KNIFE_THRU_SCREWS   = 0;
 USE_KNIFE_LOW           = 0;
 USE_KNIFE_SIDE          = 0;
@@ -145,7 +148,7 @@ USE_SCREW_KNIFE         = 0;
 
 USE_BINCAP              = 0;
 
-TEST_BARB                = 0;
+TEST_BARB               = 0;
 
 
 module Barb(input_diameter,output_diameter) {
@@ -204,6 +207,7 @@ module Corkscrew(h,twist) {
 //    }
 //}
 
+
 module CorkscrewSlitKnife(twist,depth,num_bins) {
     de = depth/num_bins;
     yrot = 360*(1 / pitch_mm)*de;
@@ -215,7 +219,14 @@ module CorkscrewSlitKnife(twist,depth,num_bins) {
     W = D * tan(slit_knife_angle);
  //   translate([10,0,0])
 //    polygon(points = [[0,0],[D,-W],[D,W]]);   
-
+    echo("twist",twist);
+    echo("W",W);
+    echo("yrot",yrot);
+    echo("de",de);
+    echo("slit_axial_length_mm",slit_axial_length_mm);
+    echo("screw_OD_mm",screw_OD_mm);
+    echo("num_bins",num_bins);
+    echo("depth",depth);
     rotate([90,0,0])
     for(i = [0:num_bins -1]) {
         translate([0,0,-de])
@@ -233,6 +244,7 @@ module CorkscrewSlitKnife(twist,depth,num_bins) {
     }
     
 }
+
 
 module CorkscrewWithVoid(h,twist) {
     rotate([90,0,0])
@@ -262,9 +274,10 @@ module CorkscrewWithoutVoidExcess(h,twist) {
 
 
 module CorkscrewWithSlit(depth,numbins) {
+    echo("Filter_twist_degrees",filter_twist_degrees);
       difference() {
-        CorkscrewWithVoid(depth,filter_twist_degrees);
-        CorkscrewSlitKnife(filter_twist_degrees,depth,numbins);
+//        CorkscrewWithVoid(depth,filter_twist_degrees);
+        #CorkscrewSlitKnife(filter_twist_degrees,depth,numbins);
     }
  //   translate([10,0,0])
  //   #CorkscrewSlitKnife(filter_twist_degrees,depth,numbins);
@@ -399,3 +412,6 @@ if (USE_VOIDLESS_SCREW) {
 }
 
 
+color("blue")
+translate([-35,0,0])
+#CorkscrewWithSlit(filter_height_mm,num_bins);
