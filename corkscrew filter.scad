@@ -97,7 +97,6 @@ module Corkscrew(h,twist) {
 }
 
 module CorkscrewSlitKnife(twist,depth,num_bins) {
-echo("XXXX");
     de = depth/num_bins;
     yrot = 360*(1 / pitch_mm)*de;
     
@@ -283,7 +282,7 @@ module ModularFilterAssembly(tube_id, total_length, bin_count, spacer_h, oring_c
         
         
         for(j = [0:num_screws -1]) {
-        rotate([0,0,120*j])
+        rotate([0,0,(360/num_screws)*j])
             // 1. Union all the solid parts together
             union() {
                 // 2. Create the screw segments
