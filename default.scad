@@ -17,15 +17,17 @@ tube_wall_mm = 1;
 
 
 // Case 1
-//insert_length_mm = (350/2)/6;
-//screw_OD_mm = 3.5;
-//screw_ID_mm = 2.5;
+insert_length_mm = (350/2)/6;
+screw_OD_mm = 2.5;
+screw_ID_mm = 1.5;
 
 // Case 2
-insert_length_mm = (350/2)/3;
-screw_OD_mm = 5;
-screw_ID_mm = 3;
+//insert_length_mm = 100;
+//screw_OD_mm = 5;
+//screw_ID_mm = 3.5;
 
+num_hex = 1;
+hex_spacing = 5;
 
 
 oring_cross_section_mm = 1.5;
@@ -50,7 +52,7 @@ tolerance_channel = 0.1;
 
 
 // Params (mm), degrees 
-number_of_complete_revolutions = 2*num_bins;
+number_of_complete_revolutions = 1/2*num_bins;
 filter_height_mm = num_bins*40/3;
 // WARNING! Trying to reduce this to one bin seemed to make the slit go away
 
@@ -58,7 +60,7 @@ filter_twist_degrees = 360*number_of_complete_revolutions;
 
 // screw_OD_mm = 4.5;
 // screw_ID_mm = 3.5;
-cell_wall_mm = 1;
+cell_wall_mm = 1.4;
 barb_input_diameter = 2;
 barb_output_diameter = 5;
 barb_wall_thickness = 1;
@@ -75,10 +77,10 @@ slit_axial_length_mm = cell_wall_mm + slit_axial_open_length_mm;
 slit_knife_angle = 45;
 hex_cell_diam_mm = 10;
 FN_RES = 60;
-bin_height_z_mm = 20;
+bin_height_z_mm = 10;
 num_screws = 3;
 
-screw_center_separation_mm = 10;
+screw_center_separation_mm = 3;
 bin_breadth_x_mm = (num_screws -1) * screw_center_separation_mm + screw_center_separation_mm*2;
 
 pitch_mm = filter_height_mm / number_of_complete_revolutions;

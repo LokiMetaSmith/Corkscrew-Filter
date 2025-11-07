@@ -25,7 +25,7 @@ $fn = $preview ? low_res_fn : high_res_fn;
 // spacer_height_mm = 5;
 // adapter_hose_id_mm = 30;
 // support_rib_thickness_mm = 2.5;
-support_revolutions = 4;
+support_revolutions = 5;
 // support_density = 4; // NEW: Number of support bundles around the circumference
 // flange_od = 20;           // Outer diameter of the hose adapter flange
 // flange_height = 5;        // Height of the hose adapter flange
@@ -52,7 +52,7 @@ THREADED_INLET        = false ;
 // Visual Options
 ADD_HELICAL_SUPPORT   = true;
 USE_TRANSLUCENCY      = false;
-SHOW_O_RINGS          = true;
+SHOW_O_RINGS          = false;
 
 // ===============================================================
 // === Main Logic ================================================
@@ -280,7 +280,7 @@ module ModularFilterAssembly(tube_id, total_length, bin_count, spacer_h, oring_c
                 }
             }
         
-        
+        HexGrid(layers = num_hex, size = hex_spacing)
         for(j = [0:num_screws -1]) {
         rotate([0,0,(360/num_screws)*j])
             // 1. Union all the solid parts together
@@ -303,7 +303,8 @@ module ModularFilterAssembly(tube_id, total_length, bin_count, spacer_h, oring_c
                 }
             }
         }               
-        // this part is subtracted.   
+        // this part is subtracted. 
+    HexGrid(layers = num_hex, size = hex_spacing)
     union() {
        for(j = [0:num_screws -1]) {
         rotate([0,0,120*j])
@@ -362,6 +363,34 @@ module HelicalOuterSupport(target_dia, target_height, rib_thickness, twist_rate)
         }
     }
 }
+
+module HexGrid(layers, size) {
+    
+    // Pre-calculate square root of 3
+    sqrt3 = sqrt(3);
+
+    // Loop through the 'q' coordinate (column)
+    for (q = [-layers : layers]) {
+        
+        // Calculate the range for the 'r' coordinate (row)
+        // This math ensures the grid has a hexagonal boundary
+        r_min = max(-layers, -q - layers);
+        r_max = min(layers, -q + layers);
+        
+        for (r = [r_min : r_max]) {
+            
+            // Convert axial (q, r) coords to cartesian (x, y)
+            // This is for "pointy top" hexagons
+            x_pos = size * sqrt3 * (q + r/2);
+            y_pos = size * 3/2 * r;
+            
+            translate([x_pos, y_pos]) {
+                children();
+            }
+        }
+    }
+}
+
 
 module OringGroove_OD_Cutter(object_dia, oring_cs) {
     groove_depth = oring_cs * 0.8;
