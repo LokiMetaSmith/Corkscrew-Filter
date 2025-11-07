@@ -103,7 +103,7 @@ module CorkscrewSlitKnife(twist,depth,num_bins) {
     // Note: The computation of the slit angle 
     // is a complicated. We create a triangle that 
     // we linearly extruide (in the "polygon" state below.)
-    D = 20;
+    D = screw_OD_mm;
     W = D * tan(slit_knife_angle);
  //   translate([10,0,0])
 //    polygon(points = [[0,0],[D,-W],[D,W]]);   
@@ -116,7 +116,7 @@ module CorkscrewSlitKnife(twist,depth,num_bins) {
     echo("num_bins",num_bins);
     echo("depth",depth);
     echo("FN_RES",FN_RES);
-    rotate([90,0,0])
+    rotate([90,180,0])
     for(i = [0:num_bins -1]) {
         translate([0,0,-de])
         rotate([0,0,-yrot*(i+1)])
@@ -128,7 +128,7 @@ module CorkscrewSlitKnife(twist,depth,num_bins) {
             polygon(points = [[0,0],[D,-W],[D,W]]);   
             color("blue",0.3)
             translate([0,0,slit_axial_length_mm])
-            cube([15,15,depth],center=true);
+            cube([screw_ID_mm,screw_ID_mm,depth],center=true);
         }
     }
     
