@@ -52,7 +52,7 @@ tolerance_channel = 0.1;
 
 
 // Params (mm), degrees 
-number_of_complete_revolutions = 1/2*num_bins;
+number_of_complete_revolutions = 1*num_bins;
 filter_height_mm = num_bins*40/3;
 // WARNING! Trying to reduce this to one bin seemed to make the slit go away
 

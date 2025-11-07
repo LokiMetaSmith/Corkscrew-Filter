@@ -291,7 +291,7 @@ module ModularFilterAssembly(tube_id, total_length, bin_count, spacer_h, oring_c
                     rot = twist_rate * z_pos;
                     
                     // Create the part at the origin, then move it into place.
-                    translate([0, 0, z_pos]) rotate([0,0,rot]) {
+                    translate([0, 0, z_pos]) rotate([0,0,180+rot]) {
                         intersection() {
                             // To use the master helix, we must "un-transform" it back to the origin.
                            rotate([90,0,0]) 
