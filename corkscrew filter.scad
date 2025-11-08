@@ -96,6 +96,43 @@ module Corkscrew(h,twist) {
     circle(r = screw_OD_mm);
 }
 
+//module CorkscrewSlitKnife(twist,depth,num_bins) {
+//    de = depth/num_bins;
+//    yrot = 360*(1 / pitch_mm)*de;
+//    
+//    // Note: The computation of the slit angle 
+//    // is a complicated. We create a triangle that 
+//    // we linearly extruide (in the "polygon" state below.)
+//    D = 5*screw_OD_mm;
+//    W = D * tan(slit_knife_angle);
+// //   translate([10,0,0])
+////    polygon(points = [[0,0],[D,-W],[D,W]]);   
+//    echo("twist",twist);
+//    echo("W",W);
+//    echo("yrot",yrot);
+//    echo("de",de);
+//    echo("slit_axial_length_mm",slit_axial_length_mm);
+//    echo("screw_OD_mm",screw_OD_mm);
+//    echo("num_bins",num_bins);
+//    echo("depth",depth);
+//    echo("FN_RES",FN_RES);
+//    rotate([90,270,0])
+//    for(i = [0:num_bins -1]) {
+//        translate([0,0,-de])
+//        rotate([0,0,-yrot*(i+1)])
+//        translate([0,0,(i+1)*de])
+//        difference() {
+//            linear_extrude(height = depth, center = true, convexity = 10, twist = twist, $fn = FN_RES)
+//            translate([screw_OD_mm,0,0])
+//            rotate([0,0,0])
+//            polygon(points = [[0,0],[D,-W],[D,W]]);   
+//            color("blue",0.3)
+//            translate([0,0,slit_axial_length_mm])
+//            cylinder(d=screw_ID_mm*8,h=depth,center=true);
+//        }
+//    }
+//    
+//}
 module CorkscrewSlitKnife(twist,depth,num_bins) {
     de = depth/num_bins;
     yrot = 360*(1 / pitch_mm)*de;
@@ -103,10 +140,8 @@ module CorkscrewSlitKnife(twist,depth,num_bins) {
     // Note: The computation of the slit angle 
     // is a complicated. We create a triangle that 
     // we linearly extruide (in the "polygon" state below.)
-    D = 5*screw_OD_mm;
-    W = D * tan(slit_knife_angle);
- //   translate([10,0,0])
-//    polygon(points = [[0,0],[D,-W],[D,W]]);   
+    D = 20;
+    W = D * tan(slit_knife_angle); 
     echo("twist",twist);
     echo("W",W);
     echo("yrot",yrot);
@@ -116,23 +151,29 @@ module CorkscrewSlitKnife(twist,depth,num_bins) {
     echo("num_bins",num_bins);
     echo("depth",depth);
     echo("FN_RES",FN_RES);
-    rotate([90,270,0])
+    echo("pitch_mm",pitch_mm);
+    // This should be the position of the helix at the "end"
+    // where we need to start the slit.
+    angle_of_knife_at_end = depth * 360 / pitch_mm;
+    echo("angle_of_knife_at_end",angle_of_knife_at_end);
+    rotate([90,0,0])
     for(i = [0:num_bins -1]) {
         translate([0,0,-de])
         rotate([0,0,-yrot*(i+1)])
         translate([0,0,(i+1)*de])
         difference() {
-            linear_extrude(height = depth, center = true, convexity = 10, twist = twist, $fn = FN_RES)
+            linear_extrude(height = depth, center = true, convexity = 10, twist = twist, $fn = 200)
+            rotate([0,0,angle_of_knife_at_end])
             translate([screw_OD_mm,0,0])
-            rotate([0,0,0])
             polygon(points = [[0,0],[D,-W],[D,W]]);   
             color("blue",0.3)
             translate([0,0,slit_axial_length_mm])
-            cylinder(d=screw_ID_mm*8,h=depth,center=true);
+            cube([150,150,depth],center=true);
         }
     }
     
 }
+
 
 module CorkscrewWithVoid(h,twist) {
     rotate([90,0,0])
