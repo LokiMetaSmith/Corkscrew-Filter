@@ -18,8 +18,8 @@ tube_wall_mm = 1;
 
 // Case 1
 insert_length_mm = (350/2)/6;
-screw_OD_mm = 2.5;
-screw_ID_mm = 1.5;
+screw_OD_mm = 2.0;
+screw_ID_mm = 1.0;
 
 // Case 2
 //insert_length_mm = 100;
