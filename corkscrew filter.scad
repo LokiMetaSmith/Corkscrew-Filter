@@ -143,7 +143,7 @@ if (USE_MODULAR_FILTER) {
 module Corkscrew(h,twist) {
     rotate([90,0,0])
     linear_extrude(height = h, center = true, convexity = 10, twist = twist, $fn = FN_RES)
-    translate([screw_OD_mm, 0, 0])
+    translate([screw_OD_mm+cell_wall_mm, 0, 0])
     scale([1,scale_ratio])
     circle(r = screw_OD_mm);
 }
@@ -216,7 +216,7 @@ module CorkscrewSlitKnife(twist,depth,num_bins) {
         difference() {
             linear_extrude(height = depth, center = true, convexity = 10, twist = twist, $fn = $fn)
             rotate([0,0,angle_of_knife_at_end])
-            translate([screw_OD_mm,0,0])
+            translate([screw_OD_mm+cell_wall_mm,0,0])
             polygon(points = [[0,0],[D,-W],[D,W]]);   
             color("blue",0.3)
             translate([0,0,slit_axial_length_mm])
@@ -230,7 +230,7 @@ module CorkscrewSlitKnife(twist,depth,num_bins) {
 module CorkscrewWithVoid(h,twist) {
     rotate([90,0,0])
     linear_extrude(height = h, center = true, convexity = 10, twist = twist, $fn = FN_RES)
-    translate([screw_OD_mm, 0, 0])
+    translate([screw_OD_mm+cell_wall_mm, 0, 0])
     difference() {
         scale([1,scale_ratio])
         circle(r = screw_OD_mm);
@@ -241,7 +241,7 @@ module CorkscrewWithVoid(h,twist) {
 module CorkscrewVoid(h,twist) {
     rotate([90,0,0])
     linear_extrude(height = h, center = true, convexity = 10, twist = twist, $fn = FN_RES)
-    translate([screw_OD_mm, 0, 0])
+    translate([screw_OD_mm+cell_wall_mm, 0, 0])
     scale([1,scale_ratio])
     circle(r = screw_ID_mm);
 }
@@ -251,7 +251,7 @@ module CorkscrewWithoutVoid(h,twist) {
     echo(scale_ratio);
     rotate([90,0,0])
     linear_extrude(height = h, center = true, convexity = 10, twist = twist, $fn = FN_RES)
-    translate([screw_OD_mm, 0, 0])
+    translate([screw_OD_mm+cell_wall_mm, 0, 0])
     scale([1,scale_ratio])
     circle(r = screw_OD_mm);
 }
@@ -285,7 +285,7 @@ module HelicalShape(h, twist, r) {
 
 //    echo(str("Generating HelicalShape: r=", r, ", center=[", screw_OD_mm, ", 0, 0]"));
     linear_extrude(height = h, center = true, convexity = 10, twist = twist) {
-        translate([screw_OD_mm, 0, 0]) {
+        translate([screw_OD_mm+cell_wall_mm, 0, 0]) {
             scale([1, scale_ratio]) {
                 circle(r = r);
             }
