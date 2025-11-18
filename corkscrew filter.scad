@@ -6,7 +6,7 @@
 // VERSION 21: Corrected spacer alignment, helical void concentricity, and support visibility.
 
 // --- Model Precision ---
-high_res_fn = 150;
+high_res_fn = 200;
 low_res_fn = 30;
 $fn = $preview ? low_res_fn : high_res_fn;
 
@@ -38,8 +38,10 @@ support_revolutions = 5;
 
 // --- Config File ---
 // Include a configuration file to override the default parameters below.
-
-include <default.scad>
+include <parameters/One_Corkscrew_param.scad>
+//include <parameters/Three_Corkscrews_param.scad>
+//include <parameters/TwentyOne_Corkscrews_param.scad>
+//include <parameters/default_param.scad>
 //include <your_awesome_parameter_variations.scad>
 
 // --- CONTROL_VARIABLES ---
@@ -48,11 +50,16 @@ USE_MASTER_HELIX_METHOD = true; // NEW: Switch between assembly strategies
 USE_MODULAR_FILTER    = 1;
 USE_HOSE_ADAPTER_CAP  = 0;
 THREADED_INLET        = false ;
-
+GENERATE_SLICE          = false; // <-- MODIFIED: Set to true to slice the model
 // Visual Options
 ADD_HELICAL_SUPPORT   = true;
 USE_TRANSLUCENCY      = false;
 SHOW_O_RINGS          = false;
+
+// --- Slice Parameters (Active if GENERATE_SLICE is true) ---
+slice_count             = 1;  // Your "number of slices"
+slice_offset_mm         = 5;   // Your "offset for the slice" (interpreted as the gap between slices)
+slice_thickness_mm      = 5;   // The thickness/height of each slice
 
 // ===============================================================
 // === Main Logic ================================================
@@ -67,6 +74,51 @@ if (GENERATE_CFD_VOLUME) {
         // 2. Subtract the entire filter assembly
         ModularFilterAssembly(tube_id, insert_length_mm, num_bins, spacer_height_mm, oring_cross_section_mm);
     }
+    
+} else if (GENERATE_SLICE) { // <-- NEW BLOCK FOR SLICING
+
+    // --- SLICE LOGIC ---
+    // Use intersection() to cut the full model with a slicing "comb"
+    intersection() {
+        
+        // --- Block 1: Generate the full model ---
+        // This is the same logic as the original 'else' block.
+        // The full model is generated here...
+        if (USE_MODULAR_FILTER) {
+            if (USE_MASTER_HELIX_METHOD) {
+                ModularFilterAssembly(tube_od_mm - (2 * tube_wall_mm), insert_length_mm, num_bins, spacer_height_mm, oring_cross_section_mm);
+            } else {
+                ModularFilterAssembly_Rotational(tube_od_mm - (2 * tube_wall_mm), insert_length_mm, num_bins, spacer_height_mm, oring_cross_section_mm);
+            }
+        } else if (USE_HOSE_ADAPTER_CAP) {
+            HoseAdapterEndCap(tube_od_mm, adapter_hose_id_mm, oring_cross_section_mm);
+        }
+        
+        // --- Block 2: Generate the slicing "comb" ---
+        // ...and this 'union' creates a series of cubes
+        // that act as the 'knife' to slice the model.
+        union() {
+            // Calculate total height of the slice block to center it at Z=0
+            total_slice_block_height = (slice_count * slice_thickness_mm) + (max(0, slice_count - 1) * slice_offset_mm);
+            // Find the Z center of the first (bottom) slice
+            start_z_center = -total_slice_block_height / 2 + slice_thickness_mm / 2;
+            // Calculate distance between the centers of two slices
+            slice_pitch = slice_thickness_mm + slice_offset_mm;
+            
+            for (i = [0 : slice_count - 1]) {
+                // Calculate the center Z position for the current slice
+                z_pos = start_z_center + (i * slice_pitch);
+                
+                // Create a large, flat cube centered at the slice's Z position
+                translate([0, 0, z_pos]) {
+                    // Cube is centered on X/Y/Z. Size 500 is arbitrary
+                    // but large enough to cut the entire model.
+                    cube([500, 500, slice_thickness_mm], center = true);
+                }
+            }
+        }
+    }
+    // --- END SLICE LOGIC ---    
 } else {
     // Logic to generate the solid parts for printing
 if (USE_MODULAR_FILTER) {
@@ -162,13 +214,13 @@ module CorkscrewSlitKnife(twist,depth,num_bins) {
         rotate([0,0,-yrot*(i+1)])
         translate([0,0,(i+1)*de])
         difference() {
-            linear_extrude(height = depth, center = true, convexity = 10, twist = twist, $fn = 200)
+            linear_extrude(height = depth, center = true, convexity = 10, twist = twist, $fn = $fn)
             rotate([0,0,angle_of_knife_at_end])
             translate([screw_OD_mm,0,0])
             polygon(points = [[0,0],[D,-W],[D,W]]);   
             color("blue",0.3)
             translate([0,0,slit_axial_length_mm])
-            cube([150,150,depth],center=true);
+            cube([150,150,depth+1],center=true);
         }
     }
     
@@ -299,7 +351,7 @@ module ModularFilterAssembly(tube_id, total_length, bin_count, spacer_h, oring_c
                         // Un-transform the master helix to align with the cylinder at the origin
                        // rotate([0,0,-rot]) translate([0,0,-z_pos]) MasterSolidHelix();
                         
-                        OringGroove_OD_Cutter(spacer_od, oring_cross_section_mm);
+                        DovetailGroove_Cutter(spacer_od, oring_cross_section_mm, is_inner=true);
                         if (is_top && THREADED_INLET) {
                             translate([0, 0, spacer_h/2])
                                 cylinder(d = 4*screw_OD_mm + tolerance_socket_fit, h = spacer_h/2 + 0.1);
@@ -460,7 +512,53 @@ module OringGroove_ID_Cutter(object_id, oring_cs) {
             square([groove_depth, groove_width], center=true);
     }
 }
+// ===============================================================
+// Parker O-Ring Handbook – Dovetail Groove Cutter (Combined)
+// Static Seal (Section 2.2.3, Table 2.5, 24° included angle)
+// ===============================================================
 
+groove_params = [
+    [1.78, 1.25, 1.40, 24, 0.5],
+    [2.62, 2.05, 2.10, 24, 0.7],
+    [3.53, 2.80, 2.85, 24, 0.9],
+    [5.33, 4.55, 4.35, 24, 1.15],
+    [6.99, 5.85, 5.85, 24, 1.45]
+];
+
+// Utility function: find closest match
+function search_closest(x, arr) =
+    let(d = [for (a = arr) abs(a - x)])
+    search(min(d), d)[0];
+
+// ---------------------------------------------------------------
+// Combined groove cutter (inner or outer based on flag)
+// ---------------------------------------------------------------
+module DovetailGroove_Cutter(object_dia, oring_cs, is_inner=true) {
+    idx = search_closest(oring_cs, [for (g = groove_params) g[0]]);
+    params = groove_params[idx];
+    h = params[1];
+    b = params[2];
+    angle = params[3];
+    r2 = params[4];
+
+    half_angle = angle / 2;
+    base_width = b - 2 * h * tan(half_angle);
+    points = is_inner ?
+                    [ [0, -b/2],
+                      [-h, -base_width/2],
+                      [-h,  base_width/2],
+                      [0,  b/2] ]
+                :
+                    [ [0, -base_width/2],
+                      [h, -b/2],
+                      [h,  b/2],
+                      [0,  base_width/2] ];
+    echo(points);
+    rotate_extrude(convexity=10)
+        translate([object_dia/2 + (is_inner ? 0 : -h)+0.01, 0, 0])
+            polygon(points             
+            );
+}
 // Creates a hose adapter that caps the end of the tube.
 module HoseAdapterEndCap(tube_od, hose_id, oring_cs) {
     cap_inner_dia = tube_od + tolerance_tube_fit;
