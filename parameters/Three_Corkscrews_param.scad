@@ -18,23 +18,23 @@ tube_wall_mm = 1;
 
 // Case 1
 insert_length_mm = (350/2)/6;
-screw_OD_mm = 2.0;
-screw_ID_mm = 1.0;
+screw_OD_mm = 5.0;
+screw_ID_mm = 4.0;
 
 // Case 2
 //insert_length_mm = 100;
 //screw_OD_mm = 5;
 //screw_ID_mm = 3.5;
 
-num_hex = 1;
+num_hex = 0;
 hex_spacing = 5;
 
 
-oring_cross_section_mm = 1.5;
+oring_cross_section_mm = 2;
 spacer_height_mm = 5;
 adapter_hose_id_mm = 30;
 support_rib_thickness_mm = 1.5;
-support_density = 4;
+support_density = 3;
 flange_od = 20;
 flange_height = 5;
 
@@ -60,7 +60,7 @@ filter_twist_degrees = 360*number_of_complete_revolutions;
 
 // screw_OD_mm = 4.5;
 // screw_ID_mm = 3.5;
-cell_wall_mm = 1.4;
+cell_wall_mm = 1.1;
 barb_input_diameter = 2;
 barb_output_diameter = 5;
 barb_wall_thickness = 1;

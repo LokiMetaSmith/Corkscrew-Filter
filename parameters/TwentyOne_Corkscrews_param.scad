@@ -27,7 +27,7 @@ screw_ID_mm = 1.0;
 //screw_ID_mm = 3.5;
 
 num_hex = 1;
-hex_spacing = 5;
+hex_spacing = 3.5;
 
 
 oring_cross_section_mm = 1.5;
@@ -60,7 +60,7 @@ filter_twist_degrees = 360*number_of_complete_revolutions;
 
 // screw_OD_mm = 4.5;
 // screw_ID_mm = 3.5;
-cell_wall_mm = 1.4;
+cell_wall_mm = 1.1;
 barb_input_diameter = 2;
 barb_output_diameter = 5;
 barb_wall_thickness = 1;
@@ -75,7 +75,7 @@ slit_axial_length_mm = cell_wall_mm + slit_axial_open_length_mm;
 // The wider the angle, the greater the slit. 180 would
 // be half the slit. I suggest this be limited to 45 degrees.
 slit_knife_angle = 45;
-hex_cell_diam_mm = 10;
+hex_cell_diam_mm = 15;
 FN_RES = 60;
 bin_height_z_mm = 10;
 num_screws = 3;

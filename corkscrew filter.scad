@@ -65,6 +65,8 @@ slice_thickness_mm      = 5;   // The thickness/height of each slice
 // === Main Logic ================================================
 // ===============================================================
 
+calculated_diameter = num_screws*scale_ratio * screw_ID_mm * (num_hex +1)
+
 if (GENERATE_CFD_VOLUME) {
     tube_id = tube_od_mm - (2 * tube_wall_mm);
     difference() {
@@ -542,16 +544,23 @@ module DovetailGroove_Cutter(object_dia, oring_cs, is_inner=true) {
 
     half_angle = angle / 2;
     base_width = b - 2 * h * tan(half_angle);
-    points = is_inner ?
-                    [ [0, -b/2],
-                      [-h, -base_width/2],
-                      [-h,  base_width/2],
-                      [0,  b/2] ]
+    //points = [[0, -0.434304], [-1.25, -0.7], [-1.25, 0.7], [0, 0.434304]]; //inner
+    //points = [[0, 0.434304], [1.25, 0.7], [1.25, -0.7], [0, -0.434304]];
+    points = (!is_inner) ?
+                    //[ [0, -b/2],
+                    //  [h, -base_width/2],
+                    //  [h,  base_width/2],
+                    //  [0,  b/2] ]
+                    [ [0, base_width/2],
+                      [h, b/2],
+                      [h, -b/2],
+                      [0,  -base_width/2] ]
                 :
                     [ [0, -base_width/2],
-                      [h, -b/2],
-                      [h,  b/2],
+                      [-h, -b/2],
+                      [-h,  b/2],
                       [0,  base_width/2] ];
+                  
     echo(points);
     rotate_extrude(convexity=10)
         translate([object_dia/2 + (is_inner ? 0 : -h)+0.01, 0, 0])
