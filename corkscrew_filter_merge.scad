@@ -13,7 +13,7 @@ $fn = $preview ? low_res_fn : high_res_fn;
 // --- Main Filter Parameters ---
 cell_diameter = 10;                     // OD of the corkscrew in a single cell.
 cell_length = 100;                      // The total Z-height of a filter cell.
-num_helices = 3;                        // Number of interleaved helices (1, 2, or 3).
+num_helices = 1;                        // Number of interleaved helices (1, 2, or 3).
 ramp_width_degrees = 20;                // Angular width of a single helix ramp.
 total_revolutions = 8;                  // Total turns over the cell_length.
 
@@ -28,11 +28,12 @@ slit_open_length_mm = 10;               // The length of the fully open part of 
 slit_width_mm = 2;                      // The width of the slit opening.
 
 // --- Array Parameters ---
-hex_array_layers = 1; // 0=1 cell, 1=7 cells, 2=19 cells, etc.
+hex_array_layers = 0; // 0=1 cell, 1=7 cells, 2=19 cells, etc.
 
 // --- CONTROL_VARIABLES ---
-USE_HEX_ARRAY_FILTER    = 1;
-USE_SINGLE_CELL_FILTER  = 0;
+USE_HEX_ARRAY_FILTER    = true;
+USE_SINGLE_CELL_FILTER  = false;
+USE_RAMPED_SLIT         = true;
 
 // ===============================================================
 // === Main Logic ================================================
@@ -67,11 +68,11 @@ module SingleCellFilter() {
 // Creates a hexagonal array of filter cells.
 module HexFilterArray(layers) {
     spacing = cell_diameter + 2; // Distance between cell centers
-    hex_radius = layers * spacing + cell_diameter;
+    hex_radius =   sqrt(3)*spacing*(layers+1);
 
     // Create the main hexagonal block and cut empty cells
     difference() {
-        cylinder(h = cell_length, d = hex_radius, center=true, $fn=6);
+        #cylinder(h = cell_length, d = hex_radius, center=true, $fn=6);
         HexArrayLayout(layers, spacing) {
             cylinder(d = cell_diameter + 0.4, h = cell_length + 2, center=true); // Cutter
         }
@@ -91,13 +92,13 @@ module HexArrayLayout(layers, spacing) {
     // Center cell
     children();
     // Rings of cells
-    for (l = 1; l <= layers; l++) {
-        for (a = 0; a < 6; a++) {
-            for (s = 0; s < l; s++) {
+    for (l = [1 : layers]) {
+        for (a = [0 : 5]) {
+            for (s = [0 : l - 1]) {
                 angle1 = a * 60;
                 angle2 = (a+1) * 60;
-                pos = l * spacing * ([(1-s/l)*cos(angle1) + (s/l)*cos(angle2)],
-                                     [(1-s/l)*sin(angle1) + (s/l)*sin(angle2)]);
+                pos = l * spacing * [(1-s/l)*cos(angle1) + (s/l)*cos(angle2),
+                                     (1-s/l)*sin(angle1) + (s/l)*sin(angle2)];
                 translate(pos) children();
             }
         }
@@ -128,7 +129,12 @@ module StagedCorkscrew(total_h, dia, helices, stages) {
             difference() {
                 MultiHelixRamp(stage_h, 360 * revolutions, dia, helices);
                 if (ADD_SLITS) {
-                    RampedSlitKnife(stage_h, 360*revolutions, dia, helices);
+                    if(USE_RAMPED_SLIT) {
+                        RampedSlitKnife(stage_h, 360*revolutions, dia, helices);
+                    }
+                    else  {
+                        NonRampedSlitKnife(stage_h, 360*revolutions, dia, helices);
+                    }
                 }
             }
         }
@@ -151,6 +157,19 @@ module MultiHelixRamp(h, twist, dia, helices) {
     }
 }
 
+// Creates a cutting tool for a slit.
+// NOTE: The "ramped" feature of the original code was broken. This is a
+// simpler implementation of a non-ramped slit.
+module NonRampedSlitKnife(h, twist, dia, helices) {
+    for (i = [0 : helices - 1]) {
+        rotate([0, 0, i * (360 / helices) + ramp_width_degrees/2]) {
+            linear_extrude(height=h, twist=twist, center=true, slices = h*2) {
+                 translate([dia/2 - slit_width_mm/2, 0])
+                    square([slit_width_mm, slit_width_mm], center=true);
+            }
+        }
+    }
+}
 // Creates a cutting tool for a ramped slit.
 module RampedSlitKnife(h, twist, dia, helices) {
     // Define the 3D shape of the cutting tool using a polyhedron
