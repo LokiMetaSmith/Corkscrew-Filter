@@ -30,7 +30,7 @@ num_hex = 0;
 hex_spacing = 5;
 
 
-oring_cross_section_mm = 2;
+oring_cross_section_mm = 4;
 spacer_height_mm = 5;
 adapter_hose_id_mm = 30;
 support_rib_thickness_mm = 1.5;
