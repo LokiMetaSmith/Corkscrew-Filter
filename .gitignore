@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+optimization_history.json
+run_foam.log
+corkscrewFilter/constant/triSurface/*.stl
+corkscrewFilter/0/
+corkscrewFilter/processor*/
+corkscrewFilter/postProcessing/
+corkscrewFilter/log.*
+optimizer/venv/
