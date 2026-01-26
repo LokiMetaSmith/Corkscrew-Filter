@@ -1,0 +1,101 @@
+import os
+import json
+import google.generativeai as genai
+from typing import Dict, List, Any
+
+class LLMAgent:
+    def __init__(self, api_key=None, model_name="gemini-1.5-flash"):
+        if not api_key:
+            api_key = os.environ.get("GEMINI_API_KEY")
+
+        if not api_key:
+            print("Warning: GEMINI_API_KEY not found. LLM features will be disabled.")
+            self.model = None
+        else:
+            genai.configure(api_key=api_key)
+            self.model = genai.GenerativeModel(model_name)
+
+        self.history = []
+
+    def suggest_parameters(self, current_params: Dict[str, Any], metrics: Dict[str, Any], constraints: str = "") -> Dict[str, Any]:
+        """
+        Asks the LLM for the next set of parameters.
+        """
+        # Add last run to history
+        if current_params:
+            self.history.append({
+                "parameters": current_params,
+                "metrics": metrics
+            })
+
+        if not self.model:
+            # Fallback if no API key
+            print("No LLM available. Returning current parameters.")
+            return current_params
+
+        prompt = self._construct_prompt(constraints)
+
+        try:
+            response = self.model.generate_content(prompt)
+            text = response.text
+            # Extract JSON from potential markdown code blocks
+            clean_text = self._extract_json(text)
+            data = json.loads(clean_text)
+
+            if "parameters" in data:
+                return data["parameters"]
+            else:
+                print("LLM response did not contain 'parameters' field.")
+                return current_params
+        except Exception as e:
+            print(f"LLM generation failed: {e}")
+            return current_params
+
+    def _construct_prompt(self, constraints):
+        history_str = json.dumps(self.history, indent=2)
+        return f"""
+You are an expert engineer optimizing a 3D printed inertial filter (corkscrew shape) using OpenSCAD and OpenFOAM.
+
+GOAL: Optimize the design parameters to maximize particle separation efficiency and minimize pressure drop.
+
+CONSTRAINTS:
+{constraints}
+
+HISTORY OF RUNS:
+{history_str}
+
+TASK:
+Analyze the history. Identify trends. Propose the NEXT set of parameters to test to improve performance.
+You must modify the parameters intelligently.
+
+RESPONSE FORMAT:
+You must respond with valid JSON only.
+{{
+    "reasoning": "Explain why you chose these parameters...",
+    "parameters": {{
+        "param_name": value,
+        ...
+    }}
+}}
+"""
+
+    def _extract_json(self, text):
+        # Remove ```json ... ``` if present
+        if "```" in text:
+            start = text.find("```json")
+            if start == -1:
+                start = text.find("```")
+
+            # find end
+            end = text.rfind("```")
+
+            if start != -1 and end != -1 and start != end:
+                # Adjust start to skip line
+                first_newline = text.find("\n", start)
+                if first_newline != -1 and first_newline < end:
+                    return text[first_newline:end].strip()
+        return text.strip()
+
+if __name__ == "__main__":
+    agent = LLMAgent(api_key="TEST_KEY") # Won't work without valid key
+    print("LLMAgent initialized.")
