@@ -10,7 +10,7 @@
 
 // --- 1. Model Selection ---
 // This variable controls which component is rendered.
-part_options = ["modular_filter_assembly", "hex_array_filter", "single_cell_filter", "hose_adapter_cap", "flat_end_screw"];
+part_options = ["modular_filter_assembly", "hex_array_filter", "single_cell_filter", "hose_adapter_cap", "flat_end_screw", "filter_holder", "custom_coupling"];
 part_to_generate = part_options[0]; // Change the index (e.g., to part_options[1]) or the string to select a different part.
 
 // --- 2. Feature Flags ---
@@ -77,6 +77,31 @@ threaded_inlet_height = 10;      // The height of the threaded inlet.
 barb_inlet_id_mm = 4;            // The inner diameter of the hose barb.
 barb_inlet_count = 3;            // The number of individual barbs on the fitting.
 barb_inlet_flange_od = barb_inlet_id_mm + 4; // The diameter of the flange at the base of the barb inlet.
+
+// --- Filter Holder Parameters ---
+filter_holder_cartridge_od = 10;
+filter_holder_thread_inner = false;
+filter_holder_thread_outer = false;
+
+// --- Custom Coupling Parameters ---
+// These are defaults, usually overridden by including a specific config file.
+custom_coupling_type = "none";
+barb_input_diameter = 5;
+barb_output_diameter = 6.5;
+barb_wall_thickness = 1;
+barb_length = 2;
+barb_count = 4;
+barb_swell = 1;
+coupling_lip_height = 2.4;
+coupling_lip_width = 16.9;
+coupling_outer_coupling_od = 14.91;
+coupling_outer_coupling_height = 10;
+coupling_inset_height = 23.5;
+coupling_inset_width = 30.3;
+coupling_inner_inlet = 29;
+coupling_inner_height = 2.37;
+coupling_inner_outlet = 5.2;
+
 
 // --- Hex Array & Single Cell Filter Parameters ---
 cell_diameter = 10;              // The outer diameter of the helical filter within a single cell.

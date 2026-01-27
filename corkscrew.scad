@@ -13,6 +13,8 @@ include <modules/cutters.scad>
 include <modules/helpers.scad>
 include <modules/inlets.scad>
 include <modules/assemblies.scad>
+include <modules/custom_couplings.scad> // Added for legacy support
+include <modules/filter_holder.scad>
 
 // =============================================================================
 // --- 2. Main Logic ---
@@ -40,6 +42,18 @@ if (part_to_generate == "modular_filter_assembly") {
 } else if (part_to_generate == "flat_end_screw") {
     total_twist = 360 * number_of_complete_revolutions;
     FlatEndScrew(insert_length_mm, total_twist, num_bins);
+} else if (part_to_generate == "custom_coupling") {
+    CustomCoupling();
+} else if (part_to_generate == "filter_holder") {
+    FilterHolder(
+        tube_id = tube_od_mm - (2 * tube_wall_mm),
+        cartridge_od = filter_holder_cartridge_od,
+        barb_od = barb_inlet_id_mm + 1.5, // reuse barb inlet param or add specific one
+        barb_id = barb_inlet_id_mm,
+        thread_inner = filter_holder_thread_inner,
+        thread_outer = filter_holder_thread_outer,
+        oring_cs = oring_cross_section_mm
+    );
 } else {
     echo("Error: `part_to_generate` variable is not set to a valid option.");
     echo("Please check `config.scad` and choose from the `part_options` list.");
