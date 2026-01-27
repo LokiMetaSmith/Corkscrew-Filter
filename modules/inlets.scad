@@ -1,3 +1,5 @@
+include <modules/barbs.scad>
+
 // =============================================================================
 // --- Inlet Component Modules ---
 // =============================================================================
@@ -37,6 +39,15 @@ module BarbInlet() {
         }
         // Barb itself, starting on top of the flange
         translate([0, 0, flange_height])
-            barb(inside_diameter = barb_inlet_id_mm, count = barb_inlet_count);
+             Barb(
+                hose_id = barb_inlet_id_mm,
+                hose_od = barb_inlet_id_mm + 1.5, // Simple default logic or parameterized
+                barb_count = barb_inlet_count,
+                barb_length = 3, // Default length
+                swell = 1,
+                wall_thickness = 1,
+                bore = true,
+                shell = true
+             );
     }
 }
