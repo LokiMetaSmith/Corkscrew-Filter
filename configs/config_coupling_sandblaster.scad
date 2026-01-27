@@ -2,6 +2,10 @@
 // --- Sandblaster Coupling Configuration ---
 // =============================================================================
 
+// --- Feature Flags ---
+part_to_generate = "custom_coupling";
+custom_coupling_type = "sandblaster";
+
 // --- Barb Parameters ---
 barb_input_diameter = 5;
 barb_output_diameter = 6.5;
@@ -21,6 +25,5 @@ coupling_inner_inlet = 9.5;
 coupling_inner_height = 2.37;
 coupling_inner_outlet = 5.2;
 
-// --- Feature Flags ---
-part_to_generate = "custom_coupling";
-custom_coupling_type = "sandblaster";
+// --- Generate Model ---
+include <../corkscrew.scad>
