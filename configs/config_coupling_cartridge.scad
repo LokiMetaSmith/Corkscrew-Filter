@@ -2,8 +2,11 @@
 // --- Cartridge Coupling Configuration ---
 // =============================================================================
 
-// --- Feature Flags ---
-part_to_generate = "custom_coupling"; // Special mode
+// 1. Load Defaults
+include <../config.scad>
+
+// 2. Override Parameters
+part_to_generate = "custom_coupling";
 custom_coupling_type = "cartridge";
 
 // --- Barb Parameters ---
@@ -25,5 +28,5 @@ coupling_inner_inlet = 29;
 coupling_inner_height = 2.37;
 coupling_inner_outlet = 5.2;
 
-// --- Generate Model ---
+// 3. Generate Model
 include <../corkscrew.scad>

@@ -11,7 +11,8 @@
 // --- 1. Model Selection ---
 // This variable controls which component is rendered.
 part_options = ["modular_filter_assembly", "hex_array_filter", "single_cell_filter", "hose_adapter_cap", "flat_end_screw", "filter_holder", "custom_coupling"];
-part_to_generate = part_options[0]; // Change the index (e.g., to part_options[1]) or the string to select a different part.
+// We use is_undef to prevent overwriting if this file is included after variables are set.
+part_to_generate = is_undef(part_to_generate) ? part_options[0] : part_to_generate;
 
 // --- 2. Feature Flags ---
 // These flags toggle optional features on the selected model.
@@ -85,7 +86,7 @@ filter_holder_thread_outer = false;
 
 // --- Custom Coupling Parameters ---
 // These are defaults, usually overridden by including a specific config file.
-custom_coupling_type = "none";
+custom_coupling_type = is_undef(custom_coupling_type) ? "none" : custom_coupling_type;
 barb_input_diameter = 5;
 barb_output_diameter = 6.5;
 barb_wall_thickness = 1;

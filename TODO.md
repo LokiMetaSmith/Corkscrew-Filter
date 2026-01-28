@@ -9,4 +9,4 @@ This file tracks planned enhancements and future work for the Thirsty Corkscrew 
 - [x] Document `optimizer/` and `parameters/` directories in the README. These are core functions for simulation and parameter evaluation.
 - [ ] Complete refactor of barb generators into a unified, parameterized `Barb` module.
 - [ ] Create `FilterHolder` part (barb fitting with dual O-rings and optional threading).
-- [ ] Standardize legacy coupling configurations (Cartridge, Sandblaster) into `configs/` files.
+- [x] Standardize legacy coupling configurations (Cartridge, Sandblaster) into `configs/` files.
