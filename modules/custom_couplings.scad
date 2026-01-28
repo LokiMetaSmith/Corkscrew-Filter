@@ -1,5 +1,5 @@
-include <modules/barbs.scad>
-include <modules/primitives.scad>
+include <barbs.scad>
+include <primitives.scad>
 // We need primitives for O-ring cutters if we want to reproduce the cartridge logic exactly.
 
 // =============================================================================

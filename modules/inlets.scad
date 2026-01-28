@@ -1,4 +1,4 @@
-include <modules/barbs.scad>
+include <barbs.scad>
 
 // =============================================================================
 // --- Inlet Component Modules ---
