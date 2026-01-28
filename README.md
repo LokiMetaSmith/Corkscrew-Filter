@@ -31,6 +31,12 @@ For a complete list of materials required and assembly instructions, please see 
 
 This project includes a case setup for running a CFD simulation using OpenFOAM to analyze the filter's performance. For detailed instructions on how to set up and run the simulation, please see the [README.md in the `corkscrewFilter` directory](./corkscrewFilter/README.md).
 
+## Automated Optimization & Parameters
+
+For those looking to optimize the filter design programmatically, the `optimizer/` directory contains tools to automate the design-simulation-analysis loop using Generative AI.
+*   See [optimizer/README.md](./optimizer/README.md) for details on the AI-driven optimization workflow.
+*   See [parameters/README.md](./parameters/README.md) for information on parameter configuration files.
+
 ## Future Work
 
 For a list of planned enhancements and future work, please see the [TODO list (TODO.md)](./TODO.md).
