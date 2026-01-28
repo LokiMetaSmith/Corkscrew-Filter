@@ -1,7 +1,7 @@
 include <BOSL2/std.scad>
 include <BOSL2/threading.scad>
-include <modules/barbs.scad>
-include <modules/primitives.scad>
+include <barbs.scad>
+include <primitives.scad>
 
 /**
  * Module: FilterHolder
