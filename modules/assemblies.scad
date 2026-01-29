@@ -193,25 +193,72 @@ module HexFilterArray(layers) {
  * tube_od:   The outer diameter of the tube this cap will fit onto.
  * hose_id:   The inner diameter of the hose that will connect to the barb.
  * oring_cs:  The cross-section diameter of the O-ring for sealing.
+ * tube_wall: The wall thickness of the tube (used for axial seal calculation).
+ * axial_seal: If true, creates a face seal (axial) instead of a radial seal.
  */
-module HoseAdapterEndCap(tube_od, hose_id, oring_cs) {
-    cap_inner_dia = tube_od - 2 * tube_wall_mm + tolerance_tube_fit;
+module HoseAdapterEndCap(tube_od, hose_id, oring_cs, tube_wall = tube_wall_mm, axial_seal = false) {
+    // Common settings
     cap_wall = 3;
-    cap_outer_dia = cap_inner_dia + 2 * cap_wall;
     cap_sleeve_height = 20;
     cap_end_plate_thick = 3;
 
-    color(USE_TRANSLUCENCY ? [0.9, 0.9, 0.9, 0.5] : "Gainsboro")
-    difference() {
-        union() {
-            cylinder(d = cap_outer_dia, h = cap_sleeve_height);
-            translate([0, 0, cap_sleeve_height]) cylinder(d = cap_outer_dia, h = cap_end_plate_thick);
-            translate([0, 0, cap_sleeve_height + cap_end_plate_thick]) cylinder(d = flange_od, h = flange_height);
+    if (axial_seal) {
+        // --- Axial Seal Geometry (Cup + Face Seal) ---
+        socket_od = tube_od + tolerance_tube_fit;
+        socket_id = tube_od - 2 * tube_wall - tolerance_tube_fit;
+
+        // The cup needs to be large enough to contain the socket OD
+        cap_outer_dia = socket_od + 2 * cap_wall;
+
+        color(USE_TRANSLUCENCY ? [0.9, 0.9, 0.9, 0.5] : "Gainsboro")
+        difference() {
+            union() {
+                // Main body block
+                cylinder(d = cap_outer_dia, h = cap_sleeve_height);
+                // End plate
+                translate([0, 0, cap_sleeve_height]) cylinder(d = cap_outer_dia, h = cap_end_plate_thick);
+                // Flange
+                translate([0, 0, cap_sleeve_height + cap_end_plate_thick]) cylinder(d = flange_od, h = flange_height);
+            }
+
+            // Cut the annular socket for the tube
+            translate([0,0,-1]) difference() {
+                 cylinder(d = socket_od, h = cap_sleeve_height + 1); // Outer slot boundary
+                 cylinder(d = socket_id, h = cap_sleeve_height + 2); // Inner slot boundary (island)
+            }
+
+            // Cut the central hole for flow
+             translate([0, 0, -1]) cylinder(d = hose_id, h = cap_sleeve_height + cap_end_plate_thick + flange_height + 2);
+
+            // Cut the O-ring groove on the face (bottom of the socket)
+            // The bottom of the socket is at Z=cap_sleeve_height (against the end plate).
+            // Shift down by half the groove depth to cut fully into the surface.
+            groove_depth = oring_cs * 0.8;
+            groove_center_dia = (socket_od + socket_id) / 2;
+            translate([0, 0, cap_sleeve_height - groove_depth / 2]) OringGroove_Face_Cutter(groove_center_dia, oring_cs);
         }
-        translate([0, 0, -1]) cylinder(d = cap_inner_dia, h = cap_sleeve_height + 2);
-        translate([0, 0, cap_sleeve_height / 2]) OringGroove_ID_Cutter(cap_inner_dia, oring_cs);
-        translate([0, 0, cap_sleeve_height]) cylinder(d = hose_id, h = cap_end_plate_thick + flange_height + 2);
+
+        translate([0, 0, cap_sleeve_height + cap_end_plate_thick + flange_height])
+            barb(hose_id, 4);
+
+    } else {
+        // --- Legacy Radial Seal Geometry ---
+
+        cap_inner_dia = tube_od - 2 * tube_wall + tolerance_tube_fit;
+        cap_outer_dia = cap_inner_dia + 2 * cap_wall;
+
+        color(USE_TRANSLUCENCY ? [0.9, 0.9, 0.9, 0.5] : "Gainsboro")
+        difference() {
+            union() {
+                cylinder(d = cap_outer_dia, h = cap_sleeve_height);
+                translate([0, 0, cap_sleeve_height]) cylinder(d = cap_outer_dia, h = cap_end_plate_thick);
+                translate([0, 0, cap_sleeve_height + cap_end_plate_thick]) cylinder(d = flange_od, h = flange_height);
+            }
+            translate([0, 0, -1]) cylinder(d = cap_inner_dia, h = cap_sleeve_height + 2);
+            translate([0, 0, cap_sleeve_height / 2]) OringGroove_ID_Cutter(cap_inner_dia, oring_cs);
+            translate([0, 0, cap_sleeve_height]) cylinder(d = hose_id, h = cap_end_plate_thick + flange_height + 2);
+        }
+        translate([0, 0, cap_sleeve_height + cap_end_plate_thick + flange_height])
+            barb(hose_id, 4);
     }
-    translate([0, 0, cap_sleeve_height + cap_end_plate_thick + flange_height])
-        barb(hose_id, 4);
 }

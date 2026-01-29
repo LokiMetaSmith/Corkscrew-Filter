@@ -55,6 +55,19 @@ module OringGroove_ID_Cutter(object_id, oring_cs) {
     rotate_extrude(convexity = 10) translate([object_id / 2 + groove_depth / 2, 0, 0]) square([groove_depth, groove_width], center = true);
 }
 
+/**
+ * Module: OringGroove_Face_Cutter
+ * Description: Creates a cutting tool for an O-ring groove on a flat face (Z-axis).
+ * Arguments:
+ * groove_center_dia: The diameter of the center of the groove.
+ * oring_cs:   The cross-section diameter of the O-ring.
+ */
+module OringGroove_Face_Cutter(groove_center_dia, oring_cs) {
+    groove_depth = oring_cs * 0.8;
+    groove_width = oring_cs * 1.1;
+    rotate_extrude(convexity = 10) translate([groove_center_dia / 2, 0, 0]) square([groove_width, groove_depth], center = true);
+}
+
 
 // --- Barb Primitives (from BarbGenerator-v3.scad by jsc, corrected implementation) ---
 
