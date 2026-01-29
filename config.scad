@@ -69,6 +69,7 @@ support_density = 4;             // The number of support bundles distributed ar
 adapter_hose_id_mm = 30;         // The inner diameter of the hose that will connect to the end cap adapter.
 flange_od = 20;                  // The outer diameter of the flange on the hose adapter.
 flange_height = 5;               // The height of the flange on the hose adapter.
+ADAPTER_AXIAL_SEAL = false;      // If true, uses an axial (face) seal with a cup for the tube. If false, uses a radial seal.
 
 // --- Inlet Parameters (for Modular Filter) ---
 // Threaded Inlet

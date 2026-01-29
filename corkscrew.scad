@@ -39,7 +39,7 @@ module GenerateSelectedPart() {
     } else if (part_to_generate == "single_cell_filter") {
         SingleCellFilter();
     } else if (part_to_generate == "hose_adapter_cap") {
-        HoseAdapterEndCap(tube_od_mm, adapter_hose_id_mm, oring_cross_section_mm);
+        HoseAdapterEndCap(tube_od_mm, adapter_hose_id_mm, oring_cross_section_mm, tube_wall_mm, ADAPTER_AXIAL_SEAL);
     } else if (part_to_generate == "flat_end_screw") {
         total_twist = 360 * number_of_complete_revolutions;
         FlatEndScrew(insert_length_mm, total_twist, num_bins);
