@@ -239,7 +239,7 @@ module HoseAdapterEndCap(tube_od, hose_id, oring_cs, tube_wall = tube_wall_mm, a
         }
 
         translate([0, 0, cap_sleeve_height + cap_end_plate_thick + flange_height])
-            barb(hose_id, 4);
+            Barb(hose_id = hose_id, hose_od = hose_id + 1.5, barb_count = 4);
 
     } else {
         // --- Legacy Radial Seal Geometry ---
@@ -259,6 +259,6 @@ module HoseAdapterEndCap(tube_od, hose_id, oring_cs, tube_wall = tube_wall_mm, a
             translate([0, 0, cap_sleeve_height]) cylinder(d = hose_id, h = cap_end_plate_thick + flange_height + 2);
         }
         translate([0, 0, cap_sleeve_height + cap_end_plate_thick + flange_height])
-            barb(hose_id, 4);
+            Barb(hose_id = hose_id, hose_od = hose_id + 1.5, barb_count = 4);
     }
 }
