@@ -59,16 +59,17 @@ module ModularFilterAssembly(tube_id, total_length) {
                                         ? threaded_inlet_flange_od + tolerance_socket_fit
                                         : barb_inlet_flange_od + tolerance_socket_fit;
 
-                                    is_barb = (inlet_type == "barb");
-                                    rz = is_top ? (spacer_height_mm / 2 - 1) : (-spacer_height_mm / 2 + 2);
-                                    ra = twist_rate * rz;
-                                    rx = is_barb ? helix_path_radius_mm * cos(ra) : 0;
-                                    ry = is_barb ? helix_path_radius_mm * sin(ra) : 0;
+                                    if (inlet_type == "barb") {
+                                        // Align recess with the helix interface
+                                        z_interface = is_top ? (spacer_height_mm / 2 - 1) : (-spacer_height_mm / 2 + 2);
+                                        z_recess_pos = is_top ? (spacer_height_mm / 2 - 1) : (-spacer_height_mm / 2);
+                                        ra = twist_rate * z_interface;
 
-                                    if (is_top) {
-                                        translate([rx, ry, spacer_height_mm / 2 - 1]) cylinder(d = recess_d, h = 2);
-                                    } else { // is_base
-                                        translate([rx, ry, -spacer_height_mm / 2]) cylinder(d = recess_d, h = 2);
+                                        rotate([0, 0, ra]) translate([helix_path_radius_mm, 0, z_recess_pos]) cylinder(d = recess_d, h = 2);
+                                    } else {
+                                        // Standard centered recess for threaded/pressfit
+                                        z_recess_pos = is_top ? (spacer_height_mm / 2 - 1) : (-spacer_height_mm / 2);
+                                        translate([0, 0, z_recess_pos]) cylinder(d = recess_d, h = 2);
                                     }
                                 }
                             }
@@ -81,10 +82,8 @@ module ModularFilterAssembly(tube_id, total_length) {
                                 translate([0, 0, z_shift]) mirror(mirror_vec) ThreadedInlet();
                             } else if (inlet_type == "barb") {
                                 z_local = is_top ? (spacer_height_mm / 2 - 1) : (-spacer_height_mm / 2 + 2);
-                                angle_local = twist_rate * z_local;
-                                x_off = helix_path_radius_mm * cos(angle_local);
-                                y_off = helix_path_radius_mm * sin(angle_local);
-                                translate([x_off, y_off, z_local]) mirror(mirror_vec) BarbInlet();
+                                ra = twist_rate * z_local;
+                                rotate([0, 0, ra]) translate([helix_path_radius_mm, 0, z_local]) mirror(mirror_vec) BarbInlet();
                             }
                         }
 
