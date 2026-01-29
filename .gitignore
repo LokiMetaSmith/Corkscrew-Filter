@@ -8,3 +8,4 @@ corkscrewFilter/processor*/
 corkscrewFilter/postProcessing/
 corkscrewFilter/log.*
 optimizer/venv/
+exports/
