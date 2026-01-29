@@ -39,7 +39,7 @@ module Barb(
             if (shell) {
                 for (z = [0 : barb_count - 1]) {
                     translate([0, 0, z * barb_length])
-                        cylinder(d1 = hose_od, d2 = hose_od + swell, h = barb_length, $fn = $fn);
+                        cylinder(d1 = hose_od + swell, d2 = hose_od, h = barb_length, $fn = $fn);
                 }
                  translate([0, 0, barb_count * barb_length])
                      cylinder(d = hose_od, h = barb_length, $fn = $fn); // Simple tip

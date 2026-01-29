@@ -58,10 +58,17 @@ module ModularFilterAssembly(tube_id, total_length) {
                                     recess_d = (inlet_type == "threaded" || inlet_type == "pressfit")
                                         ? threaded_inlet_flange_od + tolerance_socket_fit
                                         : barb_inlet_flange_od + tolerance_socket_fit;
+
+                                    is_barb = (inlet_type == "barb");
+                                    rz = is_top ? (spacer_height_mm / 2 - 1) : (-spacer_height_mm / 2 + 2);
+                                    ra = twist_rate * rz;
+                                    rx = is_barb ? helix_path_radius_mm * cos(ra) : 0;
+                                    ry = is_barb ? helix_path_radius_mm * sin(ra) : 0;
+
                                     if (is_top) {
-                                        translate([0, 0, spacer_height_mm / 2 - 1]) cylinder(d = recess_d, h = 2);
+                                        translate([rx, ry, spacer_height_mm / 2 - 1]) cylinder(d = recess_d, h = 2);
                                     } else { // is_base
-                                        translate([0, 0, -spacer_height_mm / 2]) cylinder(d = recess_d, h = 2);
+                                        translate([rx, ry, -spacer_height_mm / 2]) cylinder(d = recess_d, h = 2);
                                     }
                                 }
                             }
@@ -69,11 +76,15 @@ module ModularFilterAssembly(tube_id, total_length) {
 
                         if ((is_top || is_base) && inlet_type != "none") {
                             mirror_vec = [0, 0, is_top ? 0 : 1];
-                            z_shift = is_top ? spacer_height_mm / 2 : -spacer_height_mm / 2;
                             if (inlet_type == "threaded" || inlet_type == "pressfit") {
+                                z_shift = is_top ? spacer_height_mm / 2 : -spacer_height_mm / 2;
                                 translate([0, 0, z_shift]) mirror(mirror_vec) ThreadedInlet();
                             } else if (inlet_type == "barb") {
-                                translate([0, 0, z_shift]) mirror(mirror_vec) BarbInlet();
+                                z_local = is_top ? (spacer_height_mm / 2 - 1) : (-spacer_height_mm / 2 + 2);
+                                angle_local = twist_rate * z_local;
+                                x_off = helix_path_radius_mm * cos(angle_local);
+                                y_off = helix_path_radius_mm * sin(angle_local);
+                                translate([x_off, y_off, z_local]) mirror(mirror_vec) BarbInlet();
                             }
                         }
 
