@@ -1,3 +1,5 @@
+include <BOSL2/std.scad>
+include <BOSL2/threading.scad>
 include <barbs.scad>
 
 // =============================================================================
@@ -9,17 +11,16 @@ include <barbs.scad>
 /**
  * Module: ThreadedInlet
  * Description: Creates a threaded inlet piece with a flange, designed to be added to an end spacer.
- * Note: This creates a cosmetic thread; for a functional thread, replace the inner
- * cylinder with a proper thread library module.
+ * Note: This creates a functional thread using BOSL2 threaded_rod.
  */
 module ThreadedInlet() {
     flange_height = 2;
     difference() {
         union() {
-            cylinder(d = threaded_inlet_id_mm, h = threaded_inlet_height);
+            threaded_rod(d = threaded_inlet_id_mm, l = threaded_inlet_height, pitch = 1, anchor = BOTTOM, $fn=$fn);
             cylinder(d = threaded_inlet_flange_od, h = flange_height);
         }
-        translate([0, 0, -1])
+        down(1)
             cylinder(d = threaded_inlet_id_mm - 2, h = threaded_inlet_height + 2);
     }
 }
