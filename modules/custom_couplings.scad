@@ -47,6 +47,15 @@ module CustomCoupling() {
         }
     }
 
+    if (custom_coupling_type == "cartridge" && SHOW_O_RINGS) {
+        translate([0,0,(coupling_inset_height+coupling_lip_height)*4/5])
+            OringVisualizer(coupling_inset_width, 2.2);
+        translate([0,0,(coupling_inset_height+coupling_lip_height)/2])
+            OringVisualizer(coupling_inset_width, 2.2);
+        translate([0,0,(coupling_inset_height+coupling_lip_height)/4])
+            OringVisualizer(coupling_inset_width, 2.2);
+    }
+
     // --- Barb Attachment ---
     translate([0,0,-(coupling_outer_coupling_height+coupling_lip_height/2)])
         translate([0,0,0.09])

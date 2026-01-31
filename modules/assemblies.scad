@@ -182,6 +182,17 @@ module HexFilterArray(layers) {
         HexArrayLayout(layers, spacing) {
             StagedHelicalStructure(cell_length, cell_diameter, num_helices, num_stages);
         }
+
+        if (ADD_OUTER_O_RINGS && SHOW_O_RINGS) {
+            for (a = [0:5]) {
+                rotate([0, 0, a * 60 + 30]) {
+                    translate([hex_casing_radius / 2, 0, cell_length / 4])
+                        OringVisualizer_Linear(hex_casing_radius, oring_cross_section_mm);
+                    translate([hex_casing_radius / 2, 0, -cell_length / 4])
+                        OringVisualizer_Linear(hex_casing_radius, oring_cross_section_mm);
+                }
+            }
+        }
     }
 }
 
@@ -238,6 +249,12 @@ module HoseAdapterEndCap(tube_od, hose_id, oring_cs, tube_wall = tube_wall_mm, a
             translate([0, 0, cap_sleeve_height - groove_depth / 2]) OringGroove_Face_Cutter(groove_center_dia, oring_cs);
         }
 
+        if (SHOW_O_RINGS) {
+            groove_depth = oring_cs * 0.8;
+            groove_center_dia = (socket_od + socket_id) / 2;
+            translate([0, 0, cap_sleeve_height - groove_depth / 2]) OringVisualizer_Face(groove_center_dia, oring_cs);
+        }
+
         translate([0, 0, cap_sleeve_height + cap_end_plate_thick + flange_height])
             Barb(hose_id = hose_id, hose_od = hose_id + 1.5, barb_count = 4);
 
@@ -258,6 +275,11 @@ module HoseAdapterEndCap(tube_od, hose_id, oring_cs, tube_wall = tube_wall_mm, a
             translate([0, 0, cap_sleeve_height / 2]) OringGroove_ID_Cutter(cap_inner_dia, oring_cs);
             translate([0, 0, cap_sleeve_height]) cylinder(d = hose_id, h = cap_end_plate_thick + flange_height + 2);
         }
+
+        if (SHOW_O_RINGS) {
+            translate([0, 0, cap_sleeve_height / 2]) OringVisualizer_ID(cap_inner_dia, oring_cs);
+        }
+
         translate([0, 0, cap_sleeve_height + cap_end_plate_thick + flange_height])
             Barb(hose_id = hose_id, hose_od = hose_id + 1.5, barb_count = 4);
     }

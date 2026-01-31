@@ -133,6 +133,17 @@ module FilterHolder(
                 // 4. Clear center flow path (for entire height)
                  translate([0,0,-1]) cylinder(d = barb_id, h = lip_height + 2, $fn=$fn);
             }
+
+            // --- VISUALIZATION ---
+            if (SHOW_O_RINGS) {
+                 // Outer O-Ring
+                 translate([0,0,segment_h + segment_h/2])
+                    OringVisualizer(outer_seal_od, oring_cs);
+
+                 // Inner O-Ring
+                 translate([0,0,segment_h + segment_h/2])
+                    OringVisualizer_ID(inner_seal_id, oring_cs);
+            }
         }
     }
 }
