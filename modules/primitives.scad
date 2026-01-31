@@ -31,7 +31,7 @@ module OringGroove_OD_Cutter(object_dia, oring_cs, flat = false) {
 
 /**
  * Module: OringVisualizer
- * Description: Renders a torus shape to represent an O-ring for visualization purposes.
+ * Description: Renders a torus shape to represent an O-ring for visualization purposes (Outer Diameter).
  * Arguments:
  * object_dia: The diameter of the object the O-ring sits on.
  * oring_cs:   The cross-section diameter of the O-ring.
@@ -41,6 +41,49 @@ module OringVisualizer(object_dia, oring_cs) {
     torus_radius = object_dia / 2 - groove_depth / 2;
     color("IndianRed") rotate_extrude(convexity = 10) translate([torus_radius, 0, 0]) circle(r = oring_cs / 2);
 }
+
+/**
+ * Module: OringVisualizer_ID
+ * Description: Renders a torus shape to represent an O-ring for visualization purposes (Inner Diameter).
+ * Arguments:
+ * object_id: The inner diameter of the object the O-ring sits in.
+ * oring_cs:  The cross-section diameter of the O-ring.
+ */
+module OringVisualizer_ID(object_id, oring_cs) {
+    groove_depth = oring_cs * 0.8;
+    torus_radius = object_id / 2 + groove_depth / 2;
+    color("IndianRed") rotate_extrude(convexity = 10) translate([torus_radius, 0, 0]) circle(r = oring_cs / 2);
+}
+
+/**
+ * Module: OringVisualizer_Face
+ * Description: Renders a torus shape to represent an O-ring for visualization purposes (Axial/Face Seal).
+ * Arguments:
+ * groove_center_dia: The diameter of the center of the groove.
+ * oring_cs:   The cross-section diameter of the O-ring.
+ */
+module OringVisualizer_Face(groove_center_dia, oring_cs) {
+    color("IndianRed") rotate_extrude(convexity = 10) translate([groove_center_dia / 2, 0, 0]) circle(r = oring_cs / 2);
+}
+
+/**
+ * Module: OringVisualizer_Linear
+ * Description: Renders a cylinder/capsule shape to represent a linear O-ring seal.
+ * Arguments:
+ * length:     The length of the seal (matches object_dia in OringGroove_OD_Cutter with flat=true).
+ * oring_cs:   The cross-section diameter of the O-ring.
+ */
+module OringVisualizer_Linear(length, oring_cs) {
+    groove_depth = oring_cs * 0.8;
+    // The cutter is a cube extending from Z=0 to Z=groove_depth.
+    // The O-ring sits "in" the groove, centered at half depth?
+    // Usually O-rings are compressed. If we visualize it uncompressed, it might stick out.
+    // Let's center it at groove_depth / 2, so it's flush with the bottom of the groove
+    // but sticks out the top by (cs/2 - groove_depth/2).
+    // Center Z = groove_depth / 2.
+    color("IndianRed") translate([0, 0, groove_depth / 2]) rotate([0, 90, 0]) cylinder(h = length, d = oring_cs, center = true);
+}
+
 
 /**
  * Module: OringGroove_ID_Cutter
