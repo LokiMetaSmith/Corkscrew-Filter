@@ -13,8 +13,9 @@ include <primitives.scad>
  * cartridge_od: Outer diameter of the filter cartridge (inner seal surface).
  * barb_od: Outer diameter of the barb.
  * barb_id: Inner diameter of the barb.
- * thread_inner: (bool) If true, adds threads to the inner lip.
- * thread_outer: (bool) If true, adds threads to the outer lip.
+ * thread_inner: (bool) If true, adds threads to the inner lip (and uses face seal).
+ * thread_outer: (bool) If true, adds threads to the outer lip (and uses face seal).
+ * tube_wall: Wall thickness of the pipe (needed for flange calculation if threaded).
  */
 module FilterHolder(
     tube_id = 30, // Fits inside this pipe
@@ -23,20 +24,24 @@ module FilterHolder(
     barb_id = 4,
     thread_inner = false,
     thread_outer = false,
-    oring_cs = 1.5
+    oring_cs = 1.5,
+    tube_wall = 0
 ) {
     // Dimensions
     base_height = 5;
     lip_height = 10;
 
     // Derived
+    // If threaded outer, we create a flange that sits on the pipe rim (Face Seal).
+    // The flange must cover the pipe wall.
+    base_plate_od = thread_outer ? (tube_id + 2 * max(tube_wall, 2)) : (tube_id - 0.2);
+
     outer_seal_od = tube_id - 0.2; // Tolerance for fit
     inner_seal_id = cartridge_od + 0.2; // Tolerance for fit
 
     // Thread/Seal Segmentation
-    // We assume the lip is split:
-    // - Distal half (farthest from base): O-Ring Seal
-    // - Proximal half (closest to base): Threading (if enabled)
+    // Segment 1: Top (Proximal, near Base) -> z=5 to 10 relative to lip group origin (-5 to 0 global)
+    // Segment 2: Bottom (Distal, Tip) -> z=0 to 5 relative to lip group origin (-10 to -5 global)
     segment_h = lip_height / 2;
 
     union() {
@@ -52,9 +57,24 @@ module FilterHolder(
 
         // 2. Main Body Plate
         difference() {
-            cylinder(d = outer_seal_od, h = base_height, $fn=$fn);
+            cylinder(d = base_plate_od, h = base_height, $fn=$fn);
             // Center hole for flow
             translate([0,0,-1]) cylinder(d = barb_id, h = base_height + 2, $fn=$fn);
+
+            // Face Seals
+            if (thread_outer) {
+                // Seal against Pipe Rim (Axial) on underside
+                // Rim center approx tube_id + tube_wall
+                rim_center = tube_id + max(tube_wall, 2); // Fallback if wall=0
+                // Use primitives.scad module
+                OringGroove_Face_Cutter(rim_center, oring_cs);
+            }
+
+            if (thread_inner) {
+                // Seal against Cartridge Rim (Axial) on underside (ceiling of hole)
+                // Groove at cartridge_od
+                OringGroove_Face_Cutter(cartridge_od, oring_cs);
+            }
         }
 
         // 3. Seal Lips (Extending Downwards)
@@ -62,46 +82,48 @@ module FilterHolder(
             difference() {
                 union() {
                     // --- OUTER LIP CONSTRUCTION ---
-                    // Distal Segment (Seal) - Always Smooth
-                    translate([0,0,segment_h])
-                        difference() {
+                    // Top Segment (Proximal/Base) - z=5 to 10
+                    translate([0,0,segment_h]) {
+                        if (thread_outer) {
+                            // Threaded Section (moved to Top)
+                            threaded_rod(d=outer_seal_od, h=segment_h, pitch=1.5, internal=false, $fn=$fn);
+                        } else {
+                            // Smooth Section (Seal)
+                             difference() {
+                                cylinder(d = outer_seal_od, h = segment_h, $fn=$fn);
+                                translate([0,0,-1]) cylinder(d = outer_seal_od - 4, h = segment_h+2, $fn=$fn);
+                            }
+                        }
+                    }
+
+                    // Bottom Segment (Distal/Tip) - z=0 to 5
+                    if (thread_outer) {
+                        // Smooth Pilot Section (moved to Bottom)
+                         difference() {
                             cylinder(d = outer_seal_od, h = segment_h, $fn=$fn);
                             translate([0,0,-1]) cylinder(d = outer_seal_od - 4, h = segment_h+2, $fn=$fn);
                         }
-
-                    // Proximal Segment (Base)
-                    if (thread_outer) {
-                        // Threaded Rod (replaces smooth cylinder)
-                         threaded_rod(d=outer_seal_od, h=segment_h, pitch=1.5, internal=false, $fn=$fn);
-                         // Note: threaded_rod is solid, need to hollow it out
                     } else {
-                        // Smooth Cylinder
-                         difference() {
+                        // Original behavior: Also smooth (since thread_outer=false means plug with seal)
+                        // If we follow legacy, was the bottom threaded?
+                        // Legacy: Top=Seal, Bottom=Threaded (if true). If false, Bottom=Smooth.
+                        difference() {
                             cylinder(d = outer_seal_od, h = segment_h, $fn=$fn);
                             translate([0,0,-1]) cylinder(d = outer_seal_od - 4, h = segment_h+2, $fn=$fn);
                         }
                     }
 
                     // --- INNER LIP CONSTRUCTION ---
-                    // Distal Segment (Seal) - Always Smooth
-                    translate([0,0,segment_h])
-                        difference() {
-                            cylinder(d = inner_seal_id + 4, h = segment_h, $fn=$fn);
-                            translate([0,0,-1]) cylinder(d = inner_seal_id, h = segment_h+2, $fn=$fn);
-                        }
-
-                    // Proximal Segment (Base)
-                    if (thread_inner) {
-                         // We cut the thread later in the difference block, so here we provide material.
-                         // Standard material block
+                    // Top Segment (Proximal/Base) - z=5 to 10
+                    translate([0,0,segment_h]) {
+                         // Provide material
                          cylinder(d = inner_seal_id + 4, h = segment_h, $fn=$fn);
-                    } else {
-                        // Smooth Cylinder
-                        difference() {
-                            cylinder(d = inner_seal_id + 4, h = segment_h, $fn=$fn);
-                            translate([0,0,-1]) cylinder(d = inner_seal_id, h = segment_h+2, $fn=$fn);
-                        }
                     }
+
+                    // Bottom Segment (Distal/Tip) - z=0 to 5
+                    // Provide material
+                    cylinder(d = inner_seal_id + 4, h = segment_h, $fn=$fn);
+
 
                     // Connecting Base (overlap with main body to ensure solid)
                     translate([0,0,lip_height-1])
@@ -110,25 +132,48 @@ module FilterHolder(
 
                 // --- SUBTRACTIONS (Holes, Threads, O-Rings) ---
 
-                // 1. Hollow out the Outer Threaded Rod if it was added (it's solid by default)
+                // 1. Hollow out the Outer Threaded Rod if it was added
                 if (thread_outer) {
-                     translate([0,0,-1]) cylinder(d = outer_seal_od - 4, h = segment_h+2, $fn=$fn);
+                     // Top segment is threaded, need to hollow it.
+                     translate([0,0,segment_h-1]) cylinder(d = outer_seal_od - 4, h = segment_h+2, $fn=$fn);
                 }
 
                 // 2. Cut Inner Threads
                 if (thread_inner) {
-                     translate([0,0,-1])
+                     // Threads moved to Top Segment (Proximal)
+                     translate([0,0,segment_h-1])
                         threaded_rod(d=inner_seal_id, h=segment_h+2, pitch=1.5, internal=true, $fn=$fn);
                 }
 
-                // 3. O-Ring Grooves (Distal Segment)
-                // Outer O-Ring (Seals against Pipe ID) -> Groove on OD of Outer Lip
-                translate([0,0,segment_h + segment_h/2])
-                    OringGroove_OD_Cutter(outer_seal_od, oring_cs);
+                // Clear inner lip center (Smooth bore where not threaded)
+                // If thread_inner, Bottom is smooth.
+                // If !thread_inner, Both are smooth.
+                // The material provided was cylinder(d=inner_seal_id + 4).
+                // We need to cut the ID hole.
 
-                // Inner O-Ring (Seals against Cartridge OD) -> Groove on ID of Inner Lip
-                translate([0,0,segment_h + segment_h/2])
-                    OringGroove_ID_Cutter(inner_seal_id, oring_cs);
+                if (thread_inner) {
+                    // Cut bottom smooth bore
+                    translate([0,0,-1]) cylinder(d = inner_seal_id, h = segment_h+2, $fn=$fn);
+                } else {
+                    // Cut both smooth bores
+                     translate([0,0,-1]) cylinder(d = inner_seal_id, h = lip_height+2, $fn=$fn);
+                }
+
+
+                // 3. O-Ring Grooves (Radial)
+                // Only if NOT threaded (Radial Seal)
+
+                if (!thread_outer) {
+                    // Outer O-Ring (Seals against Pipe ID) -> Groove on Top Segment
+                    translate([0,0,segment_h + segment_h/2])
+                        OringGroove_OD_Cutter(outer_seal_od, oring_cs);
+                }
+
+                if (!thread_inner) {
+                    // Inner O-Ring (Seals against Cartridge OD) -> Groove on Top Segment
+                    translate([0,0,segment_h + segment_h/2])
+                        OringGroove_ID_Cutter(inner_seal_id, oring_cs);
+                }
 
                 // 4. Clear center flow path (for entire height)
                  translate([0,0,-1]) cylinder(d = barb_id, h = lip_height + 2, $fn=$fn);
