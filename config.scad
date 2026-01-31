@@ -12,14 +12,14 @@
 // This variable controls which component is rendered.
 part_options = ["modular_filter_assembly", "hex_array_filter", "single_cell_filter", "hose_adapter_cap", "flat_end_screw", "filter_holder", "custom_coupling"];
 // We use is_undef to prevent overwriting if this file is included after variables are set.
-part_to_generate = is_undef(part_to_generate) ? part_options[0] : part_to_generate;
+part_to_generate = is_undef(part_to_generate) ? part_options[5] : part_to_generate;
 
 // --- 2. Feature Flags ---
 // These flags toggle optional features on the selected model.
 
 // --- Modular Filter & Flat End Screw Features ---
 inlet_options = ["none", "threaded", "pressfit", "barb"];
-inlet_type = inlet_options[3];              // Inlet style for the end spacers of the modular filter. ["none", "threaded", "barb"]
+inlet_type = inlet_options[0];              // Inlet style for the end spacers of the modular filter. ["none", "threaded", "barb"]
 GENERATE_CFD_VOLUME = false;     // If true, generates the negative space (fluid volume) for CFD analysis instead of the solid part.
 ADD_HELICAL_SUPPORT = true;      // If true, adds a lattice-like support structure between the spacers for rigidity.
 
@@ -32,7 +32,7 @@ ADD_DEBRIS_EXIT_CHANNELS = false; // NEW: If true, cuts channels for debris to e
 // --- Visual/Debug Options ---
 SHOW_O_RINGS = true;             // If true, renders red O-rings in their grooves for visualization.
 USE_TRANSLUCENCY = false;        // If true, makes certain parts semi-transparent to see internal geometry.
-CUT_FOR_VISIBILITY = false;      // If true, cuts the model in half (removes Y>0) to allow inspection of internal geometry.
+CUT_FOR_VISIBILITY = true;      // If true, cuts the model in half (removes Y>0) to allow inspection of internal geometry.
 
 // =============================================================================
 // --- B. Model Parameters ---
@@ -69,7 +69,7 @@ support_density = 4;             // The number of support bundles distributed ar
 adapter_hose_id_mm = 30;         // The inner diameter of the hose that will connect to the end cap adapter.
 flange_od = 20;                  // The outer diameter of the flange on the hose adapter.
 flange_height = 5;               // The height of the flange on the hose adapter.
-ADAPTER_AXIAL_SEAL = false;      // If true, uses an axial (face) seal with a cup for the tube. If false, uses a radial seal.
+ADAPTER_AXIAL_SEAL = true;      // If true, uses an axial (face) seal with a cup for the tube. If false, uses a radial seal.
 
 // --- Inlet Parameters (for Modular Filter) ---
 // Threaded Inlet
