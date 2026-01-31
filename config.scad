@@ -39,7 +39,7 @@ CUT_FOR_VISIBILITY = false;      // If true, cuts the model in half (removes Y>0
 // =============================================================================
 
 // --- General & Precision ---
-high_res_fn = 10; // Fragment resolution for final renders ($fn). Higher values create smoother curves.
+high_res_fn = 200; // Fragment resolution for final renders ($fn). Higher values create smoother curves.
 low_res_fn = 10;   // Fragment resolution for previews. Lower values provide faster previews.
 $fn = $preview ? low_res_fn : high_res_fn; // OpenSCAD automatically uses the appropriate value.
 
