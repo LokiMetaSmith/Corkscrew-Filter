@@ -53,7 +53,8 @@ module GenerateSelectedPart() {
             barb_id = barb_inlet_id_mm,
             thread_inner = filter_holder_thread_inner,
             thread_outer = filter_holder_thread_outer,
-            oring_cs = oring_cross_section_mm
+            oring_cs = oring_cross_section_mm,
+            tube_wall = tube_wall_mm
         );
     } else {
         echo("Error: `part_to_generate` variable is not set to a valid option.");
