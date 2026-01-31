@@ -135,7 +135,19 @@ module FilterHolder(
                 // 1. Hollow out the Outer Threaded Rod if it was added
                 if (thread_outer) {
                      // Top segment is threaded, need to hollow it.
-                     translate([0,0,segment_h-1]) cylinder(d = outer_seal_od - 4, h = segment_h+2, $fn=$fn);
+                     // We must preserve the inner cup structure if it exists.
+                     // Create a "donut" cut between outer wall ID and inner cup OD.
+
+                     outer_cut_d = outer_seal_od - 4; // ID of outer threaded wall
+                     inner_keep_d = inner_seal_id + 4; // OD of inner cup wall
+
+                     if (outer_cut_d > inner_keep_d) {
+                         translate([0,0,segment_h-1])
+                         difference() {
+                            cylinder(d = outer_cut_d, h = segment_h+2, $fn=$fn);
+                            cylinder(d = inner_keep_d, h = segment_h+3, $fn=$fn); // Protect inner cup
+                         }
+                     }
                 }
 
                 // 2. Cut Inner Threads
