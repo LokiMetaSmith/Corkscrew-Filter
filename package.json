@@ -8,6 +8,7 @@
     "optimize": "python3 optimizer/main.py"
   },
   "dependencies": {
+    "@scalenc/stl-to-png": "^1.2.0",
     "openscad-wasm": "^0.0.4"
   }
 }

@@ -7,6 +7,6 @@ This file tracks planned enhancements and future work for the Thirsty Corkscrew 
 - [ ] Conduct CFD analysis to test different design parameters (slit shape, screw pitch, etc.).
 - [ ] Add particle tracking to the CFD simulation to visualize and quantify separation effectiveness.
 - [x] Document `optimizer/` and `parameters/` directories in the README. These are core functions for simulation and parameter evaluation.
-- [ ] Complete refactor of barb generators into a unified, parameterized `Barb` module.
-- [ ] Create `FilterHolder` part (barb fitting with dual O-rings and optional threading).
+- [x] Complete refactor of barb generators into a unified, parameterized `Barb` module.
+- [x] Create `FilterHolder` part (barb fitting with dual O-rings and optional threading).
 - [x] Standardize legacy coupling configurations (Cartridge, Sandblaster) into `configs/` files.
