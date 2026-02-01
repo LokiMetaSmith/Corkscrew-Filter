@@ -2,139 +2,108 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-// Configuration
-const BOSL2_REPO = 'https://github.com/BOSL2/BOSL2.git';
-const LOCAL_BOSL2_DIR = 'BOSL2'; // In the project root
-const CONFIGS_DIR = 'configs';
-const EXPORTS_DIR = 'exports';
-
-// Utility: Dynamic Import for ESM module
-const importOpenSCAD = async () => {
+const SCAD_WASM_IMPORT = async () => {
     try {
         const mod = await import('openscad-wasm');
-        return mod.default || mod;
+        return mod.default || mod.createOpenSCAD || mod;
     } catch (e) {
         console.error("Error importing openscad-wasm:", e);
         process.exit(1);
     }
 };
 
-// Utility: Ensure BOSL2 exists
-function ensureBOSL2() {
-    if (!fs.existsSync(LOCAL_BOSL2_DIR)) {
-        console.log(`BOSL2 library not found in ${LOCAL_BOSL2_DIR}. Cloning...`);
+const LIB_DIR = 'BOSL2';
+const CONFIGS_DIR = 'configs';
+const OUTPUT_DIR = 'exports';
+
+async function main() {
+    // 1. Ensure BOSL2 Library exists
+    if (!fs.existsSync(LIB_DIR)) {
+        console.log('BOSL2 library not found. Cloning...');
         try {
-            execSync(`git clone --depth 1 ${BOSL2_REPO} ${LOCAL_BOSL2_DIR}`, { stdio: 'inherit' });
+            execSync('git clone --depth 1 https://github.com/BOSL2/BOSL2.git ' + LIB_DIR, { stdio: 'inherit' });
             console.log('BOSL2 cloned successfully.');
         } catch (e) {
             console.error('Failed to clone BOSL2:', e.message);
-            // Fallback: Try zip download if git fails
+            // Fallback logic
             console.log('Attempting alternative download (zip)...');
             try {
                 execSync('curl -L -o bosl2.zip https://github.com/BelfrySCAD/BOSL2/archive/refs/heads/master.zip');
-                execSync(`unzip -q bosl2.zip`);
-                if (fs.existsSync('BOSL2-master')) {
-                    fs.renameSync('BOSL2-master', LOCAL_BOSL2_DIR);
+                execSync('unzip -q bosl2.zip');
+                if (fs.existsSync(LIB_DIR)) {
+                     fs.rmSync(LIB_DIR, { recursive: true, force: true });
                 }
+                fs.renameSync('BOSL2-master', LIB_DIR);
                 fs.unlinkSync('bosl2.zip');
-            } catch (e2) {
+            } catch(e2) {
                 console.error('Failed to download BOSL2 zip:', e2.message);
                 process.exit(1);
             }
         }
     }
-}
 
-// Utility: Load directory into WASM FS
-function loadDir(instance, localPath, virtualPath) {
-    if (!fs.existsSync(localPath)) return;
-    try { instance.FS.mkdir(virtualPath); } catch (e) {
-        // Ignore if exists
-    }
+    // 2. Parse Arguments
+    const args = process.argv.slice(2);
+    let directMode = false;
+    let outputDirect = '';
+    let inputDirect = '';
+    let directParams = [];
 
-    const items = fs.readdirSync(localPath);
-    for (const item of items) {
-        const loc = path.join(localPath, item);
-        const virt = virtualPath === '/' ? `/${item}` : `${virtualPath}/${item}`;
-        const stat = fs.statSync(loc);
-        if (stat.isDirectory()) {
-            loadDir(instance, loc, virt);
+    if (args.includes('-o')) {
+        directMode = true;
+        const oIndex = args.indexOf('-o');
+        if (oIndex + 1 < args.length) {
+            outputDirect = args[oIndex + 1];
         } else {
-            const data = fs.readFileSync(loc);
-            instance.FS.writeFile(virt, data);
+            console.error("Error: -o requires an output filename.");
+            process.exit(1);
         }
-    }
-}
 
-// Utility: Load the project files
-function loadProject(instance) {
-    // 1. Load Root .scad files
-    const rootFiles = fs.readdirSync('.').filter(f => f.endsWith('.scad'));
-    for (const f of rootFiles) {
-        instance.FS.writeFile(`/${f}`, fs.readFileSync(f));
-    }
-
-    // 2. Load Modules
-    loadDir(instance, 'modules', '/modules');
-
-    // 3. Load Parameters
-    loadDir(instance, 'parameters', '/parameters');
-
-    // 4. Load Configs
-    loadDir(instance, 'configs', '/configs');
-
-    // 5. Load BOSL2 into /libraries/BOSL2 (Standard Library Path)
-    // Create /libraries first
-    try { instance.FS.mkdir('/libraries'); } catch(e){}
-    loadDir(instance, LOCAL_BOSL2_DIR, '/libraries/BOSL2');
-}
-
-async function runRender(instance, inputFile, outputFile, extraArgs = []) {
-    // Prepare arguments
-    // openscad -o output.stl input.scad
-    const args = ['-o', outputFile, ...extraArgs, inputFile];
-
-    console.log(`Executing OpenSCAD: ${args.join(' ')}`);
-
-    try {
-        const ret = instance.callMain(args);
-        if (ret === 0) {
-            // Check if output file exists in VFS
-            if (instance.FS.analyzePath(outputFile).exists) {
-                const data = instance.FS.readFile(outputFile);
-
-                let localPath = outputFile;
-                if (path.isAbsolute(localPath) && process.platform !== 'win32') {
-                     localPath = localPath.substring(1);
-                }
-
-                const outDir = path.dirname(localPath);
-                if (outDir && !fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
-
-                fs.writeFileSync(localPath, data);
-                console.log(`Success: ${localPath}`);
-                return true;
-            } else {
-                console.error(`Error: Output file ${outputFile} was not created.`);
-                return false;
+        // Find input file (argument that doesn't start with - and is not the output file)
+        for (let i = 0; i < args.length; i++) {
+            if (args[i] === '-o') { i++; continue; }
+            if (args[i] === '-D') { i++; continue; } // Skip param values
+            if (!args[i].startsWith('-')) {
+                inputDirect = args[i];
+                break; // Assuming first non-flag arg is input
             }
-        } else {
-            console.error(`OpenSCAD returned error code: ${ret}`);
-            return false;
         }
-    } catch (e) {
-        console.error("Exception during render:", e);
-        return false;
+
+        // Collect parameters
+        for (let i = 0; i < args.length; i++) {
+             if (args[i] === '-D') {
+                 if (i + 1 < args.length) {
+                     directParams.push('-D');
+                     directParams.push(args[i+1]);
+                 }
+             }
+        }
     }
-}
 
-async function main() {
-    ensureBOSL2();
+    const createOpenSCAD = await SCAD_WASM_IMPORT();
 
-    const { createOpenSCAD } = await importOpenSCAD();
+    // Helper to load directories into VFS
+    function loadDir(instance, localPath, virtualPath) {
+        if (!fs.existsSync(localPath)) return;
+        try { instance.FS.mkdir(virtualPath); } catch(e) {}
+        const items = fs.readdirSync(localPath);
+        for (const item of items) {
+            const loc = path.join(localPath, item);
+            const virt = virtualPath === '/' ? `/${item}` : `${virtualPath}/${item}`;
+            const stat = fs.statSync(loc);
+            if (stat.isDirectory()) {
+                loadDir(instance, loc, virt);
+            } else {
+                instance.FS.writeFile(virt, fs.readFileSync(loc));
+            }
+        }
+    }
 
-    // Factory for creating fresh instances
-    const createInstance = async () => {
+    async function renderFile(inputFile, outputFile, params = []) {
+        console.log(`Rendering ${inputFile} -> ${outputFile}...`);
+
+        // Create fresh instance for each render to avoid memory issues/state pollution
+        // IMPORTANT: Increased memory limit to 512MB to handle complex models (e.g. hose_adapter_cap)
         const wrapper = await createOpenSCAD({
             noInitialRun: true,
             print: (text) => console.log("SCAD stdout:", text),
@@ -153,84 +122,101 @@ async function main() {
             instance = wrapper;
         }
 
-        loadProject(instance);
-        return instance;
-    };
+        // Mount Project Files
+        loadDir(instance, LIB_DIR, '/BOSL2');
+        loadDir(instance, 'modules', '/modules');
+        loadDir(instance, 'parameters', '/parameters');
 
-    // Parse Arguments
-    const args = process.argv.slice(2);
-
-    let outputFile = null;
-    let defineArgs = [];
-    let inputFile = null;
-
-    if (args.length > 0) {
-        for (let i = 0; i < args.length; i++) {
-            if (args[i] === '-o') {
-                outputFile = args[i + 1];
-                i++;
-            } else if (args[i].startsWith('-D')) {
-                if (args[i] === '-D') {
-                    defineArgs.push('-D');
-                    defineArgs.push(args[i + 1]);
-                    i++;
-                } else {
-                    defineArgs.push(args[i]);
-                }
-            } else if (!args[i].startsWith('-')) {
-                inputFile = args[i];
-            }
+        // Mount root SCAD files
+        const rootFiles = fs.readdirSync('.').filter(f => f.endsWith('.scad'));
+        for(const f of rootFiles) {
+            instance.FS.writeFile('/' + f, fs.readFileSync(f));
         }
 
-        if (inputFile) {
-             if (!outputFile) {
-                 console.error("Direct mode requires -o <output_file>");
-                 process.exit(1);
-             }
+        // Handle Input File
+        let vfsInputPath = '';
+        const normalizedInput = path.normalize(inputFile);
+        const relativeDir = path.dirname(normalizedInput);
 
-             let vfsInput = inputFile.replace(/\\/g, '/');
-             if (!vfsInput.startsWith('/')) vfsInput = '/' + vfsInput;
-
-             let vfsOutput = outputFile.replace(/\\/g, '/');
-             if (!vfsOutput.startsWith('/')) vfsOutput = '/' + vfsOutput;
-
-             try {
-                const instance = await createInstance();
-                await runRender(instance, vfsInput, vfsOutput, defineArgs);
-             } catch(e) {
-                console.error("Failed to run direct export:", e);
-                process.exit(1);
-             }
-             return;
+        if (relativeDir === CONFIGS_DIR || relativeDir.endsWith(path.sep + CONFIGS_DIR)) {
+            // It's in configs/, so we mount configs dir
+            loadDir(instance, CONFIGS_DIR, '/configs');
+            vfsInputPath = '/configs/' + path.basename(inputFile);
+        } else if (path.dirname(inputFile) === '.') {
+            vfsInputPath = '/' + path.basename(inputFile);
+        } else {
+            // Arbitrary path, copy specifically
+            const base = path.basename(inputFile);
+            instance.FS.writeFile('/' + base, fs.readFileSync(inputFile));
+            vfsInputPath = '/' + base;
         }
-    }
 
-    // Mode 2: Batch Export
-    console.log("Running Batch Export...");
+        const cmd = [
+            vfsInputPath,
+            '-o', 'output.stl', // Internal name
+            ...params
+        ];
 
-    if (!fs.existsSync(EXPORTS_DIR)) {
-        fs.mkdirSync(EXPORTS_DIR, { recursive: true });
-    }
-
-    const configFiles = fs.readdirSync(CONFIGS_DIR).filter(f => f.endsWith('.scad'));
-    console.log(`Found ${configFiles.length} configurations.`);
-
-    for (const conf of configFiles) {
-        const name = path.basename(conf, '.scad');
-        const vfsIn = `/configs/${conf}`;
-        const vfsOut = `${EXPORTS_DIR}/${name}.stl`;
-
-        console.log(`Exporting ${conf}...`);
         try {
-            const instance = await createInstance();
-            // Ensure /exports exists in VFS
-            try { instance.FS.mkdir(`/${EXPORTS_DIR}`); } catch(e) {}
+            const ret = instance.callMain(cmd);
+            if (ret === 0 && instance.FS.analyzePath('/output.stl').exists) {
+                const data = instance.FS.readFile('/output.stl');
 
-            const success = await runRender(instance, vfsIn, vfsOut);
+                // Determine local path logic
+                let localPath = outputFile;
+                const outDir = path.dirname(localPath);
+                if (outDir && !fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+
+                fs.writeFileSync(localPath, data);
+                console.log(`  Success: ${outputFile}`);
+                return true;
+            } else {
+                console.error(`  Failure: OpenSCAD exited with ${ret}`);
+                return false;
+            }
         } catch (e) {
-             console.error(`Export failed/crashed for ${conf}:`, e);
+            console.error(`  Exception: ${e.message}`);
+            // Explicitly trigger garbage collection if possible or just rely on V8
+            return false;
         }
+    }
+
+    if (directMode) {
+        // DIRECT MODE
+        if (!inputDirect) {
+            console.error("No input file specified.");
+            process.exit(1);
+        }
+        const success = await renderFile(inputDirect, outputDirect, directParams);
+        if (!success) process.exit(1);
+
+    } else {
+        // BATCH MODE
+        if (!fs.existsSync(OUTPUT_DIR)) {
+            fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+        }
+
+        const files = fs.readdirSync(CONFIGS_DIR).filter(f => f.endsWith('.scad'));
+        console.log(`Found ${files.length} config files in ${CONFIGS_DIR}`);
+
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const file of files) {
+            const inputPath = path.join(CONFIGS_DIR, file);
+            const outputPath = path.join(OUTPUT_DIR, file.replace('.scad', '.stl'));
+
+            const success = await renderFile(inputPath, outputPath);
+            if (success) successCount++;
+            else failCount++;
+        }
+
+        console.log(`\nExport Summary: ${successCount} succeeded, ${failCount} failed.`);
+        if (failCount > 0) process.exit(1);
     }
 }
 
-main();
+main().catch(err => {
+    console.error(err);
+    process.exit(1);
+});
