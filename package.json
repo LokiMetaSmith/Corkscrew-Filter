@@ -1,0 +1,13 @@
+{
+  "name": "openscad-wasm-export",
+  "version": "1.0.0",
+  "description": "Automated export for OpenSCAD using WebAssembly",
+  "main": "export.js",
+  "scripts": {
+    "export": "node export.js",
+    "optimize": "python3 optimizer/main.py"
+  },
+  "dependencies": {
+    "openscad-wasm": "^0.0.4"
+  }
+}
