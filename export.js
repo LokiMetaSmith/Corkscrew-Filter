@@ -49,12 +49,9 @@ function ensureBOSL2() {
 function loadDir(instance, localPath, virtualPath) {
     if (!fs.existsSync(localPath)) return;
     try { instance.FS.mkdir(virtualPath); } catch (e) {
-        // Ignore if exists, but for nested paths we might need recursive mkdir
-        // openscad-wasm FS (emscripten) usually needs explicit creation of parents?
-        // simple mkdir might fail if parent missing.
+        // Ignore if exists
     }
 
-    // Simple recursive loader
     const items = fs.readdirSync(localPath);
     for (const item of items) {
         const loc = path.join(localPath, item);
@@ -106,17 +103,11 @@ async function runRender(instance, inputFile, outputFile, extraArgs = []) {
             if (instance.FS.analyzePath(outputFile).exists) {
                 const data = instance.FS.readFile(outputFile);
 
-                // Determine local path. If outputFile starts with '/', strip it for local write
-                // to avoid writing to root (unless user really intended absolute path, but strict mode helps).
-                // Actually, simply using it as relative to CWD is safer for this script's purpose.
                 let localPath = outputFile;
                 if (path.isAbsolute(localPath) && process.platform !== 'win32') {
-                     // If it's effectively an absolute path in VFS (starts with /), treat as relative locally
-                     // to prevent EACCES errors.
                      localPath = localPath.substring(1);
                 }
 
-                // Ensure output directory exists locally
                 const outDir = path.dirname(localPath);
                 if (outDir && !fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
@@ -142,44 +133,38 @@ async function main() {
 
     const { createOpenSCAD } = await importOpenSCAD();
 
-    // Initialize OpenSCAD WASM
-    // createOpenSCAD returns a wrapper object (OpenSCAD instance factory)
-    const wrapper = await createOpenSCAD({
-        noInitialRun: true,
-        print: (text) => console.log("SCAD stdout:", text),
-        printErr: (text) => console.error("SCAD stderr:", text),
-        // Attempt to increase memory limits (Emscripten options)
-        ALLOW_MEMORY_GROWTH: 1,
-        // INITIAL_MEMORY: 268435456 // 256MB (Commented out as strict strict standard might fail if mismatched)
-    });
+    // Factory for creating fresh instances
+    const createInstance = async () => {
+        const wrapper = await createOpenSCAD({
+            noInitialRun: true,
+            print: (text) => console.log("SCAD stdout:", text),
+            printErr: (text) => console.error("SCAD stderr:", text),
+            quit: (status, toThrow) => {
+                throw new Error("OpenSCAD Quit with status " + status);
+            },
+            ALLOW_MEMORY_GROWTH: 1,
+            INITIAL_MEMORY: 536870912 // 512MB
+        });
 
-    // The library may require calling getInstance() or accessing the module directly depending on version.
-    // Based on user snippet:
-    let instance;
-    if (typeof wrapper.getInstance === 'function') {
-        instance = wrapper.getInstance();
-    } else {
-        // Fallback: maybe wrapper itself is the instance (standard emscripten)?
-        instance = wrapper;
-    }
+        let instance;
+        if (typeof wrapper.getInstance === 'function') {
+            instance = wrapper.getInstance();
+        } else {
+            instance = wrapper;
+        }
 
-    // Load Project Files
-    console.log("Loading project files into virtual filesystem...");
-    loadProject(instance);
+        loadProject(instance);
+        return instance;
+    };
 
     // Parse Arguments
     const args = process.argv.slice(2);
 
-    // Helper to parse simple flags
     let outputFile = null;
     let defineArgs = [];
     let inputFile = null;
 
-    // Check for "-o"
-    // Valid format: node export.js [-o out.stl] [-D var=val]... [file.scad]
-
     if (args.length > 0) {
-        // Mode 1: Direct Execution (CLI Wrapper)
         for (let i = 0; i < args.length; i++) {
             if (args[i] === '-o') {
                 outputFile = args[i + 1];
@@ -198,38 +183,29 @@ async function main() {
         }
 
         if (inputFile) {
-             // Validate inputs
              if (!outputFile) {
                  console.error("Direct mode requires -o <output_file>");
                  process.exit(1);
              }
-             // NOTE: inputFile logic
-             // If input is "configs/foo.scad", we should use "/configs/foo.scad" in VFS.
-             // We need to ensure we map local path to VFS path correctly.
-             // Since we mirrored the structure, a relative path like "configs/foo.scad" works if we prepend "/"?
-             // Actually, "configs/foo.scad" as a string is just a path.
-             // OpenSCAD inside WASM starts at /.
-             // If we pass "configs/foo.scad", it looks for /configs/foo.scad.
-             // But we need to make sure the user passed a relative path.
-             // ScadDriver passes "corkscrew filter.scad" (root) or similar.
-             // So simply prepending "/" usually works if valid relative path.
-             // Or ensuring it starts with "/"?
-             // Let's normalize.
 
              let vfsInput = inputFile.replace(/\\/g, '/');
              if (!vfsInput.startsWith('/')) vfsInput = '/' + vfsInput;
 
-             // Output file also needs to be VFS path.
-             // Usually output is "exports/foo.stl" or similar.
              let vfsOutput = outputFile.replace(/\\/g, '/');
              if (!vfsOutput.startsWith('/')) vfsOutput = '/' + vfsOutput;
 
-             await runRender(instance, vfsInput, vfsOutput, defineArgs);
+             try {
+                const instance = await createInstance();
+                await runRender(instance, vfsInput, vfsOutput, defineArgs);
+             } catch(e) {
+                console.error("Failed to run direct export:", e);
+                process.exit(1);
+             }
              return;
         }
     }
 
-    // Mode 2: Batch Export (Default)
+    // Mode 2: Batch Export
     console.log("Running Batch Export...");
 
     if (!fs.existsSync(EXPORTS_DIR)) {
@@ -242,31 +218,17 @@ async function main() {
     for (const conf of configFiles) {
         const name = path.basename(conf, '.scad');
         const vfsIn = `/configs/${conf}`;
-        const vfsOut = `${EXPORTS_DIR}/${name}.stl`; // Relative path for both VFS and Local
-
-        // Ensure /exports exists in VFS
-        try { instance.FS.mkdir(`/${EXPORTS_DIR}`); } catch(e) {}
+        const vfsOut = `${EXPORTS_DIR}/${name}.stl`;
 
         console.log(`Exporting ${conf}...`);
-        const success = await runRender(instance, vfsIn, vfsOut);
-        if (success) {
-            // Copy back to local FS handled by runRender logic if we pass local path?
-            // runRender writes to FS using the output path.
-            // If vfsOut is /exports/foo.stl, we read that.
-            // But we want to write to local "exports/foo.stl".
-            // runRender calls fs.writeFileSync(path.dirname(outputFile)...)
-            // wait, runRender argument `outputFile` is used for BOTH VFS and Local FS?
-            // If passed "/exports/foo.stl":
-            // instance.FS.readFile("/exports/foo.stl") -> Works.
-            // fs.writeFileSync("/exports/foo.stl") -> Fails on Linux (root).
-            // We should distinguish VFS path and Local path if they differ.
-            // For simplicity in runRender, I assumed they are the same relative path structure.
-            // If I pass "exports/foo.stl" (no leading slash),
-            // VFS: /exports/foo.stl (OpenSCAD resolves relative to cwd /)
-            // Local: exports/foo.stl (Relative to cwd)
-            // This works!
+        try {
+            const instance = await createInstance();
+            // Ensure /exports exists in VFS
+            try { instance.FS.mkdir(`/${EXPORTS_DIR}`); } catch(e) {}
 
-            // So I should pass "exports/name.stl" (no leading slash).
+            const success = await runRender(instance, vfsIn, vfsOut);
+        } catch (e) {
+             console.error(`Export failed/crashed for ${conf}:`, e);
         }
     }
 }
