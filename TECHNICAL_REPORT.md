@@ -8,13 +8,13 @@
 
 ## Abstract
 
-This report provides a comprehensive technical analysis of the "Corkscrew Filter" repository, a software-defined engineering project capable of autonomously designing, simulating, and optimizing inertial filtration devices. The system integrates three distinct technical domains: parametric Computer-Aided Design (CAD) using OpenSCAD, Computational Fluid Dynamics (CFD) using OpenFOAM, and Generative Artificial Intelligence (AI) using Large Language Models (LLMs). This evaluation focuses on the software architecture, physics simulation fidelity, and the efficacy of the agentic control loop. The analysis confirms the existence of a functional "Hardware-in-the-Loop" simulation pipeline where an AI agent iteratively modifies geometry based on physics feedback.
+This report provides a comprehensive technical analysis of the "Corkscrew Filter" repository, a software-defined engineering project capable of autonomously designing, simulating, and optimizing inertial filtration devices. The system integrates three distinct technical domains: parametric Computer-Aided Design (CAD) using OpenSCAD (via WebAssembly), Computational Fluid Dynamics (CFD) using OpenFOAM, and Generative Artificial Intelligence (AI) using Large Language Models (LLMs). This evaluation focuses on the software architecture, physics simulation fidelity, and the efficacy of the agentic control loop. The analysis confirms the existence of a functional "Hardware-in-the-Loop" simulation pipeline where an AI agent iteratively modifies geometry based on physics feedback.
 
 ## 1. Introduction
 
 The objective of the Corkscrew Filter project is to develop a modular, high-efficiency inertial filter system using a helical (corkscrew) geometry. The primary engineering challenge in inertial filtration is balancing **separation efficiency** (maximizing the removal of particulates) against **energy consumption** (minimizing pressure drop, $$\Delta P$$).
 
-Traditional design methodologies rely on manual iteration and empirical testing. This project implements an **Inverse Design** methodology, where a central software controller generates geometry, validates it through virtual wind tunnel testing (CFD), and employs an AI agent to determine the optimal parameters for the subsequent iteration.
+Traditional design methodologies rely on manual iteration and empirical testing. This project implements an **Inverse Design** methodology, where a central software controller generates geometry, validates it through virtual wind tunnel testing (CFD), and employs an AI agent to determine the optimal parameters for the subsequent iteration. Additionally, the integration of WebAssembly-based compilation enhances portability, allowing the system to operate in diverse computing environments.
 
 ## 2. Governing Physics and Theoretical Basis
 
@@ -47,8 +47,8 @@ Where:
 
 The system operates as a closed-loop feedback mechanism managed by a Python-based orchestrator (`optimizer/main.py`). The workflow proceeds as follows:
 
-1.  **Generation:** The `ScadDriver` compiles parametric configurations into a stereolithography (STL) mesh using OpenSCAD.
-2.  **Meshing:** The `FoamDriver` processes the STL into a hexahedral-dominant CFD mesh using `snappyHexMesh`.
+1.  **Generation:** The system utilizes a dual-mode generation pipeline. The primary engine is a Node.js script (`export.js`) leveraging `openscad-wasm` (OpenSCAD compiled to WebAssembly). This provides a portable, "headless" compilation capability that eliminates the need for a native OpenSCAD installation on the host machine. The `ScadDriver` orchestrates this process, maintaining a fallback capability to the native binary if available.
+2.  **Meshing:** The `FoamDriver` processes the resulting STL into a hexahedral-dominant CFD mesh using `snappyHexMesh`.
 3.  **Simulation:** The `simpleFoam` solver executes a steady-state flow simulation.
 4.  **Feedback:** The `LLMAgent` analyzes the performance metrics against defined constraints and provides a new set of parameters via the Google Gemini API.
 
@@ -59,10 +59,10 @@ The system operates as a closed-loop feedback mechanism managed by a Python-base
 The geometric modeling is performed by OpenSCAD, a script-based CAD modeler. The codebase has evolved from a monolithic structure to a highly modular library.
 
 ### 4.1. Modularity and Structure
-The primary entry point, `corkscrew.scad`, acts as a dispatcher. The geometry logic is encapsulated in the `modules/` directory:
-*   **`modules/core.scad`:** Contains the fundamental `HelicalShape` module.
-*   **`modules/inlets.scad`:** Integrates the `BOSL2` library for ISO-standard threading.
-*   **`config.scad`:** Centralizes all design parameters, enabling external control.
+The system adopts a "Configuration-as-Code" architecture. The primary entry point, `corkscrew.scad`, acts as a dispatcher, but the execution logic is driven by the `configs/` directory.
+*   **`config.scad`:** Defines the complete schema of design parameters with default values.
+*   **`configs/*.scad`:** Each file represents a discrete build target (e.g., `modular_filter_assembly.scad`). These files inherit defaults from `config.scad`, apply specific parameter overrides, and then invoke the geometry generator. This structure facilitates batch processing and version-controlled configuration management.
+*   **`modules/` Directory:** Encapsulates the core geometry logic (e.g., `core.scad` for the helix, `inlets.scad` for threading integration via `BOSL2`).
 
 ### 4.2. Geometric Optimization Features
 A critical geometric parameter is the `helix_profile_scale_ratio`.
@@ -70,6 +70,11 @@ A critical geometric parameter is the `helix_profile_scale_ratio`.
 *   **Why it matters:** By stretching the profile, the design maximizes the cross-sectional area within the annular space between the inner core and outer tube. This reduces the hydraulic resistance (increasing hydraulic diameter) while maintaining the rotational path required for separation.
 
 [Figure 2: Wireframe view of Helical Geometry generated by OpenSCAD]
+
+### 4.3. Component Evolution
+The design library has expanded to support rapid prototyping and standardized interconnects.
+*   **FilterHolder Module:** This component facilitates the integration of the filter cartridge into existing piping systems. It features a dual-seal mechanism, capable of utilizing either an axial "Face Seal" or a traditional radial seal depending on the threading configuration. This versatility allows for airtight connections with both 3D-printed and off-the-shelf components.
+*   **Unified Barb Module:** Hose retention geometry is now generated by a fully parameterized `Barb` module. This replaces legacy hardcoded functions with a "Christmas tree" profile generator that dynamically calculates barb count, swell diameter, and wall thickness to match specific hose flexibility requirements.
 
 ## 5. Subsystem Analysis: Computational Fluid Dynamics (OpenFOAM)
 
@@ -111,10 +116,15 @@ A review of the `legacy/` directory (specifically `ThirstyCorkscrew.scad`) revea
 The Corkscrew Filter repository demonstrates a high Technology Readiness Level (TRL) for an automated design framework. It successfully bridges the gap between parametric CAD and high-fidelity CFD using modern AI orchestration.
 
 ### 8.1. Technical Recommendations for Improvement
-1.  **Repository Integrity:** The `corkscrewFilter/constant` directory appears to be missing from the repository. This directory is critical as it contains `transportProperties` (defining viscosity) and `turbulenceProperties` (defining the RANS model). Without these, the simulation case is incomplete.
-2.  **Turbulence Model Verification:** Explicitly define the turbulence model (e.g., $$k-\omega$$ SST) to ensure the simulation accurately captures the rotational flow separation.
-3.  **Convergence Criteria:** The `FoamDriver` currently runs for a fixed number of iterations. Implementing a residual-based stopping criterion (e.g., stop when residuals < $$10^{-4}$$) would optimize computational resource usage.
-4.  **Parallel Execution:** The current optimization loop is sequential. Running multiple simulations in parallel would significantly accelerate the exploration of the high-dimensional parameter space.
+1.  **Turbulence Model Verification:** Explicitly define the turbulence model (e.g., $$k-\omega$$ SST) to ensure the simulation accurately captures the rotational flow separation.
+2.  **Convergence Criteria:** The `FoamDriver` currently runs for a fixed number of iterations. Implementing a residual-based stopping criterion (e.g., stop when residuals < $$10^{-4}$$) would optimize computational resource usage.
+3.  **Parallel Execution:** The current optimization loop is sequential. Running multiple simulations in parallel would significantly accelerate the exploration of the high-dimensional parameter space.
+
+### 8.2. Recent Improvements
+The following recommendations from previous evaluations have been successfully implemented:
+1.  **Repository Integrity:** The missing `corkscrewFilter/constant` directory has been restored, ensuring the OpenFOAM simulation case is fully defined with `transportProperties` and `turbulenceProperties`.
+2.  **WASM Portability:** The generation pipeline has been migrated to `openscad-wasm`, decoupling the runtime environment from local binary dependencies.
+3.  **Standardized Configuration:** A scalable "Configuration-as-Code" structure (`configs/`) has replaced ad-hoc variable modification, enabling reproducible batch generation.
 
 ---
 *End of Document*

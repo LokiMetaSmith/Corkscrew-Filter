@@ -10,3 +10,13 @@ This file tracks planned enhancements and future work for the Thirsty Corkscrew 
 - [ ] Complete refactor of barb generators into a unified, parameterized `Barb` module.
 - [ ] Create `FilterHolder` part (barb fitting with dual O-rings and optional threading).
 - [x] Standardize legacy coupling configurations (Cartridge, Sandblaster) into `configs/` files.
+
+## Distributed Optimization (Git-Based)
+- [ ] **Data Schema:** Design a JSONL-based schema for the Job Queue/Result Log. This format should favor append-only operations to minimize merge conflicts when multiple users push results.
+- [ ] **Job Manager:** Implement a `JobManager` class capable of:
+    - "Checking out" a specific parameter region of interest.
+    - Generating a local queue of jobs derived from that region.
+    - Managing the state of claimed jobs.
+- [ ] **Versioning Strategy:** Implement a hashing or UUID system to link specific job queues/results to the git commit hash of the codebase at the time of execution. This ensures reproducibility.
+- [ ] **Agent "Campaign" Mode:** Update the `LLMAgent` to support generating batch "campaigns" (multiple parameter sets) into the queue, rather than single-step iterations.
+- [ ] **Synchronization Workflow:** Create scripts/logic to handle the `pull` -> `claim` -> `run` -> `push` lifecycle, allowing a team to collaborate on the optimization surface asynchronously.
