@@ -1,11 +1,15 @@
 import subprocess
 import os
+import shutil
 import trimesh
 import numpy as np
 
 class ScadDriver:
     def __init__(self, scad_file_path):
         self.scad_file_path = scad_file_path
+        self.use_native = shutil.which("openscad") is not None
+        if not self.use_native:
+            print("Native OpenSCAD not found. Using WASM fallback via 'node export.js'.")
 
     def generate_stl(self, params, output_path):
         """
@@ -18,32 +22,31 @@ class ScadDriver:
         Returns:
             bool: True if successful, False otherwise.
         """
-        cmd = ["openscad", "-o", output_path]
-
-        # Add parameters
-        # Ensure critical flags are set for CFD generation
-        # We override params with these specific values if they aren't present,
-        # but typically the caller should manage this.
-        # For safety, we force GENERATE_CFD_VOLUME=true here?
-        # Let's just update the dict.
 
         run_params = params.copy()
-        run_params["GENERATE_CFD_VOLUME"] = "true"
-        run_params["GENERATE_SLICE"] = "false"
+        # Default flags for CFD generation if not provided
+        if "GENERATE_CFD_VOLUME" not in run_params:
+             run_params["GENERATE_CFD_VOLUME"] = "true"
+        if "GENERATE_SLICE" not in run_params:
+             run_params["GENERATE_SLICE"] = "false"
 
+        param_args = []
         for key, value in run_params.items():
-            # Handle different types if necessary, but str(value) usually works for numbers and bools
-            # For strings in SCAD, they need quotes, but most here seem to be numbers/bools.
             if isinstance(value, bool):
                 val_str = "true" if value else "false"
             else:
                 val_str = str(value)
+            param_args.extend(["-D", f"{key}={val_str}"])
 
-            cmd.extend(["-D", f"{key}={val_str}"])
+        if self.use_native:
+            cmd = ["openscad", "-o", output_path] + param_args + [self.scad_file_path]
+        else:
+            # Fallback to Node.js script
+            # Assumes export.js is in the root directory relative to where this is run
+            # The optimizer is likely run from root as 'python optimizer/main.py'
+            cmd = ["node", "export.js", "-o", output_path] + param_args + [self.scad_file_path]
 
-        cmd.append(self.scad_file_path)
-
-        print(f"Running OpenSCAD: {' '.join(cmd)}")
+        print(f"Running geometry generation: {' '.join(cmd)}")
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
@@ -51,15 +54,16 @@ class ScadDriver:
                 print(f"STL generated successfully at {output_path}")
                 return True
             else:
-                print("OpenSCAD finished but output file missing.")
+                print("Generation finished but output file missing.")
                 print(result.stderr)
                 return False
         except subprocess.CalledProcessError as e:
-            print(f"OpenSCAD failed with return code {e.returncode}")
+            print(f"Generation failed with return code {e.returncode}")
             print(e.stderr)
+            print(e.stdout)
             return False
         except FileNotFoundError:
-            print("Error: 'openscad' executable not found. Ensure it is installed and in PATH.")
+            print("Error: Execution command failed. Ensure 'openscad' or 'node' is available.")
             return False
 
     def get_bounds(self, stl_path):
@@ -91,6 +95,4 @@ class ScadDriver:
 if __name__ == "__main__":
     # Test stub
     driver = ScadDriver("corkscrew filter.scad")
-    # This won't run successfully in the sandbox unless openscad is installed,
-    # but checks syntax.
-    print("ScadDriver initialized.")
+    print(f"Driver initialized. Native mode: {driver.use_native}")
