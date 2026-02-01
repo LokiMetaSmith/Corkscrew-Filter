@@ -94,5 +94,5 @@ class ScadDriver:
 
 if __name__ == "__main__":
     # Test stub
-    driver = ScadDriver("corkscrew filter.scad")
+    driver = ScadDriver("corkscrew.scad")
     print(f"Driver initialized. Native mode: {driver.use_native}")
