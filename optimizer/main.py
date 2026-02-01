@@ -9,7 +9,7 @@ from llm_agent import LLMAgent
 def main():
     parser = argparse.ArgumentParser(description="Generative AI Optimizer for Corkscrew Filter")
     parser.add_argument("--iterations", type=int, default=5, help="Number of optimization iterations")
-    parser.add_argument("--scad-file", type=str, default="corkscrew filter.scad", help="Path to OpenSCAD file")
+    parser.add_argument("--scad-file", type=str, default="corkscrew.scad", help="Path to OpenSCAD file")
     parser.add_argument("--case-dir", type=str, default="corkscrewFilter", help="Path to OpenFOAM case directory")
     parser.add_argument("--output-stl", type=str, default="corkscrew_fluid.stl", help="Output STL filename")
     parser.add_argument("--dry-run", action="store_true", help="Skip actual OpenFOAM execution")
@@ -21,22 +21,27 @@ def main():
     agent = LLMAgent() # Expects GEMINI_API_KEY env var
 
     # Initial parameters
+    # Note: These match the variable names in config.scad
     current_params = {
+        "part_to_generate": "modular_filter_assembly",
         "num_bins": 1,
         "number_of_complete_revolutions": 2,
-        "screw_OD_mm": 1.8,
-        "screw_ID_mm": 1.0,
-        "scale_ratio": 1.4,
+        "helix_path_radius_mm": 1.8,
+        "helix_void_profile_radius_mm": 1.0,
+        "helix_profile_scale_ratio": 1.4,
         "tube_od_mm": 32,
         "insert_length_mm": 50,
-        "pitch_mm": 10
+        "GENERATE_CFD_VOLUME": True
     }
 
+    # Constraints for the LLM
     constraints = """
     - tube_od_mm must be 32 (hard constraint for fit).
     - insert_length_mm should be around 50.
-    - screw_OD_mm > screw_ID_mm.
+    - helix_path_radius_mm > helix_void_profile_radius_mm (to ensure structural integrity if solid, but for fluid volume this defines the channel).
     - num_bins should be integer >= 1.
+    - Optimization Goal: Maximize particle collection efficiency (trap moon dust) while minimizing pressure drop.
+    - Consider increasing number_of_complete_revolutions to increase centrifugal force.
     """
 
     results_history = []
@@ -107,8 +112,12 @@ def main():
         # 5. Ask LLM for next step
         if i < args.iterations - 1:
             new_params = agent.suggest_parameters(current_params, metrics, constraints)
+            # Post-process types
             if "num_bins" in new_params:
                 new_params["num_bins"] = int(new_params["num_bins"])
+            if "GENERATE_CFD_VOLUME" in new_params:
+                 # Ensure boolean stays boolean if LLM returns it
+                 pass
 
             updated_params = current_params.copy()
             updated_params.update(new_params)
