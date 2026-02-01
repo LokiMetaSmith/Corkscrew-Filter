@@ -1,7 +1,7 @@
 {
-  "name": "thirsty-corkscrew-filter",
+  "name": "openscad-wasm-export",
   "version": "1.0.0",
-  "description": "Parametric inertial filter design with automated optimization",
+  "description": "Automated export for OpenSCAD using WebAssembly",
   "main": "export.js",
   "scripts": {
     "export": "node export.js",
@@ -9,7 +9,5 @@
   },
   "dependencies": {
     "openscad-wasm": "^0.0.4"
-  },
-  "author": "",
-  "license": "ISC"
+  }
 }
