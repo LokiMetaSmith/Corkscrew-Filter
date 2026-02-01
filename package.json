@@ -1,0 +1,15 @@
+{
+  "name": "thirsty-corkscrew-filter",
+  "version": "1.0.0",
+  "description": "Parametric inertial filter design with automated optimization",
+  "main": "export.js",
+  "scripts": {
+    "export": "node export.js",
+    "optimize": "python3 optimizer/main.py"
+  },
+  "dependencies": {
+    "openscad-wasm": "^0.0.4"
+  },
+  "author": "",
+  "license": "ISC"
+}

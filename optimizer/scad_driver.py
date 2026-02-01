@@ -18,7 +18,22 @@ class ScadDriver:
         Returns:
             bool: True if successful, False otherwise.
         """
-        cmd = ["openscad", "-o", output_path]
+        # Determine which renderer to use
+        cmd = []
+        try:
+            subprocess.run(["openscad", "-v"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            cmd = ["openscad"]
+        except FileNotFoundError:
+            print("Native OpenSCAD not found. Using openscad-wasm (Node.js).")
+            # Resolve path to export.js (assumed to be in repo root, parent of 'optimizer')
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            export_js = os.path.join(base_dir, "export.js")
+            if not os.path.exists(export_js):
+                print(f"Error: export.js not found at {export_js}")
+                return False
+            cmd = ["node", export_js]
+
+        cmd.extend(["-o", output_path])
 
         # Add parameters
         # Ensure critical flags are set for CFD generation
@@ -59,7 +74,8 @@ class ScadDriver:
             print(e.stderr)
             return False
         except FileNotFoundError:
-            print("Error: 'openscad' executable not found. Ensure it is installed and in PATH.")
+            # This handles the case where 'node' is not found (since openscad check is handled above)
+            print("Error: Executable not found. Ensure OpenSCAD or Node.js is installed.")
             return False
 
     def get_bounds(self, stl_path):

@@ -9,3 +9,4 @@ corkscrewFilter/postProcessing/
 corkscrewFilter/log.*
 optimizer/venv/
 exports/
+node_modules/
