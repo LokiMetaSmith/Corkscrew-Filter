@@ -102,6 +102,7 @@ functions
             print("Invalid bounds, skipping blockMesh update.")
             return
 
+        self.bounds = bounds
         min_pt, max_pt = bounds
         center = (min_pt + max_pt) / 2
         size = (max_pt - min_pt) * margin
@@ -133,19 +134,137 @@ functions
         with open(bm_path, 'w') as f:
             f.write(content)
 
+    def _write_topoSetDict(self):
+        """
+        Writes system/topoSetDict to define inlet and outlet faces based on bounds.
+        """
+        if not hasattr(self, 'bounds') or self.bounds[0] is None:
+            print("No bounds available for topoSet.")
+            return
+
+        min_pt, max_pt = self.bounds
+        # Define a thin slice at the bottom (Z-min) and top (Z-max)
+        # Assuming Z is the vertical axis.
+        z_min = min_pt[2]
+        z_max = max_pt[2]
+
+        # Tolerance for box selection
+        tol = 0.5 # mm
+
+        topo_content = f"""
+/*--------------------------------*- C++ -*----------------------------------*\\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2406                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      topoSetDict;
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+actions
+(
+    // Inlet (Bottom)
+    {{
+        name    inlet_faces;
+        type    faceSet;
+        action  new;
+        source  boxToFace;
+        sourceInfo
+        {{
+            box ({min_pt[0]-100} {min_pt[1]-100} {z_min - tol}) ({max_pt[0]+100} {max_pt[1]+100} {z_min + tol});
+        }}
+    }}
+
+    // Outlet (Top)
+    {{
+        name    outlet_faces;
+        type    faceSet;
+        action  new;
+        source  boxToFace;
+        sourceInfo
+        {{
+            box ({min_pt[0]-100} {min_pt[1]-100} {z_max - tol}) ({max_pt[0]+100} {max_pt[1]+100} {z_max + tol});
+        }}
+    }}
+);
+
+// ************************************************************************* //
+"""
+        with open(os.path.join(self.case_dir, "system", "topoSetDict"), 'w') as f:
+            f.write(topo_content)
+
+    def _write_createPatchDict(self):
+        """
+        Writes system/createPatchDict to create patches from face sets.
+        """
+        content = """
+/*--------------------------------*- C++ -*----------------------------------*\\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2406                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      createPatchDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+pointSync false;
+
+patches
+(
+    {
+        name inlet;
+        patchInfo
+        {
+            type patch;
+        }
+        constructFrom set;
+        set inlet_faces;
+    }
+    {
+        name outlet;
+        patchInfo
+        {
+            type patch;
+        }
+        constructFrom set;
+        set outlet_faces;
+    }
+);
+
+// ************************************************************************* //
+"""
+        with open(os.path.join(self.case_dir, "system", "createPatchDict"), 'w') as f:
+            f.write(content)
+
     def run_meshing(self):
         """
         Runs the meshing pipeline.
         """
+        # Generate dictionaries for patch creation
+        self._write_topoSetDict()
+        self._write_createPatchDict()
+
         # Ensure we capture output
         cmds = [
             ["blockMesh"],
             ["surfaceFeatureExtract"],
             ["snappyHexMesh", "-overwrite"],
-            # Attempt to identify patches if standard naming didn't work.
-            # "autoPatch" splits the boundary based on angle.
-            # We use 80 degrees to catch the flat caps.
-            ["autoPatch", "80", "-overwrite"],
+            ["topoSet"],
+            ["createPatch", "-overwrite"],
             ["checkMesh"]
         ]
 
@@ -163,10 +282,7 @@ functions
     def run_particle_tracking(self):
         """
         Runs particle tracking (Lagrangian).
-        Assuming we use icoUncoupledKinematicParcelFoam for one-way coupling test,
-        or a custom solver.
-
-        This requires constant/kinematicCloudProperties to be present.
+        Assuming we use icoUncoupledKinematicParcelFoam for one-way coupling test.
         """
         # Check if properties exist
         cloud_props = os.path.join(self.case_dir, "constant", "kinematicCloudProperties")
@@ -174,8 +290,6 @@ functions
             print("Warning: kinematicCloudProperties not found. Skipping particle tracking.")
             return False
 
-        # We might need to map fields if using a different solver.
-        # But for now, we try running the solver directly.
         return self.run_command(["icoUncoupledKinematicParcelFoam"])
 
     def run_command(self, cmd, ignore_error=False):
@@ -226,6 +340,36 @@ functions
 
         if p_in is not None and p_out is not None:
             metrics['delta_p'] = abs(p_in - p_out)
+
+        # 3. Parse Particle Tracking (Separation Efficiency)
+        # We look for "Injector model1: injected X parcels" and "Current number of parcels" at the end.
+        if os.path.exists(self.log_file):
+            total_injected = 0
+            current_parcels = 0
+
+            with open(self.log_file, 'r') as f:
+                lines = f.readlines()
+                for line in lines:
+                    # "Injector model1: injected 100 parcels, mass 1e-06 kg"
+                    if "injected" in line and "parcels" in line:
+                         m = re.search(r"injected\s+(\d+)\s+parcels", line)
+                         if m:
+                             total_injected += int(m.group(1))
+
+                # Check the FINAL "Current number of parcels"
+                for line in reversed(lines):
+                    if "Current number of parcels" in line:
+                        m = re.search(r"Current number of parcels\s+=\s+(\d+)", line)
+                        if m:
+                            current_parcels = int(m.group(1))
+                        break
+
+            if total_injected > 0:
+                # Efficiency: Percentage of particles remaining (stuck to walls)
+                # Assumption: Outlet/Inlet are 'escape', Walls are 'stick'.
+                metrics['separation_efficiency'] = (current_parcels / total_injected) * 100.0
+                metrics['particles_injected'] = total_injected
+                metrics['particles_captured'] = current_parcels
 
         return metrics
 

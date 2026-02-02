@@ -7,6 +7,7 @@ from scad_driver import ScadDriver
 from foam_driver import FoamDriver
 from llm_agent import LLMAgent
 from data_store import DataStore
+from simulation_runner import run_simulation
 
 def main():
     parser = argparse.ArgumentParser(description="Generative AI Optimizer for Corkscrew Filter")
@@ -26,7 +27,13 @@ def main():
     # Get git commit
     try:
         git_commit = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
-    except Exception:
+        # Check for uncommitted changes
+        status = subprocess.check_output(["git", "status", "--porcelain"]).decode("utf-8").strip()
+        if status:
+            git_commit += " (dirty)"
+            print("Warning: Uncommitted changes detected. Git commit marked as dirty.")
+    except Exception as e:
+        print(f"Warning: Failed to retrieve git commit info: {e}")
         git_commit = "unknown"
 
     # Initial parameters
@@ -59,72 +66,21 @@ def main():
         print(f"\n=== Iteration {i+1}/{args.iterations} ===")
         print(f"Testing parameters: {current_params}")
 
-        # 1. Generate Geometry (Fluid Volume for CFD)
-        stl_path = os.path.join(args.case_dir, "constant", "triSurface", args.output_stl)
-        os.makedirs(os.path.dirname(stl_path), exist_ok=True)
-
-        if not args.dry_run:
-            success = scad.generate_stl(current_params, stl_path)
-            if not success:
-                print("Geometry generation failed. Skipping this iteration.")
-                continue
-        else:
-            print(f"[Dry Run] Generated STL at {stl_path}")
-            if not os.path.exists(stl_path):
-                with open(stl_path, 'w') as f: f.write("solid dryrun\nendsolid dryrun")
-
-        # 2. Update Mesh Config
-        if not args.dry_run:
-            bounds = scad.get_bounds(stl_path)
-            if bounds[0] is None:
-                print("Failed to get bounds. Using default.")
-            else:
-                foam.update_blockMesh(bounds)
-        else:
-             print("[Dry Run] Updated blockMeshDict")
-
-        # 3. Run Simulation
-        metrics = {}
-        if not args.dry_run:
-            foam.prepare_case()
-            if foam.run_meshing():
-                if foam.run_solver():
-                    # Attempt particle tracking
-                    foam.run_particle_tracking()
-
-                    metrics = foam.get_metrics()
-                else:
-                    print("Solver failed.")
-                    metrics = {"error": "solver_failed"}
-            else:
-                print("Meshing failed.")
-                metrics = {"error": "meshing_failed"}
-        else:
-            print("[Dry Run] Ran OpenFOAM simulation")
-            metrics = {"delta_p": 100 + i*10, "residuals": 1e-5} # Mock data
+        # Run Simulation via Runner
+        metrics, png_paths = run_simulation(
+            scad,
+            foam,
+            current_params,
+            output_stl_name=args.output_stl,
+            dry_run=args.dry_run
+        )
 
         print(f"Result metrics: {metrics}")
 
-        # 4. Generate Visualization (Solid Model for LLM)
-        png_paths = []
-        vis_base = os.path.join("exports", f"iteration_{i}_solid")
-        os.makedirs("exports", exist_ok=True)
-
-        if not args.dry_run:
-            print("Generating visualization for LLM...")
-            # Use lower resolution for vis to speed up
-            vis_params = current_params.copy()
-            vis_params["high_res_fn"] = 20 # Low res enough for shape check
-            png_paths = scad.generate_visualization(vis_params, vis_base)
-        else:
-            print(f"[Dry Run] Generated Visualization at {vis_base}.png")
-            # Create dummy files for dry run
-            for v in range(3):
-                p = f"{vis_base}_view{v}.png"
-                # Create a 1x1 white pixel png or just empty file (Pillow might fail on empty file)
-                # Let's not create files if we can't create valid PNGs easily without PIL here.
-                # Actually we can skip image loading in dry run or just pass empty list
-                pass
+        # Check for critical failure
+        if "error" in metrics and metrics["error"] == "geometry_generation_failed":
+             print("Skipping this iteration due to geometry failure.")
+             continue
 
         # 5. Save Results
         run_data = {
