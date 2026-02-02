@@ -105,22 +105,26 @@ The agent utilizes the Google Generative AI SDK (`gemini-1.5-flash`). Unlike a t
 *   **Reasoning:** The system prompts the model to "Analyze the history. Identify trends."
 *   **Why it matters:** The design space is likely non-convex and discontinuous (e.g., changing the number of bins is a discrete step). A gradient-based solver might get stuck in local minima, whereas the LLM can "reason" its way out of a local trap by proposing a novel parameter combination based on the trend data.
 
-## 7. Legacy Code Evolution
+## 7. Manual Fabrication and Evaluation
+
+This section describes the manual fabrication and evaluation tests performed. In particular, we tested a 1/4" tube, a 3/4" tube, a single bin, a three bin, and a multi corkscrew configuration.
+
+## 8. Legacy Code Evolution
 
 A review of the `legacy/` directory (specifically `ThirstyCorkscrew.scad`) reveals significant architectural maturation.
 *   **Monolithic vs. Modular:** The legacy code contained all logic in a single file, limiting scalability.
 *   **Manual vs. Automated:** The legacy approach relied on manual boolean flags for debugging, whereas the current system is built for "headless" automated execution.
 
-## 8. Conclusion and Recommendations
+## 9. Conclusion and Recommendations
 
 The Corkscrew Filter repository demonstrates a high Technology Readiness Level (TRL) for an automated design framework. It successfully bridges the gap between parametric CAD and high-fidelity CFD using modern AI orchestration.
 
-### 8.1. Technical Recommendations for Improvement
+### 9.1. Technical Recommendations for Improvement
 1.  **Turbulence Model Verification:** Explicitly define the turbulence model (e.g., $$k-\omega$$ SST) to ensure the simulation accurately captures the rotational flow separation.
 2.  **Convergence Criteria:** The `FoamDriver` currently runs for a fixed number of iterations. Implementing a residual-based stopping criterion (e.g., stop when residuals < $$10^{-4}$$) would optimize computational resource usage.
 3.  **Parallel Execution:** The current optimization loop is sequential. Running multiple simulations in parallel would significantly accelerate the exploration of the high-dimensional parameter space.
 
-### 8.2. Recent Improvements
+### 9.2. Recent Improvements
 The following recommendations from previous evaluations have been successfully implemented:
 1.  **Repository Integrity:** The missing `corkscrewFilter/constant` directory has been restored, ensuring the OpenFOAM simulation case is fully defined with `transportProperties` and `turbulenceProperties`.
 2.  **WASM Portability:** The generation pipeline has been migrated to `openscad-wasm`, decoupling the runtime environment from local binary dependencies.
