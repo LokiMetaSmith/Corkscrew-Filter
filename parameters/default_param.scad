@@ -68,7 +68,9 @@ barb_wall_thickness = 1;
 // The slit_axial_open_length_mm is the "length",
 // in an axial sense of the 
 slit_axial_open_length_mm = 1;
-slit_axial_length_mm = cell_wall_mm + slit_axial_open_length_mm;
+// slit_axial_length_mm = cell_wall_mm + slit_axial_open_length_mm;
+slit_axial_length_mm = 1.5;
+slit_chamfer_height = 0.5;
 
 // The "slit_knife" is "radial" in the since that it cuts
 // a pie-slice shaped slit into the wall of the helix.

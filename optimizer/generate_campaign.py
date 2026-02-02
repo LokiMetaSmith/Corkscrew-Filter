@@ -3,15 +3,7 @@ import argparse
 from data_store import DataStore
 from job_manager import JobManager
 from llm_agent import LLMAgent
-
-# Reuse constraints from main.py (should be shared in a config, but copying for now)
-CONSTRAINTS = """
-    - tube_od_mm must be 32 (hard constraint for fit).
-    - insert_length_mm should be around 50.
-    - helix_path_radius_mm > helix_void_profile_radius_mm.
-    - num_bins should be integer >= 1.
-    - Optimization Goal: Maximize particle collection efficiency (trap moon dust) while minimizing pressure drop.
-"""
+from constraints import CONSTRAINTS
 
 def main():
     parser = argparse.ArgumentParser(description="Generate a campaign of optimization jobs")
