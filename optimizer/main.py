@@ -8,6 +8,7 @@ from foam_driver import FoamDriver
 from llm_agent import LLMAgent
 from data_store import DataStore
 from simulation_runner import run_simulation
+from constraints import CONSTRAINTS
 
 def main():
     parser = argparse.ArgumentParser(description="Generative AI Optimizer for Corkscrew Filter")
@@ -51,14 +52,7 @@ def main():
     }
 
     # Constraints for the LLM
-    constraints = """
-    - tube_od_mm must be 32 (hard constraint for fit).
-    - insert_length_mm should be around 50.
-    - helix_path_radius_mm > helix_void_profile_radius_mm (to ensure structural integrity if solid, but for fluid volume this defines the channel).
-    - num_bins should be integer >= 1.
-    - Optimization Goal: Maximize particle collection efficiency (trap moon dust) while minimizing pressure drop.
-    - Consider increasing number_of_complete_revolutions to increase centrifugal force.
-    """
+    # Imported from constraints.py
 
     print("Starting optimization loop...")
 
@@ -97,7 +91,7 @@ def main():
         # 6. Ask LLM for next step
         if i < args.iterations - 1:
             full_history = store.load_history()
-            new_params = agent.suggest_parameters(current_params, metrics, constraints, image_paths=png_paths, history=full_history)
+            new_params = agent.suggest_parameters(current_params, metrics, CONSTRAINTS, image_paths=png_paths, history=full_history)
             # Post-process types
             if "num_bins" in new_params:
                 new_params["num_bins"] = int(new_params["num_bins"])
