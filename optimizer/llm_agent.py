@@ -71,6 +71,59 @@ class LLMAgent:
             print(f"LLM generation failed: {e}")
             return current_params
 
+    def suggest_campaign(self, history: List[Dict], constraints: str, count: int = 5) -> List[Dict[str, Any]]:
+        """
+        Asks the LLM to generate a batch of parameter sets to explore different regions of the design space.
+        """
+        if not self.model:
+            print("No LLM available.")
+            return []
+
+        history_str = json.dumps(history, indent=2)
+
+        prompt = f"""
+You are an expert engineer optimizing a 3D printed inertial filter (corkscrew shape).
+GOAL: Generate {count} DISTINCT sets of parameters to explore the design space effectively.
+Focus on varying key parameters (radius, twist, screw pitch) to understand their impact on separation efficiency and pressure drop.
+
+CONSTRAINTS:
+{constraints}
+
+HISTORY OF RUNS:
+{history_str}
+
+TASK:
+Propose {count} parameter sets. They should be diverse (explore different strategies).
+
+RESPONSE FORMAT:
+You must respond with valid JSON only.
+{{
+    "campaign_reasoning": "Explain the overall strategy...",
+    "jobs": [
+        {{
+            "reasoning": "Why this specific set...",
+            "parameters": {{ ... }}
+        }},
+        ...
+    ]
+}}
+"""
+        try:
+            response = self.model.generate_content([prompt])
+            text = response.text
+            clean_text = self._extract_json(text)
+            data = json.loads(clean_text)
+
+            if "jobs" in data and isinstance(data["jobs"], list):
+                # Extract just the parameters from each job
+                return [job["parameters"] for job in data["jobs"] if "parameters" in job]
+            else:
+                print("LLM response did not contain valid 'jobs' list.")
+                return []
+        except Exception as e:
+            print(f"LLM campaign generation failed: {e}")
+            return []
+
     def _construct_prompt(self, constraints, history, has_images=False):
         history_str = json.dumps(history, indent=2)
 
