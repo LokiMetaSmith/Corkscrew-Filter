@@ -84,7 +84,7 @@ barb_inlet_flange_od = barb_inlet_id_mm + 4; // The diameter of the flange at th
 // --- Filter Holder Parameters ---
 filter_holder_cartridge_od = 10;
 filter_holder_thread_inner = false;
-filter_holder_thread_outer = false;
+filter_holder_thread_outer = true;
 
 // --- Custom Coupling Parameters ---
 // These are defaults, usually overridden by including a specific config file.

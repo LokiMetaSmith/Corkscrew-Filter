@@ -3,6 +3,7 @@
 **Date:** October 26, 2023
 **Subject:** Technical Evaluation of the Parametric Corkscrew Filter Repository
 **Target Audience:** Technical Review Board, Open Source Community
+**Author:** Lawrence Kincheloe
 
 ---
 
