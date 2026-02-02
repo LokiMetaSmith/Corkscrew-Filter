@@ -175,18 +175,34 @@ module FilterHolder(
                 }
 
                 // 4. Clear center flow path (for entire height)
-                 translate([0,0,-1]) cylinder(d = barb_id, h = lip_height + 2, $fn=$fn);
+                // Extend upwards to ensure overlap with base plate hole
+                 translate([0,0,-1]) cylinder(d = barb_id, h = lip_height + 50, $fn=$fn);
             }
 
             // --- VISUALIZATION ---
             if (SHOW_O_RINGS) {
-                 // Outer O-Ring
-                 translate([0,0,segment_h + segment_h/2])
-                    OringVisualizer(outer_seal_od, oring_cs);
+                 if (thread_outer) {
+                      // Face Seal Visualization (Outer)
+                      // Sits on the underside of the base plate (Global Z=0)
+                      rim_center = base_plate_od - oring_cs;
+                      translate([0, 0, lip_height])
+                          OringVisualizer_Face(rim_center, oring_cs);
+                 } else {
+                     // Outer O-Ring (Radial)
+                     translate([0,0,segment_h + segment_h/2])
+                        OringVisualizer(outer_seal_od, oring_cs);
+                 }
 
-                 // Inner O-Ring
-                 translate([0,0,segment_h + segment_h/2])
-                    OringVisualizer_ID(inner_seal_id, oring_cs);
+                 if (thread_inner) {
+                     // Face Seal Visualization (Inner)
+                     // Sits on the underside of the base plate (Global Z=0)
+                     translate([0, 0, lip_height])
+                        OringVisualizer_Face(cartridge_od, oring_cs);
+                 } else {
+                     // Inner O-Ring (Radial)
+                     translate([0,0,segment_h + segment_h/2])
+                        OringVisualizer_ID(inner_seal_id, oring_cs);
+                 }
             }
         }
     }
