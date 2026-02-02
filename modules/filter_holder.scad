@@ -36,7 +36,7 @@ module FilterHolder(
     // The flange must cover the pipe wall.
     base_plate_od = thread_outer ? (tube_id + 2 * max(tube_wall, 2)) : (tube_id - 0.2);
 
-    outer_seal_od = tube_id - 0.2; // Tolerance for fit
+    outer_seal_od = thread_outer ? (tube_id + 2 * max(tube_wall, 2)) : tube_id - 0.2; // Tolerance for fit
     inner_seal_id = cartridge_od + 0.2; // Tolerance for fit
 
     // Thread/Seal Segmentation
@@ -84,7 +84,8 @@ module FilterHolder(
                     // --- OUTER LIP CONSTRUCTION ---
                     if (thread_outer) {
                         // Thread the entire length
-                        threaded_rod(d=outer_seal_od, h=lip_height, pitch=1.5, internal=false, $fn=$fn);
+                       # translate([0,0,segment_h])
+                        threaded_rod(d=tube_id, h=lip_height, pitch=1.5, internal=false, $fn=$fn);
                     } else {
                         // Smooth Seal - Top Segment
                         translate([0,0,segment_h]) {
@@ -166,6 +167,9 @@ module FilterHolder(
                     // Outer O-Ring (Seals against Pipe ID) -> Groove on Top Segment
                     translate([0,0,segment_h + segment_h/2])
                         OringGroove_OD_Cutter(outer_seal_od, oring_cs);
+                } else {
+                    translate([0,0,2*segment_h ])
+                        OringGroove_OD_Cutter(outer_seal_od, oring_cs);
                 }
 
                 if (!thread_inner) {
@@ -180,13 +184,24 @@ module FilterHolder(
 
             // --- VISUALIZATION ---
             if (SHOW_O_RINGS) {
-                 // Outer O-Ring
-                 translate([0,0,segment_h + segment_h/2])
-                    OringVisualizer(outer_seal_od, oring_cs);
-
+                if (!thread_outer) {
+                    // Outer O-Ring
+                    translate([0,0,segment_h + segment_h/2])
+                        OringVisualizer(outer_seal_od, oring_cs);
+                } else {
+                    // Outer O-Ring + threads
+                    translate([0,0,2*segment_h ])
+                        OringVisualizer(outer_seal_od, oring_cs);
+                }
+                if (!thread_inner) {
                  // Inner O-Ring
                  translate([0,0,segment_h + segment_h/2])
                     OringVisualizer_ID(inner_seal_id, oring_cs);
+                } else {
+                                    // Outer O-Ring
+                    translate([0,0,2*segment_h ])
+                        OringVisualizer(inner_seal_id, oring_cs);
+                }
             }
         }
     }
