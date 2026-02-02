@@ -155,7 +155,30 @@ A funnel was used to directly load the tube, and a fluttering blast of air with 
 (14.556 - 13.690) / (41.666 - 41.575) = 0.866 / 0.091
 This results in a capture ratio of **9.736 : 1**.
 
-### 7.3. Initial Tube Corkscrew Test
+### 7.3. Experimental Run: January 25, 2026
+
+**Test Conditions**
+*   **Material:** Cornstarch (4 Tablespoons initially in hopper).
+*   **Pressure:** 0.04 PSI measured in 3/4" tube (used for estimating velocity). Compressor set to 30 psi (steady state) before gun opened; fluctuated 60-30 psi during pulsing.
+*   **Agitation:** Agitated with mallet; tapping the gun followed by pulling the trigger proved most effective.
+
+**Observations**
+*   **10:33:** Gun opened and shaking began.
+*   **10:35:** Agitated with mallet.
+*   **10:37:** Experiment stopped.
+*   **10:41 - 10:43:** Resumed with tapping.
+*   **10:51:** Pressure fluctuation observed (60-30 psi) when trigger opened/pulsed. No noticeable change in regulator when pulsed with hammer.
+*   **Failure Mode:** Corkscrew filter barb fitting broke at 10:53.
+
+**Retention Analysis**
+*   **Hopper:** Practically empty (2-3 tablespoons less than start).
+*   **Gun:** Mostly empty (holds ~2 tablespoons).
+*   **Post-Filter:** Less than 1 tsp found in the post-IF hose.
+
+**Conclusion:**
+The system appears to be less effective than the 1/4" version, likely due to the particulate filter catching significant fine particles.
+
+### 7.4. Initial Tube Corkscrew Test
 
 This test involved a non-optimal seal, as the O-ring geometry was not correct and print artifacts made it difficult to form a perfect seal. RTV silicone rubber was applied by hand to form a “good enough” seal.
 
@@ -165,10 +188,11 @@ The outgoing air created a tight rotational vortex which kept the particles from
 **Conclusion:**
 The pressure differential and accompanying speed definitely changed the ratio of captured material in the pre-filter vs the post-filter. We can conclude that the filter itself fundamentally works, but given the vastly different performance from the much larger vacuum filter, more work needs to be done to combine existing fluid flow theory with our parameterized 3D model.
 
-### 7.4. Supplementary Materials
+### 7.5. Supplementary Materials
 
 *   **Experimental Run 10/30/2025 Photo Album:** [https://photos.app.goo.gl/baQobViRN2EK12yL6](https://photos.app.goo.gl/baQobViRN2EK12yL6)
 *   **Experimental Run 11/22/2025 Photo Album:** [https://photos.app.goo.gl/WuuFNhYvLVV2sVhG9](https://photos.app.goo.gl/WuuFNhYvLVV2sVhG9)
+*   **Experimental Run 01/25/2026 Photo Album:** [https://photos.app.goo.gl/kphwWbPpzWjCYpaS9](https://photos.app.goo.gl/kphwWbPpzWjCYpaS9)
 
 ## 8. Legacy Code Evolution
 
