@@ -52,7 +52,7 @@ def main():
         print(f"\n=== Iteration {i+1}/{args.iterations} ===")
         print(f"Testing parameters: {current_params}")
 
-        # 1. Generate Geometry
+        # 1. Generate Geometry (Fluid Volume for CFD)
         stl_path = os.path.join(args.case_dir, "constant", "triSurface", args.output_stl)
         os.makedirs(os.path.dirname(stl_path), exist_ok=True)
 
@@ -98,20 +98,42 @@ def main():
 
         print(f"Result metrics: {metrics}")
 
-        # 4. Save Results
+        # 4. Generate Visualization (Solid Model for LLM)
+        png_paths = []
+        vis_base = os.path.join("exports", f"iteration_{i}_solid")
+        os.makedirs("exports", exist_ok=True)
+
+        if not args.dry_run:
+            print("Generating visualization for LLM...")
+            # Use lower resolution for vis to speed up
+            vis_params = current_params.copy()
+            vis_params["high_res_fn"] = 20 # Low res enough for shape check
+            png_paths = scad.generate_visualization(vis_params, vis_base)
+        else:
+            print(f"[Dry Run] Generated Visualization at {vis_base}.png")
+            # Create dummy files for dry run
+            for v in range(3):
+                p = f"{vis_base}_view{v}.png"
+                # Create a 1x1 white pixel png or just empty file (Pillow might fail on empty file)
+                # Let's not create files if we can't create valid PNGs easily without PIL here.
+                # Actually we can skip image loading in dry run or just pass empty list
+                pass
+
+        # 5. Save Results
         run_data = {
             "iteration": i,
             "parameters": current_params.copy(),
-            "metrics": metrics
+            "metrics": metrics,
+            "images": png_paths
         }
         results_history.append(run_data)
 
         with open("optimization_history.json", "w") as f:
             json.dump(results_history, f, indent=2)
 
-        # 5. Ask LLM for next step
+        # 6. Ask LLM for next step
         if i < args.iterations - 1:
-            new_params = agent.suggest_parameters(current_params, metrics, constraints)
+            new_params = agent.suggest_parameters(current_params, metrics, constraints, image_paths=png_paths)
             # Post-process types
             if "num_bins" in new_params:
                 new_params["num_bins"] = int(new_params["num_bins"])

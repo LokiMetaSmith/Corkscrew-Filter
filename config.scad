@@ -39,8 +39,8 @@ CUT_FOR_VISIBILITY = true;      // If true, cuts the model in half (removes Y>0)
 // =============================================================================
 
 // --- General & Precision ---
-high_res_fn = 200; // Fragment resolution for final renders ($fn). Higher values create smoother curves.
-low_res_fn = 10;   // Fragment resolution for previews. Lower values provide faster previews.
+high_res_fn = is_undef(high_res_fn) ? 200 : high_res_fn; // Fragment resolution for final renders ($fn). Higher values create smoother curves.
+low_res_fn = is_undef(low_res_fn) ? 10 : low_res_fn;   // Fragment resolution for previews. Lower values provide faster previews.
 $fn = $preview ? low_res_fn : high_res_fn; // OpenSCAD automatically uses the appropriate value.
 
 // --- Tube & Main Assembly Parameters ---
