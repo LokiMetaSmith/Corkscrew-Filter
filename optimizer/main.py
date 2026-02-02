@@ -2,9 +2,11 @@ import os
 import json
 import argparse
 import time
+import subprocess
 from scad_driver import ScadDriver
 from foam_driver import FoamDriver
 from llm_agent import LLMAgent
+from data_store import DataStore
 
 def main():
     parser = argparse.ArgumentParser(description="Generative AI Optimizer for Corkscrew Filter")
@@ -19,6 +21,13 @@ def main():
     scad = ScadDriver(args.scad_file)
     foam = FoamDriver(args.case_dir)
     agent = LLMAgent() # Expects GEMINI_API_KEY env var
+    store = DataStore()
+
+    # Get git commit
+    try:
+        git_commit = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
+    except Exception:
+        git_commit = "unknown"
 
     # Initial parameters
     # Note: These match the variable names in config.scad
@@ -43,8 +52,6 @@ def main():
     - Optimization Goal: Maximize particle collection efficiency (trap moon dust) while minimizing pressure drop.
     - Consider increasing number_of_complete_revolutions to increase centrifugal force.
     """
-
-    results_history = []
 
     print("Starting optimization loop...")
 
@@ -121,19 +128,20 @@ def main():
 
         # 5. Save Results
         run_data = {
+            "status": "completed",
+            "git_commit": git_commit,
+            "agent_id": "optimizer-script",
             "iteration": i,
             "parameters": current_params.copy(),
             "metrics": metrics,
             "images": png_paths
         }
-        results_history.append(run_data)
-
-        with open("optimization_history.json", "w") as f:
-            json.dump(results_history, f, indent=2)
+        store.append_result(run_data)
 
         # 6. Ask LLM for next step
         if i < args.iterations - 1:
-            new_params = agent.suggest_parameters(current_params, metrics, constraints, image_paths=png_paths)
+            full_history = store.load_history()
+            new_params = agent.suggest_parameters(current_params, metrics, constraints, image_paths=png_paths, history=full_history)
             # Post-process types
             if "num_bins" in new_params:
                 new_params["num_bins"] = int(new_params["num_bins"])
