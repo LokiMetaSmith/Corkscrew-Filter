@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const { stl2png } = require('@scalenc/stl-to-png');
 
 const SCAD_WASM_IMPORT = async () => {
     const mod = await import('openscad-wasm');
@@ -10,6 +11,55 @@ const SCAD_WASM_IMPORT = async () => {
 const LIB_DIR = 'BOSL2';
 const CONFIGS_DIR = 'configs';
 const OUTPUT_DIR = 'exports';
+
+// Helper: Calculate rotated camera position (around Z axis)
+function getRotatedCamera(angleDeg) {
+    const defaultPos = [0, -25, 20];
+    const rad = (angleDeg * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+
+    // Rotate (x, y)
+    const x = defaultPos[0];
+    const y = defaultPos[1];
+
+    // x' = x cos θ - y sin θ
+    // y' = x sin θ + y cos θ
+    const newX = x * cos - y * sin;
+    const newY = x * sin + y * cos;
+
+    return [newX, newY, defaultPos[2]];
+}
+
+// Helper: Generate 3 PNGs for a given STL
+async function generatePngs(stlPath) {
+    if (!fs.existsSync(stlPath)) {
+        console.error(`  PNG Error: STL file not found: ${stlPath}`);
+        return;
+    }
+
+    console.log(`  Generating PNGs for ${path.basename(stlPath)}...`);
+    const stlData = fs.readFileSync(stlPath);
+    const angles = [0, 120, 240];
+
+    for (let i = 0; i < angles.length; i++) {
+        const angle = angles[i];
+        const camPos = getRotatedCamera(angle);
+        const pngPath = stlPath.replace(/\.stl$/i, `_view${i}.png`);
+
+        try {
+            const pngData = stl2png(stlData, {
+                width: 800,
+                height: 600,
+                cameraPosition: camPos
+            });
+            fs.writeFileSync(pngPath, pngData);
+            console.log(`    Saved view ${i} (${angle}°): ${path.basename(pngPath)}`);
+        } catch (e) {
+            console.error(`    Failed to generate view ${i}: ${e.message}`);
+        }
+    }
+}
 
 async function main() {
     // 1. Ensure BOSL2 Library exists
@@ -42,8 +92,15 @@ async function main() {
     let directMode = false;
     let outputDirect = '';
     let inputDirect = '';
-    let directParams = [];
+    let globalParams = [];
+    let generatePng = false;
 
+    // Check for PNG flag
+    if (args.includes('--png')) {
+        generatePng = true;
+    }
+
+    // Check for Direct Mode (-o)
     if (args.includes('-o')) {
         directMode = true;
         const oIndex = args.indexOf('-o');
@@ -53,25 +110,28 @@ async function main() {
             console.error("Error: -o requires an output filename.");
             process.exit(1);
         }
+    }
 
-        // Find input file (argument that doesn't start with - and is not the output file)
+    // Parse Parameters (-D)
+    for (let i = 0; i < args.length; i++) {
+         if (args[i] === '-D') {
+             if (i + 1 < args.length) {
+                 globalParams.push('-D');
+                 globalParams.push(args[i+1]);
+             }
+         }
+    }
+
+    // Determine Input File (for Direct Mode)
+    if (directMode) {
         for (let i = 0; i < args.length; i++) {
             if (args[i] === '-o') { i++; continue; }
-            if (args[i] === '-D') { i++; continue; } // Skip param values
+            if (args[i] === '-D') { i++; continue; }
+            if (args[i] === '--png') { continue; }
             if (!args[i].startsWith('-')) {
                 inputDirect = args[i];
-                break; // Assuming first non-flag arg is input
+                break;
             }
-        }
-
-        // Collect parameters
-        for (let i = 0; i < args.length; i++) {
-             if (args[i] === '-D') {
-                 if (i + 1 < args.length) {
-                     directParams.push('-D');
-                     directParams.push(args[i+1]);
-                 }
-             }
         }
     }
 
@@ -97,8 +157,12 @@ async function main() {
     async function renderFile(inputFile, outputFile, params = []) {
         console.log(`Rendering ${inputFile} -> ${outputFile}...`);
 
-        // Create fresh instance for each render to avoid memory issues/state pollution
-        const wrapper = await createOpenSCAD({ noInitialRun: true });
+        // Create fresh instance with logging
+        const wrapper = await createOpenSCAD({
+            noInitialRun: true,
+            print: (text) => console.log(`[SCAD] ${text}`),
+            printErr: (text) => console.error(`[SCAD ERR] ${text}`)
+        });
         const instance = wrapper.getInstance();
 
         // Mount Project Files
@@ -160,7 +224,10 @@ async function main() {
             console.error("No input file specified.");
             process.exit(1);
         }
-        const success = await renderFile(inputDirect, outputDirect, directParams);
+        const success = await renderFile(inputDirect, outputDirect, globalParams);
+        if (success && generatePng) {
+            await generatePngs(outputDirect);
+        }
         if (!success) process.exit(1);
 
     } else {
@@ -179,8 +246,13 @@ async function main() {
             const inputPath = path.join(CONFIGS_DIR, file);
             const outputPath = path.join(OUTPUT_DIR, file.replace('.scad', '.stl'));
 
-            const success = await renderFile(inputPath, outputPath);
-            if (success) successCount++;
+            const success = await renderFile(inputPath, outputPath, globalParams);
+            if (success) {
+                successCount++;
+                if (generatePng) {
+                    await generatePngs(outputPath);
+                }
+            }
             else failCount++;
         }
 
