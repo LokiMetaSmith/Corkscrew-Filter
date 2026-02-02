@@ -3,3 +3,4 @@ numpy
 trimesh
 pandas
 scipy
+Pillow
