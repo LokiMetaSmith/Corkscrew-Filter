@@ -12,7 +12,7 @@ This file tracks planned enhancements and future work for the Thirsty Corkscrew 
 - [x] Standardize legacy coupling configurations (Cartridge, Sandblaster) into `configs/` files.
 
 ## Distributed Optimization (Git-Based)
-- [ ] **Data Schema:** Design a JSONL-based schema for the Job Queue/Result Log. This format should favor append-only operations to minimize merge conflicts when multiple users push results.
+- [x] **Data Schema:** Design a JSONL-based schema for the Job Queue/Result Log. This format should favor append-only operations to minimize merge conflicts when multiple users push results.
 - [ ] **Job Manager:** Implement a `JobManager` class capable of:
     - "Checking out" a specific parameter region of interest.
     - Generating a local queue of jobs derived from that region.
