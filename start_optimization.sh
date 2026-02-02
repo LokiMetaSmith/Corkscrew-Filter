@@ -31,8 +31,17 @@ if [ -z "$GEMINI_API_KEY" ]; then
 fi
 
 # 3. Setup Python Environment
+VENV_DIR=".venv"
+if [ ! -d "$VENV_DIR" ]; then
+    echo "Creating Python virtual environment in $VENV_DIR..."
+    python3 -m venv "$VENV_DIR"
+fi
+
+# Activate venv
+source "$VENV_DIR/bin/activate"
+
 if [ -f "optimizer/requirements.txt" ]; then
-    echo "Installing Python requirements..."
+    echo "Installing/Updating Python requirements..."
     pip install -r optimizer/requirements.txt
 fi
 
