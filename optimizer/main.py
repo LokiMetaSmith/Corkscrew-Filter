@@ -26,7 +26,13 @@ def main():
     # Get git commit
     try:
         git_commit = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
-    except Exception:
+        # Check for uncommitted changes
+        status = subprocess.check_output(["git", "status", "--porcelain"]).decode("utf-8").strip()
+        if status:
+            git_commit += " (dirty)"
+            print("Warning: Uncommitted changes detected. Git commit marked as dirty.")
+    except Exception as e:
+        print(f"Warning: Failed to retrieve git commit info: {e}")
         git_commit = "unknown"
 
     # Initial parameters
