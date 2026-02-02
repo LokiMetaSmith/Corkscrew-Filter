@@ -22,7 +22,7 @@ class LLMAgent:
 
         self.history = []
 
-    def suggest_parameters(self, current_params: Dict[str, Any], metrics: Dict[str, Any], constraints: str = "", image_paths: List[str] = None) -> Dict[str, Any]:
+    def suggest_parameters(self, current_params: Dict[str, Any], metrics: Dict[str, Any], constraints: str = "", image_paths: List[str] = None, history: List[Dict] = None) -> Dict[str, Any]:
         """
         Asks the LLM for the next set of parameters.
         """
@@ -38,7 +38,10 @@ class LLMAgent:
             print("No LLM available. Returning current parameters.")
             return current_params
 
-        prompt = self._construct_prompt(constraints, has_images=bool(image_paths))
+        # Use provided history if available, otherwise use internal history
+        history_to_use = history if history is not None else self.history
+
+        prompt = self._construct_prompt(constraints, history_to_use, has_images=bool(image_paths))
 
         content = [prompt]
 
@@ -68,8 +71,8 @@ class LLMAgent:
             print(f"LLM generation failed: {e}")
             return current_params
 
-    def _construct_prompt(self, constraints, has_images=False):
-        history_str = json.dumps(self.history, indent=2)
+    def _construct_prompt(self, constraints, history, has_images=False):
+        history_str = json.dumps(history, indent=2)
 
         visual_instruction = ""
         if has_images:
