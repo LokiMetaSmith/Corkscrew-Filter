@@ -22,22 +22,29 @@ module ModularFilterAssembly(tube_id, total_length) {
 
     // --- Master Helix Definitions ---
     module MasterSolidHelix() { Corkscrew(total_length + 2, twist_rate * (total_length + 2), void = false); }
-    module MasterVoidHelix() { Corkscrew(total_length + 2, twist_rate * (total_length + 2), void = true); }
+    module MasterHollowHelix() {
+        HollowHelicalShape(
+            total_length + 2,
+            twist_rate * (total_length + 2),
+            helix_path_radius_mm,
+            helix_profile_radius_mm,
+            helix_void_profile_radius_mm + tolerance_channel
+        );
+    }
 
-    difference() {
-        union() {
-            // --- Create the screw segments (bins) ---
-            for (i = [0 : num_bins - 1]) {
-                z_pos = -total_length / 2 + spacer_height_mm + i * (bin_length + spacer_height_mm) + bin_length / 2;
-                rot = twist_rate * z_pos;
+    union() {
+        // --- Create the screw segments (bins) ---
+        for (i = [0 : num_bins - 1]) {
+            z_pos = -total_length / 2 + spacer_height_mm + i * (bin_length + spacer_height_mm) + bin_length / 2;
+            rot = twist_rate * z_pos;
 
-                translate([0, 0, z_pos]) rotate([0, 0, rot]) {
-                    intersection() {
-                        rotate([0, 0, -rot]) translate([0, 0, -z_pos]) MasterSolidHelix();
-                        cylinder(h = bin_length + 0.1, d = tube_id * 2, center = true);
-                    }
+            translate([0, 0, z_pos]) rotate([0, 0, rot]) {
+                intersection() {
+                    rotate([0, 0, -rot]) translate([0, 0, -z_pos]) MasterHollowHelix();
+                    cylinder(h = bin_length + 0.1, d = tube_id * 2, center = true);
                 }
             }
+        }
 
             // --- Create the spacers ---
             for (i = [0 : num_bins]) {
@@ -95,8 +102,6 @@ module ModularFilterAssembly(tube_id, total_length) {
                     }
                 }
             }
-        }
-        MasterVoidHelix();
     }
 }
 
