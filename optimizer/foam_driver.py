@@ -13,22 +13,27 @@ class FoamDriver:
         self.template_dir = os.path.abspath(template_dir) if template_dir else self.case_dir
         self.log_file = os.path.join(self.case_dir, "run_foam.log")
         self.docker_image = os.environ.get("OPENFOAM_IMAGE", "opencfd/openfoam-default:2406")
+        self.has_tools = False
         self.use_docker = self._should_use_docker()
 
     def _should_use_docker(self):
         """
         Determines if Docker should be used.
-        Returns True if 'simpleFoam' is NOT found in the system PATH.
+        Returns True if 'simpleFoam' is NOT found in the system PATH but 'docker' IS.
+        Also sets self.has_tools accordingly.
         """
         if shutil.which("simpleFoam"):
             print("Native OpenFOAM found.")
+            self.has_tools = True
             return False
         else:
             if shutil.which("docker"):
                 print("Native OpenFOAM not found. Using Docker wrapper.")
+                self.has_tools = True
                 return True
             else:
                 print("Warning: Neither native OpenFOAM nor Docker found.")
+                self.has_tools = False
                 return False
 
     def _get_docker_command(self, cmd, cwd):
@@ -348,6 +353,10 @@ patches
         return self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking")
 
     def run_command(self, cmd, log_file=None, ignore_error=False, description="Running command"):
+        if not self.has_tools:
+            if not log_file:
+                print(f"Skipping command {' '.join(cmd)} (no OpenFOAM/Docker tools found).")
+            return False
 
         final_cmd = cmd
         if self.use_docker:
