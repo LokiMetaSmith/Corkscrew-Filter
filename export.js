@@ -127,11 +127,29 @@ async function main() {
     }
 
     // Parse Parameters (-D)
+    const STRING_PARAMS = ['part_to_generate', 'inlet_type', 'slit_type', 'custom_coupling_type'];
     for (let i = 0; i < args.length; i++) {
          if (args[i] === '-D') {
              if (i + 1 < args.length) {
                  globalParams.push('-D');
-                 globalParams.push(args[i+1]);
+                 let paramArg = args[i+1];
+
+                 // Auto-quote known string parameters if they are missing quotes
+                 // This handles cases where the shell strips quotes (e.g. Windows CMD/PowerShell)
+                 const eqIdx = paramArg.indexOf('=');
+                 if (eqIdx > 0) {
+                     const key = paramArg.substring(0, eqIdx).trim();
+                     let val = paramArg.substring(eqIdx + 1).trim();
+                     if (STRING_PARAMS.includes(key)) {
+                         // Check if already quoted (simple check)
+                         if (!val.startsWith('"') && !val.startsWith("'")) {
+                             val = `"${val}"`;
+                             paramArg = `${key}=${val}`;
+                         }
+                     }
+                 }
+
+                 globalParams.push(paramArg);
              }
          }
     }
@@ -170,6 +188,9 @@ async function main() {
 
     async function renderFile(inputFile, outputFile, params = []) {
         console.log(`Rendering ${inputFile} -> ${outputFile}...`);
+        if (params.length > 0) {
+             console.log(`  Params: ${params.join(' ')}`);
+        }
 
         // Create fresh instance for each render to avoid memory issues/state pollution
         // IMPORTANT: Increased memory limit to 512MB to handle complex models (e.g. hose_adapter_cap)
