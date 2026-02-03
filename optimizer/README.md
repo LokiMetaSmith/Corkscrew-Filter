@@ -43,6 +43,7 @@ python optimizer/main.py --iterations 5 --scad-file corkscrew.scad --case-dir co
 *   **`foam_driver.py`**: Handles OpenFOAM case preparation, meshing, solving, and results extraction.
 *   **`scad_driver.py`**: Wraps OpenSCAD command-line tools to generate STL files from parameter sets.
 *   **`data_store.py`**: Manages the persistent storage of optimization results in `optimization_log.jsonl`.
+*   **`constraints.py`**: Central definitions for optimization goals and parameter constraints.
 
 ## Data Storage
 

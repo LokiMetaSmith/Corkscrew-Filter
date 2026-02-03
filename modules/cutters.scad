@@ -62,7 +62,7 @@ module RampedSlitKnife(h, twist, dia, helices) {
  * Description: Helper module to create a single knife with a chamfered leading edge.
  */
 module RampedKnifeShape(h, twist, radius, profile_radius) {
-    chamfer_h = 0.5;
+    chamfer_h = slit_chamfer_height;
     body_h = h - chamfer_h;
     twist_per_mm = h > 0 ? twist / h : 0;
     chamfer_twist = twist_per_mm * chamfer_h;
@@ -131,7 +131,6 @@ module CorkscrewSlitKnife(twist, depth, num_bins) {
     pitch_mm = twist == 0 ? 1e9 : depth / (twist / 360);
     de = depth / num_bins;
     yrot = 360 * (1 / pitch_mm) * de;
-    slit_axial_length_mm = 1.5;
 
     for (i = [1:num_bins-1]) {
         j = -num_bins/2 + i;

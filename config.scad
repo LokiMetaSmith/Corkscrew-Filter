@@ -121,6 +121,8 @@ slit_ramp_length_mm = 5;         // The length of the ramped portion of a slit (
 slit_open_length_mm = 10;        // The length of the fully open portion of a slit.
 slit_width_mm = 2;               // The width of the slit opening.
 slit_depth_mm = 2;               // The depth of the slit cut into the ramp.
+slit_axial_length_mm = 1.5;      // The height (Z-axis) of the slit cut for CorkscrewSlitKnife.
+slit_chamfer_height = 0.5;       // The height of the chamfer on the leading edge of the slit knife.
 
 // --- Tolerances & Fit ---
 tolerance_tube_fit = 0.2;        // Clearance between the spacers and the inner wall of the main tube.
