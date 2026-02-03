@@ -4,8 +4,13 @@ const { execSync } = require('child_process');
 const { stl2png } = require('@scalenc/stl-to-png');
 
 const SCAD_WASM_IMPORT = async () => {
-    const mod = await import('openscad-wasm');
-    return mod.default || mod.createOpenSCAD || mod;
+    try {
+        const mod = await import('openscad-wasm');
+        return mod.default || mod.createOpenSCAD || mod;
+    } catch (e) {
+        console.error("Error importing openscad-wasm:", e);
+        process.exit(1);
+    }
 };
 
 const LIB_DIR = 'BOSL2';
@@ -157,13 +162,25 @@ async function main() {
     async function renderFile(inputFile, outputFile, params = []) {
         console.log(`Rendering ${inputFile} -> ${outputFile}...`);
 
-        // Create fresh instance with logging
+        // Create fresh instance for each render to avoid memory issues/state pollution
+        // IMPORTANT: Increased memory limit to 512MB to handle complex models (e.g. hose_adapter_cap)
         const wrapper = await createOpenSCAD({
             noInitialRun: true,
-            print: (text) => console.log(`[SCAD] ${text}`),
-            printErr: (text) => console.error(`[SCAD ERR] ${text}`)
+            print: (text) => console.log("SCAD stdout:", text),
+            printErr: (text) => console.error("SCAD stderr:", text),
+            quit: (status, toThrow) => {
+                throw new Error("OpenSCAD Quit with status " + status);
+            },
+            ALLOW_MEMORY_GROWTH: 1,
+            INITIAL_MEMORY: 536870912 // 512MB
         });
-        const instance = wrapper.getInstance();
+
+        let instance;
+        if (typeof wrapper.getInstance === 'function') {
+            instance = wrapper.getInstance();
+        } else {
+            instance = wrapper;
+        }
 
         // Mount Project Files
         loadDir(instance, LIB_DIR, '/BOSL2');
@@ -204,7 +221,13 @@ async function main() {
             const ret = instance.callMain(cmd);
             if (ret === 0 && instance.FS.analyzePath('/output.stl').exists) {
                 const data = instance.FS.readFile('/output.stl');
-                fs.writeFileSync(outputFile, data);
+
+                // Determine local path logic
+                let localPath = outputFile;
+                const outDir = path.dirname(localPath);
+                if (outDir && !fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+
+                fs.writeFileSync(localPath, data);
                 console.log(`  Success: ${outputFile}`);
                 return true;
             } else {
