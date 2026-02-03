@@ -12,3 +12,5 @@ optimizer/venv/
 exports/
 node_modules/
 logs/
+.venv/*
+*.bak
