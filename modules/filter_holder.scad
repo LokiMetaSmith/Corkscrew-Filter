@@ -16,6 +16,7 @@ include <primitives.scad>
  * thread_inner: (bool) If true, adds threads to the inner lip (and uses face seal).
  * thread_outer: (bool) If true, adds threads to the outer lip (and uses face seal).
  * tube_wall: Wall thickness of the pipe (needed for flange calculation if threaded).
+ * use_colors: (bool) If true, applies distinct colors to sub-parts for visualization.
  */
 module FilterHolder(
     tube_id = 30, // Fits inside this pipe
@@ -25,7 +26,8 @@ module FilterHolder(
     thread_inner = false,
     thread_outer = false,
     oring_cs = 1.5,
-    tube_wall = 2
+    tube_wall = 2,
+    use_colors = true
 ) {
     // Dimensions
     base_height = 5;
@@ -47,7 +49,15 @@ module FilterHolder(
     union() {
         // 1. Central Barb
         translate([0, 0, base_height])
-        color("Blue", 1.0)
+        if (use_colors) color("Blue", 1.0)
+        Barb(
+            hose_id = barb_id,
+            hose_od = barb_od,
+            barb_count = 3,
+            wall_thickness = (barb_od - barb_id)/2,
+            swell = 1
+        );
+        else
         Barb(
             hose_id = barb_id,
             hose_od = barb_od,
@@ -58,7 +68,9 @@ module FilterHolder(
 
         // 2. Main Body Plate
         difference() {
-            color("Chartreuse", 1.0) cylinder(d = base_plate_od, h = base_height, $fn=$fn);
+            if (use_colors) color("Chartreuse", 1.0) cylinder(d = base_plate_od, h = base_height, $fn=$fn);
+            else cylinder(d = base_plate_od, h = base_height, $fn=$fn);
+
             // Center hole for flow
             translate([0,0,-1]) cylinder(d = barb_id, h = base_height + 2, $fn=$fn);
 
@@ -85,21 +97,34 @@ module FilterHolder(
                     // --- OUTER LIP CONSTRUCTION ---
                     if (thread_outer) {
                         // Thread the entire length
-                        color("Orange", 1.0)translate([0,0,segment_h])
-                        threaded_rod(d=tube_id, h=lip_height, pitch=1.5, internal=false, $fn=$fn);
-                         
+                        if (use_colors) color("Orange", 1.0)translate([0,0,segment_h])threaded_rod(d=tube_id, h=lip_height, pitch=1.5, internal=false, $fn=$fn);
+                        else translate([0,0,segment_h])threaded_rod(d=tube_id, h=lip_height, pitch=1.5, internal=false, $fn=$fn); 
                     } else {
                         // Smooth Seal - Top Segment
                         translate([0,0,segment_h]) {
-                             color("Orange", 1.0) difference() {
+                             if (use_colors) {
+                                color("Orange", 1.0) difference() {
+                                    cylinder(d = outer_seal_od, h = segment_h, $fn=$fn);
+                                    translate([0,0,-1]) cylinder(d = outer_seal_od - 4, h = segment_h+2, $fn=$fn);
+                                }
+                             } else {
+                                difference() {
+                                    cylinder(d = outer_seal_od, h = segment_h, $fn=$fn);
+                                    translate([0,0,-1]) cylinder(d = outer_seal_od - 4, h = segment_h+2, $fn=$fn);
+                                }
+                             }
+                        }
+                        // Smooth Seal - Bottom Segment
+                        if (use_colors) {
+                            color("Gold", 1.0) difference() {
                                 cylinder(d = outer_seal_od, h = segment_h, $fn=$fn);
                                 translate([0,0,-1]) cylinder(d = outer_seal_od - 4, h = segment_h+2, $fn=$fn);
                             }
-                        }
-                        // Smooth Seal - Bottom Segment
-                        color("Gold", 1.0) difference() {
-                            cylinder(d = outer_seal_od, h = segment_h, $fn=$fn);
-                            translate([0,0,-1]) cylinder(d = outer_seal_od - 4, h = segment_h+2, $fn=$fn);
+                        } else {
+                             difference() {
+                                cylinder(d = outer_seal_od, h = segment_h, $fn=$fn);
+                                translate([0,0,-1]) cylinder(d = outer_seal_od - 4, h = segment_h+2, $fn=$fn);
+                            }
                         }
                     }
 
@@ -107,17 +132,20 @@ module FilterHolder(
                     // Top Segment (Proximal/Base) - z=5 to 10
                     translate([0,0,segment_h]) {
                          // Provide material
-                         color("Cyan", 1.0) cylinder(d = inner_seal_id + 4, h = segment_h, $fn=$fn);
+                         if (use_colors) color("Cyan", 1.0) cylinder(d = inner_seal_id + 4, h = segment_h, $fn=$fn);
+                         else cylinder(d = inner_seal_id + 4, h = segment_h, $fn=$fn);
                     }
 
                     // Bottom Segment (Distal/Tip) - z=0 to 5
                     // Provide material
-                    color("Purple", 1.0) cylinder(d = inner_seal_id + 4, h = segment_h, $fn=$fn);
+                    if (use_colors) color("Purple", 1.0) cylinder(d = inner_seal_id + 4, h = segment_h, $fn=$fn);
+                    else cylinder(d = inner_seal_id + 4, h = segment_h, $fn=$fn);
 
 
                     // Connecting Base (overlap with main body to ensure solid)
                     translate([0,0,lip_height-1])
-                        color("Magenta", 1.0) cylinder(d = outer_seal_od, h = 1, $fn=$fn);
+                        if (use_colors) color("Magenta", 1.0) cylinder(d = outer_seal_od, h = 1, $fn=$fn);
+                        else cylinder(d = outer_seal_od, h = 1, $fn=$fn);
                 }
 
                 // --- SUBTRACTIONS (Holes, Threads, O-Rings) ---

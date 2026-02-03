@@ -32,13 +32,37 @@ fi
 
 # 3. Setup Python Environment
 VENV_DIR=".venv"
+
+# Detect Python Executable
+PYTHON_CMD=""
+if command -v python &> /dev/null; then
+    PYTHON_CMD="python"
+elif command -v python3 &> /dev/null; then
+    PYTHON_CMD="python3"
+elif command -v py &> /dev/null; then
+    PYTHON_CMD="py"
+else
+    echo "Error: Python not found (tried 'python', 'python3', 'py'). Please install Python."
+    exit 1
+fi
+echo "Using Python executable: $PYTHON_CMD"
+
 if [ ! -d "$VENV_DIR" ]; then
     echo "Creating Python virtual environment in $VENV_DIR..."
-    python3 -m venv "$VENV_DIR"
+    "$PYTHON_CMD" -m venv "$VENV_DIR"
 fi
 
 # Activate venv
-source "$VENV_DIR/bin/activate"
+if [ -f "$VENV_DIR/Scripts/activate" ]; then
+    # Windows (Git Bash)
+    source "$VENV_DIR/Scripts/activate"
+elif [ -f "$VENV_DIR/bin/activate" ]; then
+    # Unix
+    source "$VENV_DIR/bin/activate"
+else
+    echo "Error: Virtual environment activation script not found in $VENV_DIR."
+    exit 1
+fi
 
 if [ -f "optimizer/requirements.txt" ]; then
     echo "Installing/Updating Python requirements..."
