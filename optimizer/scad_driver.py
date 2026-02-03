@@ -62,6 +62,17 @@ class ScadDriver:
         if "GENERATE_SLICE" not in run_params:
              run_params["GENERATE_SLICE"] = "false"
 
+        # Check if CFD generation is requested (handle bool or string)
+        gen_cfd = run_params.get("GENERATE_CFD_VOLUME", "true")
+        if str(gen_cfd).lower() == "true":
+             if "CUT_FOR_VISIBILITY" not in run_params:
+                 # Disable visibility cut for CFD volume to save processing time
+                 run_params["CUT_FOR_VISIBILITY"] = "false"
+
+        # Limit resolution to prevent OOM/Timeouts if not specified
+        if "high_res_fn" not in run_params:
+             run_params["high_res_fn"] = 100
+
         param_args = []
         for key, value in run_params.items():
             param_args.extend(self._format_param(key, value))
