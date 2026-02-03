@@ -10,3 +10,5 @@ corkscrewFilter/log.*
 optimizer/venv/
 exports/
 node_modules/
+.venv/*
+*.bak
