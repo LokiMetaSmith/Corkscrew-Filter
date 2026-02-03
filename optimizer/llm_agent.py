@@ -1,6 +1,8 @@
 import os
 import json
-import google.generativeai as genai
+import mimetypes
+from google import genai
+from google.genai import types
 from typing import Dict, List, Any
 try:
     from PIL import Image
@@ -15,11 +17,11 @@ class LLMAgent:
 
         if not api_key:
             print("Warning: GEMINI_API_KEY not found. LLM features will be disabled.")
-            self.model = None
+            self.client = None
         else:
-            genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel(model_name)
+            self.client = genai.Client(api_key=api_key)
 
+        self.model_name = model_name
         self.history = []
 
     def suggest_parameters(self, current_params: Dict[str, Any], metrics: Dict[str, Any], constraints: str = "", image_paths: List[str] = None, history: List[Dict] = None) -> Dict[str, Any]:
@@ -33,7 +35,7 @@ class LLMAgent:
                 "metrics": metrics
             })
 
-        if not self.model:
+        if not self.client:
             # Fallback if no API key
             print("No LLM available. Returning current parameters.")
             return current_params
@@ -46,17 +48,28 @@ class LLMAgent:
         content = [prompt]
 
         # Load images if provided
-        if image_paths and Image:
+        if image_paths:
             for path in image_paths:
                 try:
                     print(f"Loading image for LLM: {path}")
-                    img = Image.open(path)
-                    content.append(img)
+                    # Read file directly as bytes
+                    with open(path, "rb") as f:
+                        image_data = f.read()
+
+                    # Determine mime type
+                    mime_type, _ = mimetypes.guess_type(path)
+                    if not mime_type:
+                        mime_type = "image/png" # Default fallback
+
+                    content.append(types.Part.from_bytes(data=image_data, mime_type=mime_type))
                 except Exception as e:
                     print(f"Failed to load image {path}: {e}")
 
         try:
-            response = self.model.generate_content(content)
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=content
+            )
             text = response.text
             # Extract JSON from potential markdown code blocks
             clean_text = self._extract_json(text)
@@ -75,7 +88,7 @@ class LLMAgent:
         """
         Asks the LLM to generate a batch of parameter sets to explore different regions of the design space.
         """
-        if not self.model:
+        if not self.client:
             print("No LLM available.")
             return []
 
@@ -109,7 +122,10 @@ You must respond with valid JSON only.
 }}
 """
         try:
-            response = self.model.generate_content([prompt])
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=[prompt]
+            )
             text = response.text
             clean_text = self._extract_json(text)
             data = json.loads(clean_text)

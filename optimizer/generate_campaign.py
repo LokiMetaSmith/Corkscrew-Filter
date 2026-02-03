@@ -18,7 +18,7 @@ def main():
     history = store.load_history()
 
     # Check if agent has model
-    if not agent.model:
+    if not agent.client:
         print("Error: No LLM available (check GEMINI_API_KEY). Cannot generate campaign.")
         return
 
