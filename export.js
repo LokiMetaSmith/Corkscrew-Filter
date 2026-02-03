@@ -197,7 +197,11 @@ async function main() {
         const wrapper = await createOpenSCAD({
             noInitialRun: true,
             print: (text) => console.log("SCAD stdout:", text),
-            printErr: (text) => console.error("SCAD stderr:", text),
+            printErr: (text) => {
+                if (!text.includes("Could not initialize localization")) {
+                    console.error("SCAD stderr:", text);
+                }
+            },
             quit: (status, toThrow) => {
                 throw new Error("OpenSCAD Quit with status " + status);
             },
