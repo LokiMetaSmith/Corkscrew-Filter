@@ -67,9 +67,18 @@ async function generatePngs(stlPath) {
 }
 
 async function main() {
-    // 1. Ensure BOSL2 Library exists
+    // 1. Ensure BOSL2 Library exists and is valid
+    let needDownload = false;
     if (!fs.existsSync(LIB_DIR)) {
-        console.log('BOSL2 library not found. Cloning...');
+        needDownload = true;
+    } else if (!fs.existsSync(path.join(LIB_DIR, 'std.scad'))) {
+        console.log('BOSL2 directory exists but appears corrupt/empty. Re-downloading...');
+        try { fs.rmSync(LIB_DIR, { recursive: true, force: true }); } catch(e) {}
+        needDownload = true;
+    }
+
+    if (needDownload) {
+        console.log('BOSL2 library not found or invalid. Cloning...');
         try {
             execSync('git clone --depth 1 https://github.com/BOSL2/BOSL2.git ' + LIB_DIR, { stdio: 'inherit' });
             console.log('BOSL2 cloned successfully.');
@@ -172,7 +181,7 @@ async function main() {
                 throw new Error("OpenSCAD Quit with status " + status);
             },
             ALLOW_MEMORY_GROWTH: 1,
-            INITIAL_MEMORY: 536870912 // 512MB
+            INITIAL_MEMORY: 2147483648 // 2GB
         });
 
         let instance;
@@ -183,9 +192,21 @@ async function main() {
         }
 
         // Mount Project Files
-        // Ensure /libraries exists for standard library path resolution
+        // Mount BOSL2 to standard library path
         try { instance.FS.mkdir('/libraries'); } catch(e) {}
         loadDir(instance, LIB_DIR, '/libraries/BOSL2');
+
+        // Create Symlinks for fallback compatibility (Root and Relative)
+        // This avoids duplicating memory usage for large libraries
+        try {
+            instance.FS.symlink('/libraries/BOSL2', '/BOSL2');
+        } catch(e) { console.warn("Symlink /BOSL2 failed:", e.message); }
+
+        try { instance.FS.mkdir('/modules'); } catch(e) {}
+        try {
+             instance.FS.symlink('/libraries/BOSL2', '/modules/BOSL2');
+        } catch(e) { console.warn("Symlink /modules/BOSL2 failed:", e.message); }
+
         loadDir(instance, 'modules', '/modules');
         loadDir(instance, 'parameters', '/parameters');
 
