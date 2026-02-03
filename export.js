@@ -183,7 +183,9 @@ async function main() {
         }
 
         // Mount Project Files
-        loadDir(instance, LIB_DIR, '/BOSL2');
+        // Ensure /libraries exists for standard library path resolution
+        try { instance.FS.mkdir('/libraries'); } catch(e) {}
+        loadDir(instance, LIB_DIR, '/libraries/BOSL2');
         loadDir(instance, 'modules', '/modules');
         loadDir(instance, 'parameters', '/parameters');
 
