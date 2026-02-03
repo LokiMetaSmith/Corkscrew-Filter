@@ -8,5 +8,7 @@ corkscrewFilter/processor*/
 corkscrewFilter/postProcessing/
 corkscrewFilter/log.*
 optimizer/venv/
+.venv/
 exports/
 node_modules/
+logs/

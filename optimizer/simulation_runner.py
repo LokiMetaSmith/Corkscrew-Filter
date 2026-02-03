@@ -1,7 +1,8 @@
 import os
 import time
+from utils import Timer
 
-def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False):
+def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False, iteration=0):
     """
     Executes the full simulation pipeline:
     1. Generate Fluid Geometry (STL)
@@ -16,6 +17,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         params (dict): Dictionary of parameters for the run.
         output_stl_name (str): Filename for the fluid STL (inside case/constant/triSurface).
         dry_run (bool): If True, skips actual processing and returns mock data.
+        iteration (int): The current iteration number (used for logging).
 
     Returns:
         tuple: (metrics, image_paths)
@@ -23,14 +25,26 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
             image_paths (list): List of paths to generated PNG visualizations.
     """
 
+    # Setup Log Directory
+    log_dir = os.path.join("logs", f"iteration_{iteration}")
+    os.makedirs(log_dir, exist_ok=True)
+
+    # Log files
+    geom_log = os.path.join(log_dir, "geometry.log")
+    mesh_log = os.path.join(log_dir, "meshing.log")
+    solver_log = os.path.join(log_dir, "solver.log")
+    vis_log = os.path.join(log_dir, "visualization.log")
+
     # 1. Generate Geometry (Fluid Volume for CFD)
     stl_path = os.path.join(foam_driver.case_dir, "constant", "triSurface", output_stl_name)
     os.makedirs(os.path.dirname(stl_path), exist_ok=True)
 
     if not dry_run:
-        success = scad_driver.generate_stl(params, stl_path)
+        with Timer("Geometry Generation"):
+            success = scad_driver.generate_stl(params, stl_path, log_file=geom_log)
+
         if not success:
-            print("Geometry generation failed.")
+            print(f"Geometry generation failed. Check {geom_log} for details.")
             return {"error": "geometry_generation_failed"}, []
     else:
         print(f"[Dry Run] Generated STL at {stl_path}")
@@ -51,17 +65,25 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
     metrics = {}
     if not dry_run:
         foam_driver.prepare_case()
-        if foam_driver.run_meshing():
-            if foam_driver.run_solver():
-                # Attempt particle tracking (optional/experimental)
-                foam_driver.run_particle_tracking()
 
-                metrics = foam_driver.get_metrics()
+        with Timer("Meshing"):
+            success = foam_driver.run_meshing(log_file=mesh_log)
+
+        if success:
+            with Timer("Solver"):
+                success = foam_driver.run_solver(log_file=solver_log)
+
+            if success:
+                # Attempt particle tracking (optional/experimental)
+                with Timer("Particle Tracking"):
+                    foam_driver.run_particle_tracking(log_file=solver_log)
+
+                metrics = foam_driver.get_metrics(log_file=solver_log)
             else:
-                print("Solver failed.")
+                print(f"Solver failed. Check {solver_log}")
                 metrics = {"error": "solver_failed"}
         else:
-            print("Meshing failed.")
+            print(f"Meshing failed. Check {mesh_log}")
             metrics = {"error": "meshing_failed"}
     else:
         print("[Dry Run] Ran OpenFOAM simulation")
@@ -88,11 +110,13 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
     os.makedirs("exports", exist_ok=True)
 
     if not dry_run:
-        print("Generating visualization...")
         # Use lower resolution for vis to speed up
         vis_params = params.copy()
         vis_params["high_res_fn"] = 20 # Low res enough for shape check
-        png_paths = scad_driver.generate_visualization(vis_params, vis_base)
+
+        with Timer("Visualization"):
+            png_paths = scad_driver.generate_visualization(vis_params, vis_base, log_file=vis_log)
+
     else:
         print(f"[Dry Run] Generated Visualization at {vis_base}.png")
         # Create dummy path for dry run consistency

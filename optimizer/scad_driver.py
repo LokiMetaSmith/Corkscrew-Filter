@@ -3,6 +3,7 @@ import os
 import shutil
 import trimesh
 import numpy as np
+from utils import run_command_with_spinner
 
 class ScadDriver:
     def __init__(self, scad_file_path, force_native=False):
@@ -41,13 +42,14 @@ class ScadDriver:
         except ValueError:
             return False
 
-    def generate_stl(self, params, output_path):
+    def generate_stl(self, params, output_path, log_file=None):
         """
         Runs OpenSCAD to generate an STL file with the given parameters.
 
         Args:
             params (dict): Dictionary of parameter names and values.
             output_path (str): Path to save the generated STL.
+            log_file (str): Path to log file.
 
         Returns:
             bool: True if successful, False otherwise.
@@ -71,27 +73,35 @@ class ScadDriver:
             # Assumes export.js is in the root directory relative to where this is run
             cmd = ["node", "export.js", "-o", output_path] + param_args + [self.scad_file_path]
 
-        print(f"Running geometry generation: {' '.join(cmd)}")
+        if not log_file:
+            print(f"Running geometry generation: {' '.join(cmd)}")
 
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            if log_file:
+                run_command_with_spinner(cmd, log_file, description="Generating Geometry")
+            else:
+                result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+
             if os.path.exists(output_path):
-                print(f"STL generated successfully at {output_path}")
+                if not log_file:
+                    print(f"STL generated successfully at {output_path}")
                 return True
             else:
                 print("Generation finished but output file missing.")
-                print(result.stderr)
+                # If using log_file, the error details are there.
                 return False
         except subprocess.CalledProcessError as e:
             print(f"Generation failed with return code {e.returncode}")
-            print(e.stderr)
-            print(e.stdout)
+            # If log_file used, details are in log.
+            if not log_file:
+                print(e.stderr)
+                print(e.stdout)
             return False
         except FileNotFoundError:
             print("Error: Execution command failed. Ensure 'openscad' or 'node' is available.")
             return False
 
-    def generate_visualization(self, params, output_base):
+    def generate_visualization(self, params, output_base, log_file=None):
         """
         Generates the solid model and PNG screenshots using export.js.
 
@@ -99,6 +109,7 @@ class ScadDriver:
             params (dict): Parameters for the model.
             output_base (str): Base path for output (e.g., 'temp/vis_model').
                               Will generate 'temp/vis_model.stl' and 'temp/vis_model_viewX.png'.
+            log_file (str): Path to log file.
 
         Returns:
             list: List of paths to the generated PNG files, or empty list on failure.
@@ -122,10 +133,14 @@ class ScadDriver:
         # Use node export.js specifically
         cmd = ["node", "export.js", "-o", stl_path, "--png"] + param_args + [self.scad_file_path]
 
-        print(f"Running visualization generation: {' '.join(cmd)}")
+        if not log_file:
+            print(f"Running visualization generation: {' '.join(cmd)}")
 
         try:
-            subprocess.run(cmd, capture_output=True, text=True, check=True)
+            if log_file:
+                run_command_with_spinner(cmd, log_file, description="Generating Visualization")
+            else:
+                subprocess.run(cmd, capture_output=True, text=True, check=True)
 
             # Collect PNG paths
             png_paths = []
