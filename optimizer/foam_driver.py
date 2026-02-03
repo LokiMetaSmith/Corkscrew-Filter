@@ -4,12 +4,65 @@ import subprocess
 import glob
 import re
 import math
+import sys
 
 class FoamDriver:
     def __init__(self, case_dir, template_dir=None):
         self.case_dir = os.path.abspath(case_dir)
         self.template_dir = os.path.abspath(template_dir) if template_dir else self.case_dir
         self.log_file = os.path.join(self.case_dir, "run_foam.log")
+        self.docker_image = os.environ.get("OPENFOAM_IMAGE", "opencfd/openfoam-default:2406")
+        self.use_docker = self._should_use_docker()
+
+    def _should_use_docker(self):
+        """
+        Determines if Docker should be used.
+        Returns True if 'simpleFoam' is NOT found in the system PATH.
+        """
+        if shutil.which("simpleFoam"):
+            print("Native OpenFOAM found.")
+            return False
+        else:
+            if shutil.which("docker"):
+                print("Native OpenFOAM not found. Using Docker wrapper.")
+                return True
+            else:
+                print("Warning: Neither native OpenFOAM nor Docker found.")
+                return False
+
+    def _get_docker_command(self, cmd, cwd):
+        """
+        Constructs the Docker command to run the given shell command inside the container.
+        """
+        # We assume the cwd is within the project root or the case directory.
+        # To simplify, we mount the case directory to /data in the container
+        # and set the working directory to /data.
+
+        # However, OpenFOAM often needs access to parent directories if using shared libs or includes.
+        # A safer bet for this specific project structure is to mount the 'case_dir' to '/home/openfoam/run'
+        # or similar.
+
+        # User ID mapping to avoid permission issues on Linux
+        # On Mac/Windows Docker Desktop handles this automagically usually, but explicit is good.
+        uid_gid_args = []
+        if sys.platform == "linux":
+            uid = os.getuid()
+            gid = os.getgid()
+            uid_gid_args = ["-u", f"{uid}:{gid}"]
+
+        # Mount point: Target path inside container
+        container_workdir = "/home/openfoam/run"
+
+        docker_cmd = [
+            "docker", "run", "--rm",
+            "-v", f"{cwd}:{container_workdir}",
+            "-w", container_workdir,
+        ] + uid_gid_args + [
+            self.docker_image,
+            "/bin/bash", "-c", " ".join(cmd)
+        ]
+
+        return docker_cmd
 
     def prepare_case(self):
         """
@@ -293,12 +346,36 @@ patches
         return self.run_command(["icoUncoupledKinematicParcelFoam"])
 
     def run_command(self, cmd, ignore_error=False):
-        print(f"Running {' '.join(cmd)} in {self.case_dir}...")
+
+        final_cmd = cmd
+        if self.use_docker:
+            # Wrap in docker call
+            final_cmd = self._get_docker_command(cmd, self.case_dir)
+            # When using Docker, we are effectively running "docker" as the command,
+            # so we shouldn't fail on FileNotFoundError for the inner command.
+            # But subprocess.run will invoke 'docker', which must exist.
+
+        print(f"Running {' '.join(final_cmd)}...")
+
         try:
             with open(self.log_file, "a") as log:
+                # Log the exact command being run for debugging
+                log.write(f"\n# Executing: {' '.join(final_cmd)}\n")
+                log.flush()
+
+                # If using Docker, we execute in the current environment (host),
+                # but map cwd to the container.
+                # So subprocess cwd should be '.' or just inherit,
+                # because the 'cwd' arg in _get_docker_command handles the volume mount source.
+
+                # However, for non-docker, we want cwd=self.case_dir.
+                # For docker, we invoke 'docker' from anywhere, but it's cleaner to stay put.
+
+                cwd = self.case_dir if not self.use_docker else os.getcwd()
+
                 subprocess.run(
-                    cmd,
-                    cwd=self.case_dir,
+                    final_cmd,
+                    cwd=cwd,
                     stdout=log,
                     stderr=subprocess.STDOUT,
                     check=True
@@ -310,7 +387,10 @@ patches
                 return False
             return True
         except FileNotFoundError:
-            print(f"Executable {cmd[0]} not found.")
+            if self.use_docker:
+                print("Error: 'docker' executable not found.")
+            else:
+                print(f"Executable {cmd[0]} not found.")
             return False
 
     def get_metrics(self):
