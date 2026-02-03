@@ -39,3 +39,23 @@ module Corkscrew(h, twist, void = false) {
         : helix_profile_radius_mm;
     HelicalShape(h, twist, helix_path_radius_mm, profile_r);
 }
+
+/**
+ * Module: HollowHelicalShape
+ * Description: Generates a hollow helical extrusion (tube) by subtracting an inner profile from an outer profile
+ * before extrusion. This is much more efficient than 3D boolean differences.
+ * Arguments:
+ * h:         The height of the helical extrusion.
+ * twist:     The total twist angle in degrees over the height `h`.
+ * path_r:    The radius of the helical path from the central axis.
+ * outer_r:   The base radius of the outer circular profile.
+ * inner_r:   The base radius of the inner circular profile.
+ */
+module HollowHelicalShape(h, twist, path_r, outer_r, inner_r) {
+    linear_extrude(height = h, center = true, convexity = 10, twist = twist) {
+        difference() {
+            translate([path_r, 0, 0]) scale([1, helix_profile_scale_ratio]) circle(r = outer_r);
+            translate([path_r, 0, 0]) scale([1, helix_profile_scale_ratio]) circle(r = inner_r);
+        }
+    }
+}
