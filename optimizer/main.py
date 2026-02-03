@@ -66,7 +66,8 @@ def main():
             foam,
             current_params,
             output_stl_name=args.output_stl,
-            dry_run=args.dry_run
+            dry_run=args.dry_run,
+            iteration=i
         )
 
         print(f"Result metrics: {metrics}")

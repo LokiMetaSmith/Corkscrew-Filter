@@ -5,6 +5,7 @@ import glob
 import re
 import math
 import sys
+from utils import run_command_with_spinner
 
 class FoamDriver:
     def __init__(self, case_dir, template_dir=None):
@@ -303,7 +304,7 @@ patches
         with open(os.path.join(self.case_dir, "system", "createPatchDict"), 'w') as f:
             f.write(content)
 
-    def run_meshing(self):
+    def run_meshing(self, log_file=None):
         """
         Runs the meshing pipeline.
         """
@@ -322,17 +323,18 @@ patches
         ]
 
         for cmd in cmds:
-            if not self.run_command(cmd):
+            # Pass command name as description
+            if not self.run_command(cmd, log_file=log_file, description=f"Meshing ({cmd[0]})"):
                 return False
         return True
 
-    def run_solver(self):
+    def run_solver(self, log_file=None):
         """
         Runs the solver.
         """
-        return self.run_command(["simpleFoam"])
+        return self.run_command(["simpleFoam"], log_file=log_file, description="Solving CFD")
 
-    def run_particle_tracking(self):
+    def run_particle_tracking(self, log_file=None):
         """
         Runs particle tracking (Lagrangian).
         Assuming we use icoUncoupledKinematicParcelFoam for one-way coupling test.
@@ -343,9 +345,9 @@ patches
             print("Warning: kinematicCloudProperties not found. Skipping particle tracking.")
             return False
 
-        return self.run_command(["icoUncoupledKinematicParcelFoam"])
+        return self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking")
 
-    def run_command(self, cmd, ignore_error=False):
+    def run_command(self, cmd, log_file=None, ignore_error=False, description="Running command"):
 
         final_cmd = cmd
         if self.use_docker:
@@ -355,34 +357,35 @@ patches
             # so we shouldn't fail on FileNotFoundError for the inner command.
             # But subprocess.run will invoke 'docker', which must exist.
 
-        print(f"Running {' '.join(final_cmd)}...")
+        # Use passed log_file or fallback to self.log_file
+        target_log = log_file if log_file else self.log_file
+
+        if not log_file:
+            print(f"Running {' '.join(final_cmd)}...")
 
         try:
-            with open(self.log_file, "a") as log:
-                # Log the exact command being run for debugging
-                log.write(f"\n# Executing: {' '.join(final_cmd)}\n")
-                log.flush()
+            cwd = self.case_dir if not self.use_docker else os.getcwd()
 
-                # If using Docker, we execute in the current environment (host),
-                # but map cwd to the container.
-                # So subprocess cwd should be '.' or just inherit,
-                # because the 'cwd' arg in _get_docker_command handles the volume mount source.
+            if log_file:
+                run_command_with_spinner(final_cmd, target_log, cwd=cwd, description=description)
+            else:
+                 # Legacy/Fallback behavior
+                with open(target_log, "a") as log:
+                    log.write(f"\n# Executing: {' '.join(final_cmd)}\n")
+                    log.flush()
+                    subprocess.run(
+                        final_cmd,
+                        cwd=cwd,
+                        stdout=log,
+                        stderr=subprocess.STDOUT,
+                        check=True
+                    )
 
-                # However, for non-docker, we want cwd=self.case_dir.
-                # For docker, we invoke 'docker' from anywhere, but it's cleaner to stay put.
-
-                cwd = self.case_dir if not self.use_docker else os.getcwd()
-
-                subprocess.run(
-                    final_cmd,
-                    cwd=cwd,
-                    stdout=log,
-                    stderr=subprocess.STDOUT,
-                    check=True
-                )
             return True
         except subprocess.CalledProcessError:
-            print(f"Command {' '.join(cmd)} failed.")
+            if not log_file:
+                print(f"Command {' '.join(cmd)} failed.")
+
             if not ignore_error:
                 return False
             return True
@@ -393,16 +396,18 @@ patches
                 print(f"Executable {cmd[0]} not found.")
             return False
 
-    def get_metrics(self):
+    def get_metrics(self, log_file=None):
         """
         Parses logs to get metrics.
         Returns dict: {'delta_p': float, 'residuals': float, 'particle_data': ...}
         """
         metrics = {'delta_p': None, 'residuals': None}
 
+        target_log = log_file if log_file else self.log_file
+
         # 1. Parse Residuals from log
-        if os.path.exists(self.log_file):
-            with open(self.log_file, 'r') as f:
+        if os.path.exists(target_log):
+            with open(target_log, 'r') as f:
                 lines = f.readlines()
                 # Find last "Solving for Ux, ... Initial residual = X, Final residual = Y"
                 for line in reversed(lines):
@@ -423,11 +428,11 @@ patches
 
         # 3. Parse Particle Tracking (Separation Efficiency)
         # We look for "Injector model1: injected X parcels" and "Current number of parcels" at the end.
-        if os.path.exists(self.log_file):
+        if os.path.exists(target_log):
             total_injected = 0
             current_parcels = 0
 
-            with open(self.log_file, 'r') as f:
+            with open(target_log, 'r') as f:
                 lines = f.readlines()
                 for line in lines:
                     # "Injector model1: injected 100 parcels, mass 1e-06 kg"
