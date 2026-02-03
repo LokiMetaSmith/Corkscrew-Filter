@@ -85,11 +85,9 @@ subModels
         type localInteraction;
         patches
         (
-            walls
+            corkscrew
             {
-                type rebound;
-                e    0.8;
-                mu   0.5;
+                type stick;
             }
             outlet
             {

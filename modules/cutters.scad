@@ -58,6 +58,71 @@ module RampedSlitKnife(h, twist, dia, helices) {
 }
 
 /**
+ * Module: RampedKnifeShape
+ * Description: Helper module to create a single knife with a chamfered leading edge.
+ */
+module RampedKnifeShape(h, twist, radius, profile_radius) {
+    chamfer_h = slit_chamfer_height;
+    body_h = h - chamfer_h;
+    twist_per_mm = h > 0 ? twist / h : 0;
+    chamfer_twist = twist_per_mm * chamfer_h;
+    body_twist = twist_per_mm * body_h;
+
+    // Define the 2D profile polygon dimensions
+    w = profile_radius * 2;
+
+    // Calculate points for the chamfer polyhedron
+    // Bottom points: Scaled by 0.5, at Z=0, translated by radius
+    // Top points: Full scale, at Z=chamfer_h, translated by radius, rotated by chamfer_twist
+
+    // Bottom Polygon (Scaled 0.5)
+    // Original: [0,0], [w, -w], [w, w]
+    // Scaled: [0,0], [0.5w, -0.5w], [0.5w, 0.5w]
+    // Translated by [radius, 0]: [radius, 0], [radius+0.5w, -0.5w], [radius+0.5w, 0.5w]
+    p0 = [radius, 0, 0];
+    p1 = [radius + 0.5*w, -0.5*w, 0];
+    p2 = [radius + 0.5*w, 0.5*w, 0];
+
+    // Top Polygon (Full size)
+    // Translated by [radius, 0]: [radius, 0], [radius+w, -w], [radius+w, w]
+    // Then Rotated by chamfer_twist
+    ct_rad = chamfer_twist;
+
+    // Function to rotate point around Z
+    function rotZ(p, angle) = [
+        p[0]*cos(angle) - p[1]*sin(angle),
+        p[0]*sin(angle) + p[1]*cos(angle),
+        p[2] + chamfer_h
+    ];
+
+    p3 = rotZ([radius, 0, 0], ct_rad);
+    p4 = rotZ([radius + w, -w, 0], ct_rad);
+    p5 = rotZ([radius + w, w, 0], ct_rad);
+
+    chamfer_points = [p0, p1, p2, p3, p4, p5];
+    chamfer_faces = [
+        [0, 2, 1], // Bottom
+        [3, 4, 5], // Top
+        [0, 1, 4, 3], // Side 1
+        [1, 2, 5, 4], // Side 2
+        [2, 0, 3, 5]  // Side 3
+    ];
+
+    // Shift to match center=true of original linear_extrude
+    translate([0, 0, -h/2]) {
+        // Chamfer Section (Polyhedron)
+        polyhedron(points = chamfer_points, faces = chamfer_faces);
+
+        // Main Body Section - Standard helical extrusion
+        // Using shifted points to avoid translate() inside linear_extrude which causes issues in WASM
+        translate([0, 0, chamfer_h])
+        rotate([0, 0, chamfer_twist])
+        linear_extrude(height = body_h, twist = body_twist, center = false)
+             polygon(points = [[radius, 0], [radius+w, -w], [radius+w, w]]);
+    }
+}
+
+/**
  * Module: CorkscrewSlitKnife
  * Description: Creates cutting tools to separate bins on the `FlatEndScrew` model.
  * Arguments: (Same as FlatEndScrew)
@@ -66,15 +131,12 @@ module CorkscrewSlitKnife(twist, depth, num_bins) {
     pitch_mm = twist == 0 ? 1e9 : depth / (twist / 360);
     de = depth / num_bins;
     yrot = 360 * (1 / pitch_mm) * de;
-    slit_axial_length_mm = 1.5;
 
     for (i = [1:num_bins-1]) {
         j = -num_bins/2 + i;
         rotate([0, 0, -yrot * j])
         translate([0, 0, j * de])
-            linear_extrude(height = slit_axial_length_mm, center = true, twist = twist / depth * slit_axial_length_mm)
-                translate([helix_path_radius_mm, 0, 0])
-                    polygon(points = [[0, 0], [helix_profile_radius_mm*2, -helix_profile_radius_mm*2], [helix_profile_radius_mm*2, helix_profile_radius_mm*2]]);
+            RampedKnifeShape(slit_axial_length_mm, twist / depth * slit_axial_length_mm, helix_path_radius_mm, helix_profile_radius_mm);
     }
 }
 

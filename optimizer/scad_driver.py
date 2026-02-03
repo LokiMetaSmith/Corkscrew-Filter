@@ -5,11 +5,41 @@ import trimesh
 import numpy as np
 
 class ScadDriver:
-    def __init__(self, scad_file_path):
+    def __init__(self, scad_file_path, force_native=False):
         self.scad_file_path = scad_file_path
-        self.use_native = shutil.which("openscad") is not None
-        if not self.use_native:
-            print("Native OpenSCAD not found. Using WASM fallback via 'node export.js'.")
+        # User requested favoring export.js.
+        # Only use native if explicitly forced or if node is missing (unlikely in this env).
+        self.use_native = force_native and (shutil.which("openscad") is not None)
+
+        if self.use_native:
+            print("Using Native OpenSCAD.")
+        else:
+            print("Using 'node export.js' (WASM/JS driver).")
+
+    def _format_param(self, key, value):
+        """Formats a key-value pair for OpenSCAD CLI (-D key=value)."""
+        if isinstance(value, bool):
+            val_str = "true" if value else "false"
+        elif isinstance(value, str):
+            # Check if it's a boolean string
+            if value.lower() in ["true", "false"]:
+                val_str = value.lower()
+            # Check if it's a number (rough check)
+            elif self._is_number(value):
+                val_str = value
+            else:
+                # It's a string literal, needs quotes
+                val_str = f'"{value}"'
+        else:
+            val_str = str(value)
+        return ["-D", f"{key}={val_str}"]
+
+    def _is_number(self, s):
+        try:
+            float(s)
+            return True
+        except ValueError:
+            return False
 
     def generate_stl(self, params, output_path):
         """
@@ -32,18 +62,13 @@ class ScadDriver:
 
         param_args = []
         for key, value in run_params.items():
-            if isinstance(value, bool):
-                val_str = "true" if value else "false"
-            else:
-                val_str = str(value)
-            param_args.extend(["-D", f"{key}={val_str}"])
+            param_args.extend(self._format_param(key, value))
 
         if self.use_native:
             cmd = ["openscad", "-o", output_path] + param_args + [self.scad_file_path]
         else:
             # Fallback to Node.js script
             # Assumes export.js is in the root directory relative to where this is run
-            # The optimizer is likely run from root as 'python optimizer/main.py'
             cmd = ["node", "export.js", "-o", output_path] + param_args + [self.scad_file_path]
 
         print(f"Running geometry generation: {' '.join(cmd)}")
@@ -65,6 +90,61 @@ class ScadDriver:
         except FileNotFoundError:
             print("Error: Execution command failed. Ensure 'openscad' or 'node' is available.")
             return False
+
+    def generate_visualization(self, params, output_base):
+        """
+        Generates the solid model and PNG screenshots using export.js.
+
+        Args:
+            params (dict): Parameters for the model.
+            output_base (str): Base path for output (e.g., 'temp/vis_model').
+                              Will generate 'temp/vis_model.stl' and 'temp/vis_model_viewX.png'.
+
+        Returns:
+            list: List of paths to the generated PNG files, or empty list on failure.
+        """
+        stl_path = output_base + ".stl"
+
+        # Setup parameters for solid visual
+        vis_params = params.copy()
+        # Force these to ensure we see the solid part
+        vis_params["GENERATE_CFD_VOLUME"] = False
+        vis_params["GENERATE_SLICE"] = False
+        # Ensure we are generating the main assembly if not specified
+        if "part_to_generate" not in vis_params:
+            vis_params["part_to_generate"] = "modular_filter_assembly"
+
+        # Build command (Force use of export.js for --png support)
+        param_args = []
+        for key, value in vis_params.items():
+            param_args.extend(self._format_param(key, value))
+
+        # Use node export.js specifically
+        cmd = ["node", "export.js", "-o", stl_path, "--png"] + param_args + [self.scad_file_path]
+
+        print(f"Running visualization generation: {' '.join(cmd)}")
+
+        try:
+            subprocess.run(cmd, capture_output=True, text=True, check=True)
+
+            # Collect PNG paths
+            png_paths = []
+            # export.js generates _view0.png, _view1.png, _view2.png
+            for i in range(3):
+                png_path = stl_path.replace(".stl", f"_view{i}.png")
+
+                if os.path.exists(png_path):
+                    png_paths.append(png_path)
+
+            if not png_paths:
+                print("Warning: Visualization ran but no PNGs found.")
+
+            return png_paths
+
+        except Exception as e:
+            print(f"Visualization generation failed: {e}")
+            if hasattr(e, 'stderr'): print(e.stderr)
+            return []
 
     def get_bounds(self, stl_path):
         """

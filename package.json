@@ -5,9 +5,11 @@
   "main": "export.js",
   "scripts": {
     "export": "node export.js",
-    "optimize": "python3 optimizer/main.py"
+    "optimize": "python3 optimizer/main.py",
+    "test": "node test/regression.js"
   },
   "dependencies": {
+    "@scalenc/stl-to-png": "^1.2.0",
     "openscad-wasm": "^0.0.4"
   }
 }

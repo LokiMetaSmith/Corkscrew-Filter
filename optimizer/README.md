@@ -42,3 +42,17 @@ python optimizer/main.py --iterations 5 --scad-file corkscrew.scad --case-dir co
 *   **`llm_agent.py`**: Interacts with the Google Gemini API to analyze simulation history and suggest new parameters.
 *   **`foam_driver.py`**: Handles OpenFOAM case preparation, meshing, solving, and results extraction.
 *   **`scad_driver.py`**: Wraps OpenSCAD command-line tools to generate STL files from parameter sets.
+*   **`data_store.py`**: Manages the persistent storage of optimization results in `optimization_log.jsonl`.
+*   **`constraints.py`**: Central definitions for optimization goals and parameter constraints.
+
+## Data Storage
+
+Results are stored in `optimization_log.jsonl`, a JSON Lines file where each line is a self-contained JSON object representing a single optimization run. This format allows for efficient append-only logging and easier merging of results from distributed runs.
+
+Each entry contains:
+*   `id`: Unique UUID for the run.
+*   `timestamp`: UTC timestamp.
+*   `status`: Status of the run (e.g., "completed").
+*   `git_commit`: The git commit hash at the time of execution.
+*   `parameters`: The input parameters used.
+*   `metrics`: The output metrics from the simulation.
