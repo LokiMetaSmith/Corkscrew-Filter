@@ -102,7 +102,7 @@ module ModularFilterAssembly(tube_id, total_length) {
                     }
                 }
             }
-    }
+        }
 }
 
 /**

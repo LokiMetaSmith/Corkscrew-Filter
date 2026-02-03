@@ -12,7 +12,7 @@
 // This variable controls which component is rendered.
 part_options = ["modular_filter_assembly", "hex_array_filter", "single_cell_filter", "hose_adapter_cap", "flat_end_screw", "filter_holder", "custom_coupling"];
 // We use is_undef to prevent overwriting if this file is included after variables are set.
-part_to_generate = is_undef(part_to_generate) ? part_options[5] : part_to_generate;
+default_part_to_generate = part_options[5];
 
 // --- 2. Feature Flags ---
 // These flags toggle optional features on the selected model.
