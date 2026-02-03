@@ -25,7 +25,7 @@ module FilterHolder(
     thread_inner = false,
     thread_outer = false,
     oring_cs = 1.5,
-    tube_wall = 0
+    tube_wall = 2
 ) {
     // Dimensions
     base_height = 5;
@@ -36,7 +36,7 @@ module FilterHolder(
     // The flange must cover the pipe wall.
     base_plate_od = thread_outer ? (tube_id + 2 * max(tube_wall, 2)) : (tube_id - 0.2);
 
-    outer_seal_od = thread_outer ? (tube_id + 2 * max(tube_wall, 2)) : tube_id - 0.2; // Tolerance for fit
+    outer_seal_od = thread_outer ? (tube_id - 2 * max(tube_wall, 2)) : tube_id - 0.2; // Tolerance for fit
     inner_seal_id = cartridge_od + 0.2; // Tolerance for fit
 
     // Thread/Seal Segmentation
@@ -47,6 +47,7 @@ module FilterHolder(
     union() {
         // 1. Central Barb
         translate([0, 0, base_height])
+        color("Blue", 1.0)
         Barb(
             hose_id = barb_id,
             hose_od = barb_od,
@@ -57,7 +58,7 @@ module FilterHolder(
 
         // 2. Main Body Plate
         difference() {
-            cylinder(d = base_plate_od, h = base_height, $fn=$fn);
+            color("Chartreuse", 1.0) cylinder(d = base_plate_od, h = base_height, $fn=$fn);
             // Center hole for flow
             translate([0,0,-1]) cylinder(d = barb_id, h = base_height + 2, $fn=$fn);
 
@@ -84,18 +85,19 @@ module FilterHolder(
                     // --- OUTER LIP CONSTRUCTION ---
                     if (thread_outer) {
                         // Thread the entire length
-                        translate([0,0,segment_h])
+                        color("Orange", 1.0)translate([0,0,segment_h])
                         threaded_rod(d=tube_id, h=lip_height, pitch=1.5, internal=false, $fn=$fn);
+                         
                     } else {
                         // Smooth Seal - Top Segment
                         translate([0,0,segment_h]) {
-                             difference() {
+                             color("Orange", 1.0) difference() {
                                 cylinder(d = outer_seal_od, h = segment_h, $fn=$fn);
                                 translate([0,0,-1]) cylinder(d = outer_seal_od - 4, h = segment_h+2, $fn=$fn);
                             }
                         }
                         // Smooth Seal - Bottom Segment
-                        difference() {
+                        color("Gold", 1.0) difference() {
                             cylinder(d = outer_seal_od, h = segment_h, $fn=$fn);
                             translate([0,0,-1]) cylinder(d = outer_seal_od - 4, h = segment_h+2, $fn=$fn);
                         }
@@ -105,17 +107,17 @@ module FilterHolder(
                     // Top Segment (Proximal/Base) - z=5 to 10
                     translate([0,0,segment_h]) {
                          // Provide material
-                         cylinder(d = inner_seal_id + 4, h = segment_h, $fn=$fn);
+                         color("Cyan", 1.0) cylinder(d = inner_seal_id + 4, h = segment_h, $fn=$fn);
                     }
 
                     // Bottom Segment (Distal/Tip) - z=0 to 5
                     // Provide material
-                    cylinder(d = inner_seal_id + 4, h = segment_h, $fn=$fn);
+                    color("Purple", 1.0) cylinder(d = inner_seal_id + 4, h = segment_h, $fn=$fn);
 
 
                     // Connecting Base (overlap with main body to ensure solid)
                     translate([0,0,lip_height-1])
-                        cylinder(d = outer_seal_od, h = 1, $fn=$fn);
+                        color("Magenta", 1.0) cylinder(d = outer_seal_od, h = 1, $fn=$fn);
                 }
 
                 // --- SUBTRACTIONS (Holes, Threads, O-Rings) ---
@@ -169,7 +171,7 @@ module FilterHolder(
                         OringGroove_OD_Cutter(outer_seal_od, oring_cs);
                 } else {
                      rim_center = base_plate_od - oring_cs;
-                   # translate([0,0,lip_height ])
+                    translate([0,0,lip_height ])
                         OringGroove_OD_Cutter(rim_center, oring_cs);
                 }
 
