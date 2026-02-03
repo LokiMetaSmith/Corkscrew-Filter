@@ -76,20 +76,30 @@ module HelicalOuterSupport(target_dia, target_height, rib_thickness, twist_rate)
     twist_angle = twist_rate * target_height;
     radius = target_dia / 2 - rib_thickness;
 
+    // Optimization: limit resolution for thin ribs to prevent geometric explosion
+    // Reduced to 8 (octagon) for performance
+    rib_fn = ($fn > 0) ? min($fn, 8) : 0;
+
+    // Limit slices to approx 20 degrees per slice, minimum 5
+    // This overrides global $fn for the extrusion slicing
+    // Aggressive reduction for performance stability in WASM
+    twist_slices = max(5, ceil(abs(twist_angle) / 18));
+
     for( i = [0:1:support_density-1]){
         rotate([0,0,i*(360/support_density)]) {
             union() {
-                linear_extrude(height = target_height, center = false, convexity = 10, twist = -twist_angle)
+                linear_extrude(height = target_height, center = false, convexity = 10, twist = -twist_angle, slices=twist_slices)
                     translate([radius,0,0])
-                        circle(d=rib_thickness);
-                linear_extrude(height = target_height, center = false, convexity = 10, twist = twist_angle)
+                        circle(d=rib_thickness, $fn=rib_fn);
+                // Offset slightly to avoid co-surface geometric degeneracy which slows down CSG
+                linear_extrude(height = target_height, center = false, convexity = 10, twist = twist_angle, slices=twist_slices)
                     rotate([0,0,120])
-                        translate([radius,0,0])
-                            circle(d=rib_thickness);
-                linear_extrude(height = target_height, center = false, convexity = 10, twist = 0)
+                        translate([radius - 0.05,0,0])
+                            circle(d=rib_thickness, $fn=rib_fn);
+                linear_extrude(height = target_height, center = false, convexity = 10, twist = 0, slices=twist_slices)
                     rotate([0,0,240])
-                        translate([radius,0,0])
-                            circle(d=rib_thickness);
+                        translate([radius + 0.05,0,0])
+                            circle(d=rib_thickness, $fn=rib_fn);
             }
         }
     }
