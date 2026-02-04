@@ -11,7 +11,7 @@ except ImportError:
     Image = None
 
 class LLMAgent:
-    def __init__(self, api_key=None, model_name="gemini-1.5-flash-001"):
+    def __init__(self, api_key=None, model_name="gemini-1.5-flash"):
         if not api_key:
             api_key = os.environ.get("GEMINI_API_KEY")
 

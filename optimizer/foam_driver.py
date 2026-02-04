@@ -112,11 +112,11 @@ class FoamDriver:
 
         return container_cmd
 
-    def prepare_case(self):
+    def prepare_case(self, keep_mesh=False):
         """
         Prepares the case directory.
         """
-        if self.case_dir != self.template_dir:
+        if not keep_mesh and self.case_dir != self.template_dir:
             if os.path.exists(self.case_dir):
                 shutil.rmtree(self.case_dir)
             shutil.copytree(self.template_dir, self.case_dir)
