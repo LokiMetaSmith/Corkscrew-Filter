@@ -42,11 +42,6 @@ module ModularFilterAssembly(tube_id, total_length) {
             z_pos = -total_length / 2 + spacer_height_mm + i * (bin_length + spacer_height_mm) + bin_length / 2;
             rot = twist_rate * z_pos;
 
-            #translate([0, 0, z_pos]) rotate([0, 0, rot]) {
-                intersection() {
-                    rotate([0, 0, -rot]) translate([0, 0, -z_pos]) MasterHollowHelix();
-                    cylinder(h = bin_length + 0.1, d = tube_id * 2, center = true);
-                }
             // Generate hollow segment directly with slight overlap for continuity
             local_h = bin_length + 0.02;
             local_twist = twist_rate * local_h;
