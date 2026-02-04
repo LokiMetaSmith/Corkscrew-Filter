@@ -46,7 +46,21 @@ class LLMAgent:
                 # Assuming try next for robustness.
                 continue
 
+        self._list_available_models()
         raise Exception("All models failed to generate content.")
+
+    def _list_available_models(self):
+        """
+        Lists available models to help debug 404/not-found errors.
+        """
+        try:
+            print("\n--- Available Models ---")
+            for m in self.client.models.list():
+                if "generateContent" in m.supported_generation_methods:
+                    print(f"- {m.name}")
+            print("------------------------\n")
+        except Exception as e:
+            print(f"Failed to list models: {e}")
 
     def suggest_parameters(self, current_params: Dict[str, Any], metrics: Dict[str, Any], constraints: str = "", image_paths: List[str] = None, history: List[Dict] = None) -> Dict[str, Any]:
         """
