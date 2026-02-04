@@ -194,10 +194,14 @@ module FilterHolder(
                         threaded_rod(d=cap_id, h=lip_height+2, pitch=1.5, internal=true, anchor=BOTTOM, $fn=$fn);
                 }
 
-                // 2. Socket Internal Threads
+                // 2. Socket Internal Threads or Smooth Socket Hole
                 if (cartridge_thread_inner) {
                      translate([0,0,cartridge_offset-1])
                         threaded_rod(d=socket_id, h=cartridge_wall_height+2, pitch=1.5, internal=true, anchor=BOTTOM, $fn=$fn);
+                } else if (!cartridge_thread_outer) {
+                    // Smooth Socket Hole (Fix for "incorrect purple circle")
+                    translate([0,0,cartridge_offset-1])
+                        cylinder(d=socket_id, h=cartridge_wall_height+2, anchor=BOTTOM, $fn=$fn);
                 }
 
                 // 3. Clear Center Flow Path
@@ -238,6 +242,13 @@ module FilterHolder(
                             cylinder(d=cartridge_feature_od, h=lip_height+3, anchor=BOTTOM, $fn=$fn);
                         }
                     }
+
+                    // Distal Face Seal (Fix for "circled green part")
+                    distal_groove_dia = tube_id - 2.1;
+                    groove_depth = oring_cs * 0.8;
+                    // Cut at the bottom face (Local Z=0)
+                    translate([0,0, groove_depth/2])
+                        OringGroove_Face_Cutter(distal_groove_dia, oring_cs);
                 }
             }
 
@@ -245,10 +256,18 @@ module FilterHolder(
             if (SHOW_O_RINGS) {
                  // Tube Interface
                  if (tube_thread_outer || tube_thread_inner) {
-                      // Face Seal
+                      // Face Seal (Base Plate)
                       rim_seal_d = tube_id + tube_wall;
                       translate([0, 0, lip_height])
                           OringVisualizer_Face(rim_seal_d, oring_cs);
+
+                      // Face Seal (Distal End) - if outer thread
+                      if (tube_thread_outer) {
+                          distal_groove_dia = tube_id - 2.1;
+                          groove_depth = oring_cs * 0.8;
+                          translate([0,0, groove_depth/2])
+                              OringVisualizer_Face(distal_groove_dia, oring_cs);
+                      }
                  } else {
                      // Radial Seal
                      translate([0,0, lip_height * 0.75])
