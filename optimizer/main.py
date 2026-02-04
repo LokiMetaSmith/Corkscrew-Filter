@@ -73,9 +73,15 @@ def main():
         print(f"Result metrics: {metrics}")
 
         # Check for critical failure
-        if "error" in metrics and metrics["error"] == "geometry_generation_failed":
-             print("Skipping this iteration due to geometry failure.")
-             continue
+        if "error" in metrics:
+            if metrics["error"] == "environment_missing_tools":
+                print("\nCRITICAL ERROR: OpenFOAM tools not found.")
+                print("Please install OpenFOAM (simpleFoam, blockMesh) or Docker, or run with --dry-run.")
+                print("Aborting optimization.")
+                break
+            elif metrics["error"] == "geometry_generation_failed":
+                print("Skipping this iteration due to geometry failure.")
+                continue
 
         # 5. Save Results
         run_data = {

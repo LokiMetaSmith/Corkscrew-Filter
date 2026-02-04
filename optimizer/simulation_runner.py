@@ -53,6 +53,11 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
 
     # 2. Update Mesh Config
     if not dry_run:
+        # Early check for environment
+        if not foam_driver.has_tools:
+            print("OpenFOAM tools not found. Skipping simulation.")
+            return {"error": "environment_missing_tools", "details": "Neither OpenFOAM nor Docker found"}, []
+
         bounds = scad_driver.get_bounds(stl_path)
         if bounds[0] is None:
             print("Failed to get bounds. Using default.")
