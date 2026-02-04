@@ -35,7 +35,7 @@ module ModularFilterAssembly(tube_id, total_length) {
             local_h = bin_length + 0.02;
             local_twist = twist_rate * local_h;
 
-            translate([0, 0, z_pos]) rotate([0, 0, rot]) {
+            translate([0, 0, z_pos]) rotate([0, 0, rot - local_twist / 2]) {
                  HollowHelicalShape(local_h, local_twist, helix_path_radius_mm, helix_profile_radius_mm, helix_void_profile_radius_mm + tolerance_channel);
             }
         }
@@ -57,6 +57,7 @@ module ModularFilterAssembly(tube_id, total_length) {
                     difference() {
                         cylinder(d = spacer_od, h = spacer_height_mm, center = true);
                         // Cut with local solid helix segment
+                        rotate([0, 0, -cut_twist / 2])
                         HelicalShape(cut_h, cut_twist, helix_path_radius_mm, helix_profile_radius_mm);
                         union(){
                             OringGroove_OD_Cutter(spacer_od, oring_cross_section_mm);
@@ -97,6 +98,7 @@ module ModularFilterAssembly(tube_id, total_length) {
                     // Disable support generation during CFD volume creation to prevent timeouts due to CSG complexity
                     if (ADD_HELICAL_SUPPORT && !GENERATE_CFD_VOLUME && !is_top) {
                         translate([0, 0, spacer_height_mm / 2])
+                            rotate([0, 0, twist_rate * spacer_height_mm / 2])
                             HelicalOuterSupport(spacer_od, bin_length, support_rib_thickness_mm, twist_rate);
                     }
                 }
