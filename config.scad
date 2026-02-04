@@ -91,6 +91,8 @@ filter_holder_cartridge_thread_inner = false;
 filter_holder_cartridge_thread_outer = false;
 filter_holder_tube_thread_inner = false;
 filter_holder_tube_thread_outer = true;
+filter_holder_cartridge_wall_height = 10;
+filter_holder_cartridge_offset = 0;
 
 // --- Custom Coupling Parameters ---
 // These are defaults, usually overridden by including a specific config file.

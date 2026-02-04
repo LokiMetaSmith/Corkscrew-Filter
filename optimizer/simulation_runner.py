@@ -2,7 +2,7 @@ import os
 import time
 from utils import Timer
 
-def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False, skip_cfd=False, iteration=0):
+def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False, skip_cfd=False, iteration=0, reuse_mesh=False):
     """
     Executes the full simulation pipeline:
     1. Generate Fluid Geometry (STL)
@@ -19,6 +19,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         dry_run (bool): If True, skips actual processing and returns mock data.
         skip_cfd (bool): If True, generates geometry but skips CFD simulation.
         iteration (int): The current iteration number (used for logging).
+        reuse_mesh (bool): If True, skips geometry generation and meshing, using existing mesh.
 
     Returns:
         tuple: (metrics, image_paths)
@@ -41,12 +42,15 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
     os.makedirs(os.path.dirname(stl_path), exist_ok=True)
 
     if not dry_run:
-        with Timer("Geometry Generation"):
-            success = scad_driver.generate_stl(params, stl_path, log_file=geom_log)
+        if not reuse_mesh:
+            with Timer("Geometry Generation"):
+                success = scad_driver.generate_stl(params, stl_path, log_file=geom_log)
 
-        if not success:
-            print(f"Geometry generation failed. Check {geom_log} for details.")
-            return {"error": "geometry_generation_failed"}, []
+            if not success:
+                print(f"Geometry generation failed. Check {geom_log} for details.")
+                return {"error": "geometry_generation_failed"}, []
+        else:
+            print("[Reuse Mesh] Skipping geometry generation.")
     else:
         print(f"[Dry Run] Generated STL at {stl_path}")
         if not os.path.exists(stl_path):
@@ -59,11 +63,14 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
             print("OpenFOAM tools not found. Skipping simulation.")
             return {"error": "environment_missing_tools", "details": "Neither OpenFOAM nor Docker found"}, []
 
-        bounds = scad_driver.get_bounds(stl_path)
-        if bounds[0] is None:
-            print("Failed to get bounds. Using default.")
+        if not reuse_mesh:
+            bounds = scad_driver.get_bounds(stl_path)
+            if bounds[0] is None:
+                print("Failed to get bounds. Using default.")
+            else:
+                foam_driver.update_blockMesh(bounds)
         else:
-            foam_driver.update_blockMesh(bounds)
+            print("[Reuse Mesh] Skipping BlockMesh update.")
     elif skip_cfd:
         print("[Skip CFD] Skipping BlockMesh update.")
     else:
@@ -72,10 +79,14 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
     # 3. Run Simulation
     metrics = {}
     if not dry_run and not skip_cfd:
-        foam_driver.prepare_case()
+        foam_driver.prepare_case(keep_mesh=reuse_mesh)
 
-        with Timer("Meshing"):
-            success = foam_driver.run_meshing(log_file=mesh_log)
+        if not reuse_mesh:
+            with Timer("Meshing"):
+                success = foam_driver.run_meshing(log_file=mesh_log)
+        else:
+            print("[Reuse Mesh] Skipping meshing pipeline.")
+            success = True
 
         if success:
             with Timer("Solver"):
