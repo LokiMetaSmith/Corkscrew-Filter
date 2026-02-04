@@ -94,7 +94,7 @@ class FoamDriver:
             "-w", container_workdir,
         ] + uid_gid_args + [
             self.docker_image,
-            "/bin/bash", "-lc", " ".join(cmd)
+            "/bin/bash", "-lc", f"cd {container_workdir} && " + " ".join(cmd)
         ]
 
         return container_cmd
