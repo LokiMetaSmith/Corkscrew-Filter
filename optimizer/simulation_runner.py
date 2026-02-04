@@ -2,7 +2,7 @@ import os
 import time
 from utils import Timer
 
-def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False, iteration=0):
+def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False, skip_cfd=False, iteration=0):
     """
     Executes the full simulation pipeline:
     1. Generate Fluid Geometry (STL)
@@ -17,6 +17,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         params (dict): Dictionary of parameters for the run.
         output_stl_name (str): Filename for the fluid STL (inside case/constant/triSurface).
         dry_run (bool): If True, skips actual processing and returns mock data.
+        skip_cfd (bool): If True, generates geometry but skips CFD simulation.
         iteration (int): The current iteration number (used for logging).
 
     Returns:
@@ -52,7 +53,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
             with open(stl_path, 'w') as f: f.write("solid dryrun\nendsolid dryrun")
 
     # 2. Update Mesh Config
-    if not dry_run:
+    if not dry_run and not skip_cfd:
         # Early check for environment
         if not foam_driver.has_tools:
             print("OpenFOAM tools not found. Skipping simulation.")
@@ -63,12 +64,14 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
             print("Failed to get bounds. Using default.")
         else:
             foam_driver.update_blockMesh(bounds)
+    elif skip_cfd:
+        print("[Skip CFD] Skipping BlockMesh update.")
     else:
          print("[Dry Run] Updated blockMeshDict")
 
     # 3. Run Simulation
     metrics = {}
-    if not dry_run:
+    if not dry_run and not skip_cfd:
         foam_driver.prepare_case()
 
         with Timer("Meshing"):
@@ -90,6 +93,9 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         else:
             print(f"Meshing failed. Check {mesh_log}")
             metrics = {"error": "meshing_failed"}
+    elif skip_cfd:
+        print("[Skip CFD] Skipping CFD simulation.")
+        metrics = {"skipped": True, "note": "CFD simulation skipped by user request"}
     else:
         print("[Dry Run] Ran OpenFOAM simulation")
         # Mock metrics for dry run
