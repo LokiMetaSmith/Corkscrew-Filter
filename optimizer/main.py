@@ -18,6 +18,7 @@ def main():
     parser.add_argument("--output-stl", type=str, default="corkscrew_fluid.stl", help="Output STL filename")
     parser.add_argument("--dry-run", action="store_true", help="Skip actual OpenFOAM execution (mocks everything)")
     parser.add_argument("--skip-cfd", action="store_true", help="Generate geometry but skip CFD simulation")
+    parser.add_argument("--reuse-mesh", action="store_true", help="Reuse existing mesh (skips geometry generation and meshing)")
     args = parser.parse_args()
 
     # Initialize components
@@ -69,7 +70,8 @@ def main():
             output_stl_name=args.output_stl,
             dry_run=args.dry_run,
             skip_cfd=args.skip_cfd,
-            iteration=i
+            iteration=i,
+            reuse_mesh=args.reuse_mesh
         )
 
         print(f"Result metrics: {metrics}")
