@@ -22,7 +22,7 @@ class LLMAgent:
             self.client = genai.Client(api_key=api_key)
 
         self.model_name = model_name
-        self.fallback_models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-1.5-pro", "gemini-1.0-pro"]
+        self.fallback_models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.5-flash-latest", "gemini-1.5-pro", "gemini-1.0-pro"]
         self.history = []
 
     def _generate_with_retry(self, contents):
@@ -56,7 +56,13 @@ class LLMAgent:
         try:
             print("\n--- Available Models ---")
             for m in self.client.models.list():
-                if "generateContent" in m.supported_generation_methods:
+                # Check supported_actions (newer API) or supported_generation_methods (older API)
+                actions = getattr(m, "supported_actions", None)
+                methods = getattr(m, "supported_generation_methods", None)
+
+                if actions and "generateContent" in actions:
+                    print(f"- {m.name}")
+                elif methods and "generateContent" in methods:
                     print(f"- {m.name}")
             print("------------------------\n")
         except Exception as e:
