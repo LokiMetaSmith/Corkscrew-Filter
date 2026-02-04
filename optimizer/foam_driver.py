@@ -14,31 +14,39 @@ class FoamDriver:
         self.log_file = os.path.join(self.case_dir, "run_foam.log")
         self.docker_image = os.environ.get("OPENFOAM_IMAGE", "opencfd/openfoam-default:2406")
         self.has_tools = False
-        self.use_docker = self._should_use_docker()
+        self.container_tool = None
+        self.use_container = False
+        self._check_execution_environment()
 
-    def _should_use_docker(self):
+    def _check_execution_environment(self):
         """
-        Determines if Docker should be used.
-        Returns True if 'simpleFoam' is NOT found in the system PATH but 'docker' IS.
-        Also sets self.has_tools accordingly.
+        Determines the execution environment (Native, Podman, or Docker).
+        Sets self.has_tools, self.container_tool, and self.use_container.
         """
         if shutil.which("simpleFoam"):
             print("Native OpenFOAM found.")
             self.has_tools = True
-            return False
+            self.container_tool = None
+            self.use_container = False
+        elif shutil.which("podman"):
+            print("Native OpenFOAM not found. Using Podman wrapper.")
+            self.has_tools = True
+            self.container_tool = "podman"
+            self.use_container = True
+        elif shutil.which("docker"):
+            print("Native OpenFOAM not found. Using Docker wrapper.")
+            self.has_tools = True
+            self.container_tool = "docker"
+            self.use_container = True
         else:
-            if shutil.which("docker"):
-                print("Native OpenFOAM not found. Using Docker wrapper.")
-                self.has_tools = True
-                return True
-            else:
-                print("Warning: Neither native OpenFOAM nor Docker found.")
-                self.has_tools = False
-                return False
+            print("Warning: Neither native OpenFOAM, Podman, nor Docker found.")
+            self.has_tools = False
+            self.container_tool = None
+            self.use_container = False
 
-    def _get_docker_command(self, cmd, cwd):
+    def _get_container_command(self, cmd, cwd):
         """
-        Constructs the Docker command to run the given shell command inside the container.
+        Constructs the container command (Docker or Podman) to run the given shell command inside the container.
         """
         # We assume the cwd is within the project root or the case directory.
         # To simplify, we mount the case directory to /data in the container
@@ -52,15 +60,18 @@ class FoamDriver:
         # On Mac/Windows Docker Desktop handles this automagically usually, but explicit is good.
         uid_gid_args = []
         if sys.platform == "linux":
-            uid = os.getuid()
-            gid = os.getgid()
-            uid_gid_args = ["-u", f"{uid}:{gid}"]
+            # Only add UID mapping if using Docker.
+            # Podman (rootless) usually handles mapping automatically and passing -u breaks volume permissions.
+            if self.container_tool == "docker":
+                uid = os.getuid()
+                gid = os.getgid()
+                uid_gid_args = ["-u", f"{uid}:{gid}"]
 
         # Mount point: Target path inside container
         container_workdir = "/home/openfoam/run"
 
-        docker_cmd = [
-            "docker", "run", "--rm",
+        container_cmd = [
+            self.container_tool, "run", "--rm",
             "-v", f"{cwd}:{container_workdir}",
             "-w", container_workdir,
         ] + uid_gid_args + [
@@ -68,7 +79,7 @@ class FoamDriver:
             "/bin/bash", "-c", " ".join(cmd)
         ]
 
-        return docker_cmd
+        return container_cmd
 
     def prepare_case(self):
         """
@@ -355,16 +366,14 @@ patches
     def run_command(self, cmd, log_file=None, ignore_error=False, description="Running command"):
         if not self.has_tools:
             if not log_file:
-                print(f"Skipping command {' '.join(cmd)} (no OpenFOAM/Docker tools found).")
+                print(f"Skipping command {' '.join(cmd)} (no OpenFOAM/Container tools found).")
             return False
 
         final_cmd = cmd
-        if self.use_docker:
-            # Wrap in docker call
-            final_cmd = self._get_docker_command(cmd, self.case_dir)
-            # When using Docker, we are effectively running "docker" as the command,
-            # so we shouldn't fail on FileNotFoundError for the inner command.
-            # But subprocess.run will invoke 'docker', which must exist.
+        if self.use_container:
+            # Wrap in container call
+            final_cmd = self._get_container_command(cmd, self.case_dir)
+            # When using container, we are effectively running "container_tool" as the command
 
         # Use passed log_file or fallback to self.log_file
         target_log = log_file if log_file else self.log_file
@@ -373,7 +382,7 @@ patches
             print(f"Running {' '.join(final_cmd)}...")
 
         try:
-            cwd = self.case_dir if not self.use_docker else os.getcwd()
+            cwd = self.case_dir if not self.use_container else os.getcwd()
 
             if log_file:
                 run_command_with_spinner(final_cmd, target_log, cwd=cwd, description=description)
@@ -399,8 +408,8 @@ patches
                 return False
             return True
         except FileNotFoundError:
-            if self.use_docker:
-                print("Error: 'docker' executable not found.")
+            if self.use_container:
+                print(f"Error: '{self.container_tool}' executable not found.")
             else:
                 print(f"Executable {cmd[0]} not found.")
             return False
