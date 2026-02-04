@@ -16,7 +16,8 @@ def main():
     parser.add_argument("--scad-file", type=str, default="corkscrew.scad", help="Path to OpenSCAD file")
     parser.add_argument("--case-dir", type=str, default="corkscrewFilter", help="Path to OpenFOAM case directory")
     parser.add_argument("--output-stl", type=str, default="corkscrew_fluid.stl", help="Output STL filename")
-    parser.add_argument("--dry-run", action="store_true", help="Skip actual OpenFOAM execution")
+    parser.add_argument("--dry-run", action="store_true", help="Skip actual OpenFOAM execution (mocks everything)")
+    parser.add_argument("--skip-cfd", action="store_true", help="Generate geometry but skip CFD simulation")
     args = parser.parse_args()
 
     # Initialize components
@@ -67,6 +68,7 @@ def main():
             current_params,
             output_stl_name=args.output_stl,
             dry_run=args.dry_run,
+            skip_cfd=args.skip_cfd,
             iteration=i
         )
 
@@ -76,7 +78,8 @@ def main():
         if "error" in metrics:
             if metrics["error"] == "environment_missing_tools":
                 print("\nCRITICAL ERROR: OpenFOAM tools not found.")
-                print("Please install OpenFOAM (simpleFoam, blockMesh) or Docker, or run with --dry-run.")
+                print("Please install OpenFOAM (simpleFoam, blockMesh) or Docker.")
+                print("Alternatively, run with --skip-cfd to generate geometry without simulation, or --dry-run for a mock test.")
                 print("Aborting optimization.")
                 break
             elif metrics["error"] == "geometry_generation_failed":
