@@ -11,7 +11,7 @@ except ImportError:
     Image = None
 
 class LLMAgent:
-    def __init__(self, api_key=None, model_name="gemini-1.5-flash"):
+    def __init__(self, api_key=None, model_name="gemini-1.5-flash-001"):
         if not api_key:
             api_key = os.environ.get("GEMINI_API_KEY")
 
@@ -22,7 +22,45 @@ class LLMAgent:
             self.client = genai.Client(api_key=api_key)
 
         self.model_name = model_name
+        self.fallback_models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-1.5-pro", "gemini-1.0-pro"]
         self.history = []
+
+    def _generate_with_retry(self, contents):
+        """
+        Attempts to generate content, retrying with fallback models if a 404 or other client error occurs.
+        """
+        models_to_try = [self.model_name] + self.fallback_models
+
+        for model in models_to_try:
+            try:
+                print(f"Attempting to generate with model: {model}")
+                response = self.client.models.generate_content(
+                    model=model,
+                    contents=contents
+                )
+                return response
+            except Exception as e:
+                print(f"Model {model} failed: {e}")
+                # If it's a 404 Not Found, try next.
+                # For other errors, we might also want to try next or fail.
+                # Assuming try next for robustness.
+                continue
+
+        self._list_available_models()
+        raise Exception("All models failed to generate content.")
+
+    def _list_available_models(self):
+        """
+        Lists available models to help debug 404/not-found errors.
+        """
+        try:
+            print("\n--- Available Models ---")
+            for m in self.client.models.list():
+                if "generateContent" in m.supported_generation_methods:
+                    print(f"- {m.name}")
+            print("------------------------\n")
+        except Exception as e:
+            print(f"Failed to list models: {e}")
 
     def suggest_parameters(self, current_params: Dict[str, Any], metrics: Dict[str, Any], constraints: str = "", image_paths: List[str] = None, history: List[Dict] = None) -> Dict[str, Any]:
         """
@@ -66,10 +104,7 @@ class LLMAgent:
                     print(f"Failed to load image {path}: {e}")
 
         try:
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=content
-            )
+            response = self._generate_with_retry(content)
             text = response.text
             # Extract JSON from potential markdown code blocks
             clean_text = self._extract_json(text)
@@ -81,7 +116,7 @@ class LLMAgent:
                 print("LLM response did not contain 'parameters' field.")
                 return current_params
         except Exception as e:
-            print(f"LLM generation failed: {e}")
+            print(f"LLM generation failed after retries: {e}")
             return current_params
 
     def suggest_campaign(self, history: List[Dict], constraints: str, count: int = 5) -> List[Dict[str, Any]]:
@@ -122,10 +157,7 @@ You must respond with valid JSON only.
 }}
 """
         try:
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=[prompt]
-            )
+            response = self._generate_with_retry([prompt])
             text = response.text
             clean_text = self._extract_json(text)
             data = json.loads(clean_text)
