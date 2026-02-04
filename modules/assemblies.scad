@@ -31,6 +31,10 @@ module ModularFilterAssembly(tube_id, total_length) {
             helix_void_profile_radius_mm + tolerance_channel
         );
     }
+    // --- Optimized Generation (Local Segments) ---
+    // Instead of generating a global MasterHelix and intersecting/differencing it (O(N^2) complexity),
+    // we generate local segments for each bin and spacer with the correct phase alignment.
+    // This reduces complexity to O(N) and avoids massive boolean operations.
 
     union() {
         // --- Create the screw segments (bins) ---
@@ -38,70 +42,84 @@ module ModularFilterAssembly(tube_id, total_length) {
             z_pos = -total_length / 2 + spacer_height_mm + i * (bin_length + spacer_height_mm) + bin_length / 2;
             rot = twist_rate * z_pos;
 
-            translate([0, 0, z_pos]) rotate([0, 0, rot]) {
+            #translate([0, 0, z_pos]) rotate([0, 0, rot]) {
                 intersection() {
                     rotate([0, 0, -rot]) translate([0, 0, -z_pos]) MasterHollowHelix();
                     cylinder(h = bin_length + 0.1, d = tube_id * 2, center = true);
                 }
+            // Generate hollow segment directly with slight overlap for continuity
+            local_h = bin_length + 0.02;
+            local_twist = twist_rate * local_h;
+
+            translate([0, 0, z_pos]) rotate([0, 0, rot - local_twist / 2]) {
+                 HollowHelicalShape(local_h, local_twist, helix_path_radius_mm, helix_profile_radius_mm, helix_void_profile_radius_mm + tolerance_channel);
             }
         }
 
-            // --- Create the spacers ---
-            for (i = [0 : num_bins]) {
-                z_pos = -total_length / 2 + i * (bin_length + spacer_height_mm) + spacer_height_mm / 2;
-                rot = twist_rate * z_pos;
-                is_base = (i == 0);
-                is_top = (i == num_bins);
-                spacer_od = tube_id - tolerance_tube_fit;
+        // --- Create the spacers ---
+        for (i = [0 : num_bins]) {
+            z_pos = -total_length / 2 + i * (bin_length + spacer_height_mm) + spacer_height_mm / 2;
+            rot = twist_rate * z_pos;
+            is_base = (i == 0);
+            is_top = (i == num_bins);
+            spacer_od = tube_id - tolerance_tube_fit;
 
-                translate([0, 0, z_pos]) rotate([0, 0, rot]) {
-                    union() {
-                        difference() {
-                            cylinder(d = spacer_od, h = spacer_height_mm, center = true);
-                            rotate([0, 0, -rot]) translate([0, 0, -z_pos]) MasterSolidHelix();
-                            union(){
-                                OringGroove_OD_Cutter(spacer_od, oring_cross_section_mm);
-                                if ((is_top || is_base) && inlet_type != "none") {
-                                    recess_d = (inlet_type == "threaded" || inlet_type == "pressfit")
-                                        ? threaded_inlet_flange_od + tolerance_socket_fit
-                                        : barb_inlet_flange_od + tolerance_socket_fit;
+            // Generate cutter for spacer hole
+            cut_h = spacer_height_mm + 0.02;
+            cut_twist = twist_rate * cut_h;
 
-                                    if (inlet_type == "barb") {
-                                        // Align recess with the helix interface
-                                        z_interface = is_top ? (spacer_height_mm / 2 - 1) : (-spacer_height_mm / 2 + 2);
-                                        z_recess_pos = is_top ? (spacer_height_mm / 2 - 1) : (-spacer_height_mm / 2);
-                                        ra = twist_rate * z_interface;
+            translate([0, 0, z_pos]) rotate([0, 0, rot]) {
+                union() {
+                    difference() {
+                        cylinder(d = spacer_od, h = spacer_height_mm, center = true);
+                        // Cut with local solid helix segment
+                        rotate([0, 0, -cut_twist / 2])
+                        HelicalShape(cut_h, cut_twist, helix_path_radius_mm, helix_profile_radius_mm);
+                        union(){
+                            OringGroove_OD_Cutter(spacer_od, oring_cross_section_mm);
+                            if ((is_top || is_base) && inlet_type != "none") {
+                                recess_d = (inlet_type == "threaded" || inlet_type == "pressfit")
+                                    ? threaded_inlet_flange_od + tolerance_socket_fit
+                                    : barb_inlet_flange_od + tolerance_socket_fit;
 
-                                        rotate([0, 0, ra]) translate([helix_path_radius_mm, 0, z_recess_pos]) cylinder(d = recess_d, h = 2);
-                                    } else {
-                                        // Standard centered recess for threaded/pressfit
-                                        z_recess_pos = is_top ? (spacer_height_mm / 2 - 1) : (-spacer_height_mm / 2);
-                                        translate([0, 0, z_recess_pos]) cylinder(d = recess_d, h = 2);
-                                    }
+                                if (inlet_type == "barb") {
+                                    // Align recess with the helix interface
+                                    z_interface = is_top ? (spacer_height_mm / 2 - 1) : (-spacer_height_mm / 2 + 2);
+                                    z_recess_pos = is_top ? (spacer_height_mm / 2 - 1) : (-spacer_height_mm / 2);
+                                    ra = twist_rate * z_interface;
+
+                                    rotate([0, 0, ra]) translate([helix_path_radius_mm, 0, z_recess_pos]) cylinder(d = recess_d, h = 2);
+                                } else {
+                                    // Standard centered recess for threaded/pressfit
+                                    z_recess_pos = is_top ? (spacer_height_mm / 2 - 1) : (-spacer_height_mm / 2);
+                                    translate([0, 0, z_recess_pos]) cylinder(d = recess_d, h = 2);
                                 }
                             }
                         }
+                    }
 
-                        if ((is_top || is_base) && inlet_type != "none") {
-                            mirror_vec = [0, 0, is_top ? 0 : 1];
-                            if (inlet_type == "threaded" || inlet_type == "pressfit") {
-                                z_shift = is_top ? spacer_height_mm / 2 : -spacer_height_mm / 2;
-                                translate([0, 0, z_shift]) mirror(mirror_vec) ThreadedInlet();
-                            } else if (inlet_type == "barb") {
-                                z_local = is_top ? (spacer_height_mm / 2 - 1) : (-spacer_height_mm / 2 + 2);
-                                ra = twist_rate * z_local;
-                                rotate([0, 0, ra]) translate([helix_path_radius_mm, 0, z_local]) mirror(mirror_vec) BarbInlet();
-                            }
+                    if ((is_top || is_base) && inlet_type != "none") {
+                        mirror_vec = [0, 0, is_top ? 0 : 1];
+                        if (inlet_type == "threaded" || inlet_type == "pressfit") {
+                            z_shift = is_top ? spacer_height_mm / 2 : -spacer_height_mm / 2;
+                            translate([0, 0, z_shift]) mirror(mirror_vec) ThreadedInlet();
+                        } else if (inlet_type == "barb") {
+                            z_local = is_top ? (spacer_height_mm / 2 - 1) : (-spacer_height_mm / 2 + 2);
+                            ra = twist_rate * z_local;
+                            rotate([0, 0, ra]) translate([helix_path_radius_mm, 0, z_local]) mirror(mirror_vec) BarbInlet();
                         }
+                    }
 
-                        if (SHOW_O_RINGS) { OringVisualizer(spacer_od, oring_cross_section_mm); }
-                        if (ADD_HELICAL_SUPPORT && !is_top) {
-                            translate([0, 0, spacer_height_mm / 2])
-                                HelicalOuterSupport(spacer_od, bin_length, support_rib_thickness_mm, twist_rate);
-                        }
+                    if (SHOW_O_RINGS) { OringVisualizer(spacer_od, oring_cross_section_mm); }
+                    // Disable support generation during CFD volume creation to prevent timeouts due to CSG complexity
+                    if (ADD_HELICAL_SUPPORT && !GENERATE_CFD_VOLUME && !is_top) {
+                        translate([0, 0, spacer_height_mm / 2])
+                            rotate([0, 0, twist_rate * spacer_height_mm / 2])
+                            HelicalOuterSupport(spacer_od, bin_length, support_rib_thickness_mm, twist_rate);
                     }
                 }
             }
+        }
     }
 }
 
