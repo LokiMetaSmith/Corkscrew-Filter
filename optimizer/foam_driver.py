@@ -18,6 +18,18 @@ class FoamDriver:
         self.use_container = False
         self._check_execution_environment()
 
+    def _is_tool_usable(self, tool):
+        """
+        Checks if the container tool is actually usable (can connect to daemon/vm).
+        """
+        try:
+            # Check if we can get info from the daemon/machine
+            # Use short timeout because we don't want to wait long if it's hanging
+            subprocess.run([tool, "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=5)
+            return True
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+            return False
+
     def _check_execution_environment(self):
         """
         Determines the execution environment (Native, Podman, or Docker).
@@ -28,18 +40,24 @@ class FoamDriver:
             self.has_tools = True
             self.container_tool = None
             self.use_container = False
-        elif shutil.which("podman"):
+        elif shutil.which("podman") and self._is_tool_usable("podman"):
             print("Native OpenFOAM not found. Using Podman wrapper.")
             self.has_tools = True
             self.container_tool = "podman"
             self.use_container = True
-        elif shutil.which("docker"):
+        elif shutil.which("docker") and self._is_tool_usable("docker"):
             print("Native OpenFOAM not found. Using Docker wrapper.")
             self.has_tools = True
             self.container_tool = "docker"
             self.use_container = True
         else:
-            print("Warning: Neither native OpenFOAM, Podman, nor Docker found.")
+            # Diagnostic messages
+            if shutil.which("podman"):
+                print("Warning: Podman found but not responsive. Check 'podman machine start'.")
+            if shutil.which("docker"):
+                print("Warning: Docker found but not responsive. Check Docker Desktop/daemon.")
+
+            print("Warning: Neither native OpenFOAM, responsive Podman, nor Docker found.")
             self.has_tools = False
             self.container_tool = None
             self.use_container = False
