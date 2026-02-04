@@ -32,29 +32,29 @@ ADD_DEBRIS_EXIT_CHANNELS = false; // NEW: If true, cuts channels for debris to e
 // --- Visual/Debug Options ---
 SHOW_O_RINGS = true;             // If true, renders red O-rings in their grooves for visualization.
 USE_TRANSLUCENCY = false;        // If true, makes certain parts semi-transparent to see internal geometry.
-CUT_FOR_VISIBILITY = true;      // If true, cuts the model in half (removes Y>0) to allow inspection of internal geometry.
+CUT_FOR_VISIBILITY = false;      // If true, cuts the model in half (removes Y>0) to allow inspection of internal geometry.
 
 // =============================================================================
 // --- B. Model Parameters ---
 // =============================================================================
 
 // --- General & Precision ---
-high_res_fn = is_undef(high_res_fn) ? 200 : high_res_fn; // Fragment resolution for final renders ($fn). Higher values create smoother curves.
-if (high_res_fn > 60) {
+_requested_high_res_fn = is_undef(high_res_fn) ? 200 : high_res_fn; // Fragment resolution for final renders ($fn). Higher values create smoother curves.
+if (_requested_high_res_fn > 60) {
     echo("WARNING: high_res_fn capped at 60 for performance stability in WASM environment.");
 }
-high_res_fn = min(high_res_fn, 60); // Cap resolution to prevent timeouts in WASM environment
+_actual_high_res_fn = min(_requested_high_res_fn, 60); // Cap resolution to prevent timeouts in WASM environment
 low_res_fn = is_undef(low_res_fn) ? 10 : low_res_fn;   // Fragment resolution for previews. Lower values provide faster previews.
-$fn = $preview ? low_res_fn : high_res_fn; // OpenSCAD automatically uses the appropriate value.
+$fn = $preview ? low_res_fn : _actual_high_res_fn; // OpenSCAD automatically uses the appropriate value.
 
 // --- Tube & Main Assembly Parameters ---
 tube_od_mm = 32;                 // The outer diameter of the tube the filter assembly will be inserted into.
 tube_wall_mm = 1;                // The wall thickness of the tube. Used to calculate the inner diameter.
-insert_length_mm = 350 / 2;      // The total length of the filter insert from end to end.
+insert_length_mm = 50 ;      // The total length of the filter insert from end to end.
 num_bins = 1;                    // The number of separate helical screw segments in the modular assembly.
 
 // --- Helical Screw Parameters ---
-number_of_complete_revolutions = 12; // How many full 360-degree turns the screw makes over its total length.
+number_of_complete_revolutions = 1; // How many full 360-degree turns the screw makes over its total length.
 helix_path_radius_mm = 1.8;      // The radius of the helical path, measured from the central axis to the center of the screw's profile.
 helix_profile_radius_mm = 1.8;   // The radius of the circular cross-section of the solid screw itself.
 helix_void_profile_radius_mm = 1; // The radius of the circular cross-section of the channel (the void) inside the screw.
