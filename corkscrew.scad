@@ -51,8 +51,10 @@ module GenerateSelectedPart() {
             cartridge_od = filter_holder_cartridge_od,
             barb_od = barb_inlet_id_mm + 1.5, // reuse barb inlet param or add specific one
             barb_id = barb_inlet_id_mm,
-            thread_inner = filter_holder_thread_inner,
-            thread_outer = filter_holder_thread_outer,
+            cartridge_thread_inner = filter_holder_cartridge_thread_inner,
+            cartridge_thread_outer = filter_holder_cartridge_thread_outer,
+            tube_thread_inner = filter_holder_tube_thread_inner,
+            tube_thread_outer = filter_holder_tube_thread_outer,
             oring_cs = oring_cross_section_mm,
             tube_wall = tube_wall_mm
         );
