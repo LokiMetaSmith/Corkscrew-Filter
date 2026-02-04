@@ -20,6 +20,17 @@ module ModularFilterAssembly(tube_id, total_length) {
     bin_length = total_screw_length / num_bins;
     twist_rate = (360 * number_of_complete_revolutions) / total_length; // degrees per mm
 
+    // --- Master Helix Definitions ---
+    module MasterSolidHelix() { Corkscrew(total_length + 2, twist_rate * (total_length + 2), void = false); }
+    module MasterHollowHelix() {
+        HollowHelicalShape(
+            total_length + 2,
+            twist_rate * (total_length + 2),
+            helix_path_radius_mm,
+            helix_profile_radius_mm,
+            helix_void_profile_radius_mm + tolerance_channel
+        );
+    }
     // --- Optimized Generation (Local Segments) ---
     // Instead of generating a global MasterHelix and intersecting/differencing it (O(N^2) complexity),
     // we generate local segments for each bin and spacer with the correct phase alignment.
@@ -31,6 +42,11 @@ module ModularFilterAssembly(tube_id, total_length) {
             z_pos = -total_length / 2 + spacer_height_mm + i * (bin_length + spacer_height_mm) + bin_length / 2;
             rot = twist_rate * z_pos;
 
+            #translate([0, 0, z_pos]) rotate([0, 0, rot]) {
+                intersection() {
+                    rotate([0, 0, -rot]) translate([0, 0, -z_pos]) MasterHollowHelix();
+                    cylinder(h = bin_length + 0.1, d = tube_id * 2, center = true);
+                }
             // Generate hollow segment directly with slight overlap for continuity
             local_h = bin_length + 0.02;
             local_twist = twist_rate * local_h;

@@ -24,7 +24,9 @@ include <modules/filter_holder.scad>
 // based on the `part_to_generate` variable set in `config.scad`.
 
 module GenerateSelectedPart() {
-    if (part_to_generate == "modular_filter_assembly") {
+    target_part = is_undef(part_to_generate) ? default_part_to_generate : part_to_generate;
+
+    if (target_part == "modular_filter_assembly") {
         tube_id = tube_od_mm - (2 * tube_wall_mm);
         if (GENERATE_CFD_VOLUME) {
             difference() {
@@ -34,18 +36,18 @@ module GenerateSelectedPart() {
         } else {
             ModularFilterAssembly(tube_id, insert_length_mm);
         }
-    } else if (part_to_generate == "hex_array_filter") {
+    } else if (target_part == "hex_array_filter") {
         HexFilterArray(hex_array_layers);
-    } else if (part_to_generate == "single_cell_filter") {
+    } else if (target_part == "single_cell_filter") {
         SingleCellFilter();
-    } else if (part_to_generate == "hose_adapter_cap") {
+    } else if (target_part == "hose_adapter_cap") {
         HoseAdapterEndCap(tube_od_mm, adapter_hose_id_mm, oring_cross_section_mm, tube_wall_mm, ADAPTER_AXIAL_SEAL);
-    } else if (part_to_generate == "flat_end_screw") {
+    } else if (target_part == "flat_end_screw") {
         total_twist = 360 * number_of_complete_revolutions;
         FlatEndScrew(insert_length_mm, total_twist, num_bins);
-    } else if (part_to_generate == "custom_coupling") {
+    } else if (target_part == "custom_coupling") {
         CustomCoupling();
-    } else if (part_to_generate == "filter_holder") {
+    } else if (target_part == "filter_holder") {
         FilterHolder(
             tube_id = tube_od_mm - (2 * tube_wall_mm),
             cartridge_od = filter_holder_cartridge_od,
