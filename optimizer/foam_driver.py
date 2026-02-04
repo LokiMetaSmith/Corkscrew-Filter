@@ -30,6 +30,19 @@ class FoamDriver:
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
             return False
 
+    def _try_start_podman(self):
+        print("Attempting to start Podman machine...")
+        try:
+            subprocess.run(["podman", "machine", "start"], check=True, timeout=120)
+            print("Podman machine start command finished. Verifying...")
+            if self._is_tool_usable("podman"):
+                return True
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+
+        print("Failed to auto-start Podman.")
+        return False
+
     def _check_execution_environment(self):
         """
         Determines the execution environment (Native, Podman, or Docker).
@@ -40,7 +53,7 @@ class FoamDriver:
             self.has_tools = True
             self.container_tool = None
             self.use_container = False
-        elif shutil.which("podman") and self._is_tool_usable("podman"):
+        elif shutil.which("podman") and (self._is_tool_usable("podman") or self._try_start_podman()):
             print("Native OpenFOAM not found. Using Podman wrapper.")
             self.has_tools = True
             self.container_tool = "podman"
@@ -94,7 +107,7 @@ class FoamDriver:
             "-w", container_workdir,
         ] + uid_gid_args + [
             self.docker_image,
-            "/bin/bash", "-lc", " ".join(cmd)
+            "/bin/bash", "-lc", f"cd {container_workdir} && " + " ".join(cmd)
         ]
 
         return container_cmd
