@@ -15,15 +15,16 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-surface         "corkscrew_fluid.stl";
-
-extractionMethod    extractFromSurface;
-
-extractFromSurfaceCoeffs
+corkscrew_fluid.stl
 {
-    includedAngle   150;
-}
+    extractionMethod    extractFromSurface;
 
-writeObj        true;
+    extractFromSurfaceCoeffs
+    {
+        includedAngle   150;
+    }
+
+    writeObj        true;
+}
 
 // ************************************************************************* //
