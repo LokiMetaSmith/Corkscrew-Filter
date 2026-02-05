@@ -37,6 +37,12 @@ boundaryField
         type            nutkWallFunction;
         value           uniform 0;
     }
+
+    corkscrew
+    {
+        type            nutkWallFunction;
+        value           uniform 0;
+    }
 }
 
 // ************************************************************************* //

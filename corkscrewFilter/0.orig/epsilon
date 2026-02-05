@@ -37,6 +37,12 @@ boundaryField
         type            epsilonWallFunction;
         value           uniform 14.8;
     }
+
+    corkscrew
+    {
+        type            epsilonWallFunction;
+        value           uniform 14.8;
+    }
 }
 
 // ************************************************************************* //

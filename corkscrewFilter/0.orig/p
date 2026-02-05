@@ -35,6 +35,11 @@ boundaryField
     {
         type            zeroGradient;
     }
+
+    corkscrew
+    {
+        type            zeroGradient;
+    }
 }
 
 // ************************************************************************* //

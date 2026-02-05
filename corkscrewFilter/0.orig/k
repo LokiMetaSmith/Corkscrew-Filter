@@ -37,6 +37,12 @@ boundaryField
         type            kqRWallFunction;
         value           uniform 0.09375;
     }
+
+    corkscrew
+    {
+        type            kqRWallFunction;
+        value           uniform 0.09375;
+    }
 }
 
 // ************************************************************************* //
