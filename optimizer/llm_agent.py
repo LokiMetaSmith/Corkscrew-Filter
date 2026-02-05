@@ -11,7 +11,7 @@ except ImportError:
     Image = None
 
 class LLMAgent:
-    def __init__(self, api_key=None, model_name="gemini-1.5-flash-001"):
+    def __init__(self, api_key=None, model_name="gemini-2.5-flash"):
         if not api_key:
             api_key = os.environ.get("GEMINI_API_KEY")
 
@@ -22,7 +22,7 @@ class LLMAgent:
             self.client = genai.Client(api_key=api_key)
 
         self.model_name = model_name
-        self.fallback_models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.5-flash-latest", "gemini-1.5-pro", "gemini-1.0-pro"]
+        self.fallback_models = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-flash-latest", "gemini-pro-latest", "gemini-1.5-flash"]
         self.history = []
 
     def _generate_with_retry(self, contents):
