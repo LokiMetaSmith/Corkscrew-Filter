@@ -82,6 +82,9 @@ addLayersControls
     minMedianAxisAngle 90;
     nBufferCellsNoExtrude 0;
     nLayerIter 50;
+    nSmoothSurfaceNormals 1;
+    nSmoothNormals 3;
+    nSmoothThickness 10;
 }
 
 snapControls
