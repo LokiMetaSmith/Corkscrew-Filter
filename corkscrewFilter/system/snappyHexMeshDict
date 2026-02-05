@@ -88,6 +88,7 @@ snapControls
 
 meshQualityControls
 {
+    nSmoothScale 4;
     errorReduction 0.75;
     maxNonOrtho 65;
     maxBoundarySkewness 20;
