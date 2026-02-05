@@ -198,6 +198,52 @@ class ScadDriver:
             print(f"Error reading STL bounds: {e}")
             return None, None
 
+    def get_internal_point(self, stl_path, num_samples=5000):
+        """
+        Finds a point strictly inside the STL mesh.
+        Used to identify 'locationInMesh' for snappyHexMesh.
+
+        Args:
+            stl_path (str): Path to the STL file.
+            num_samples (int): Number of random points to sample.
+
+        Returns:
+            list: [x, y, z] coordinate of an internal point, or None if not found.
+        """
+        try:
+            mesh = trimesh.load(stl_path)
+            if isinstance(mesh, trimesh.Scene):
+                if len(mesh.geometry) == 0:
+                     return None
+                mesh = trimesh.util.concatenate(tuple(mesh.geometry.values()))
+
+            if not mesh.is_watertight:
+                print(f"Warning: Mesh {stl_path} is not watertight. 'contains' check might be unreliable.")
+
+            # Get bounds
+            min_pt, max_pt = mesh.bounds
+
+            # Create random points
+            points = np.random.uniform(min_pt, max_pt, (num_samples, 3))
+
+            # Check containment
+            # trimesh uses ray tracing for this
+            contains = mesh.contains(points)
+
+            # Find first True
+            idx = np.where(contains)[0]
+            if len(idx) > 0:
+                point = points[idx[0]].tolist()
+                print(f"Found internal point: {point}")
+                return point
+
+            print(f"Warning: Could not find internal point after {num_samples} samples.")
+            return None
+
+        except Exception as e:
+            print(f"Error finding internal point: {e}")
+            return None
+
 if __name__ == "__main__":
     # Test stub
     driver = ScadDriver("corkscrew.scad")

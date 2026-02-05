@@ -71,6 +71,15 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
             else:
                 foam_driver.update_blockMesh(bounds)
 
+                # Try to find an internal point using robust ray tracing (trimesh)
+                internal_point = scad_driver.get_internal_point(stl_path)
+                if internal_point:
+                    # Pass internal point as custom_location
+                    foam_driver.update_snappyHexMesh_location(bounds, custom_location=internal_point)
+                else:
+                    print("Warning: Could not find internal point. Falling back to bounds-based location.")
+                    # Fallback to legacy behavior (derived from bounds)
+                    foam_driver.update_snappyHexMesh_location(bounds)
                 # Calculate custom location for snappyHexMesh to ensure we seed inside the helical channel
                 custom_location = None
                 part = params.get("part_to_generate", "modular_filter_assembly")
