@@ -15,3 +15,7 @@ logs/
 .venv/*
 *.bak
 *.stl
+corkscrewFilter/constant/extendedFeatureEdgeMesh/
+corkscrewFilter/constant/polyMesh/
+corkscrewFilter/constant/triSurface/*.eMesh
+optimization_log.jsonl
