@@ -32,9 +32,9 @@ module ModularFilterAssembly(tube_id, total_length) {
         );
     }
     // --- Optimized Generation (Local Segments) ---
-    // Instead of generating a global MasterHelix and intersecting/differencing it (O(N^2) complexity),
-    // we generate local segments for each bin and spacer with the correct phase alignment.
-    // This reduces complexity to O(N) and avoids massive boolean operations.
+    // We use the Master Helix method to ensure perfect alignment.
+    // Screw segments are intersections of the MasterHollowHelix and a defining cylinder.
+    // Spacer holes are differences of the MasterSolidHelix.
 
     union() {
         // --- Create the screw segments (bins) ---
@@ -42,12 +42,11 @@ module ModularFilterAssembly(tube_id, total_length) {
             z_pos = -total_length / 2 + spacer_height_mm + i * (bin_length + spacer_height_mm) + bin_length / 2;
             rot = twist_rate * z_pos;
 
-            // Generate hollow segment directly with slight overlap for continuity
-            local_h = bin_length + 0.02;
-            local_twist = twist_rate * local_h;
-
-            translate([0, 0, z_pos]) rotate([0, 0, rot - local_twist / 2]) {
-                 HollowHelicalShape(local_h, local_twist, helix_path_radius_mm, helix_profile_radius_mm, helix_void_profile_radius_mm + tolerance_channel);
+            translate([0, 0, z_pos]) rotate([0, 0, rot]) {
+                 intersection() {
+                    rotate([0, 0, -rot]) translate([0, 0, -z_pos]) MasterHollowHelix();
+                    cylinder(h = bin_length + 0.1, d = tube_id * 2, center = true);
+                 }
             }
         }
 
@@ -59,17 +58,12 @@ module ModularFilterAssembly(tube_id, total_length) {
             is_top = (i == num_bins);
             spacer_od = tube_id - tolerance_tube_fit;
 
-            // Generate cutter for spacer hole
-            cut_h = spacer_height_mm + 0.02;
-            cut_twist = twist_rate * cut_h;
-
             translate([0, 0, z_pos]) rotate([0, 0, rot]) {
                 union() {
                     difference() {
                         cylinder(d = spacer_od, h = spacer_height_mm, center = true);
-                        // Cut with local solid helix segment
-                        rotate([0, 0, -cut_twist / 2])
-                        HelicalShape(cut_h, cut_twist, helix_path_radius_mm, helix_profile_radius_mm);
+                        // Cut with MasterSolidHelix
+                        rotate([0, 0, -rot]) translate([0, 0, -z_pos]) MasterSolidHelix();
                         union(){
                             OringGroove_OD_Cutter(spacer_od, oring_cross_section_mm);
                             if ((is_top || is_base) && inlet_type != "none") {
