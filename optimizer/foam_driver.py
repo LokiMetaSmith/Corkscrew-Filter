@@ -253,28 +253,39 @@ functions
         with open(bm_path, 'w') as f:
             f.write(content)
 
-    def update_snappyHexMesh_location(self, bounds):
+    def update_snappyHexMesh_location(self, location):
         """
-        Updates locationInMesh in system/snappyHexMeshDict to be inside the fluid domain.
-        Assumes fluid is an annulus/void inside a tube, so we pick a point near the outer boundary.
+        Updates locationInMesh in system/snappyHexMeshDict.
+
+        Args:
+            location: Either a list/tuple of length 3 (explicit point [x, y, z]),
+                      or a tuple of length 2 (bounds: (min_pt, max_pt)).
         """
-        if bounds is None or bounds[0] is None:
-             return
+        location_str = ""
 
-        min_pt, max_pt = bounds
+        # Check if it's an explicit point [x, y, z]
+        if isinstance(location, (list, tuple)) and len(location) == 3 and isinstance(location[0], (int, float)):
+             location_str = f"({location[0]:.4f} {location[1]:.4f} {location[2]:.4f})"
 
-        # Calculate a safe point.
-        # We assume the geometry is centered at (0,0,Z).
-        # We want a point at radius ~80% of the bounds.
-        # max_pt[0] is roughly the radius.
+        # Check if it's bounds (min, max)
+        elif isinstance(location, (list, tuple)) and len(location) == 2:
+            bounds = location
+            if bounds is None or bounds[0] is None:
+                 return
 
-        x_target = max_pt[0] * 0.8
+            min_pt, max_pt = bounds
 
-        # Ensure it's not too small (e.g. if bounds are tiny)
-        if x_target < 2.0:
-            x_target = 5.0
+            # Legacy logic: assume annulus/void inside tube
+            x_target = max_pt[0] * 0.8
 
-        location = f"({x_target:.3f} 0 0)"
+            if x_target < 2.0:
+                x_target = 5.0
+
+            location_str = f"({x_target:.3f} 0 0)"
+
+        else:
+            print(f"Invalid location format passed to update_snappyHexMesh_location: {location}")
+            return
 
         shm_path = os.path.join(self.case_dir, "system", "snappyHexMeshDict")
         if not os.path.exists(shm_path):
@@ -286,7 +297,7 @@ functions
         # Regex to find locationInMesh (x y z);
         pattern = re.compile(r"locationInMesh\s+\(.*\);")
         if pattern.search(content):
-            content = pattern.sub(f"locationInMesh {location};", content)
+            content = pattern.sub(f"locationInMesh {location_str};", content)
 
         with open(shm_path, 'w') as f:
             f.write(content)

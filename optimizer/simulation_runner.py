@@ -69,7 +69,14 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                 print("Failed to get bounds. Using default.")
             else:
                 foam_driver.update_blockMesh(bounds)
-                foam_driver.update_snappyHexMesh_location(bounds)
+
+                # Try to find an internal point
+                internal_point = scad_driver.get_internal_point(stl_path)
+                if internal_point:
+                    foam_driver.update_snappyHexMesh_location(internal_point)
+                else:
+                    print("Warning: Could not find internal point. Falling back to bounds-based location.")
+                    foam_driver.update_snappyHexMesh_location(bounds)
         else:
             print("[Reuse Mesh] Skipping BlockMesh update.")
     elif skip_cfd:
