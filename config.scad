@@ -32,7 +32,7 @@ ADD_DEBRIS_EXIT_CHANNELS = true; // NEW: If true, cuts channels for debris to ex
 // --- Visual/Debug Options ---
 SHOW_O_RINGS = true;             // If true, renders red O-rings in their grooves for visualization.
 USE_TRANSLUCENCY = true;        // If true, makes certain parts semi-transparent to see internal geometry.
-CUT_FOR_VISIBILITY = true;      // If true, cuts the model in half (removes Y>0) to allow inspection of internal geometry.
+CUT_FOR_VISIBILITY = false;      // If true, cuts the model in half (removes Y>0) to allow inspection of internal geometry.
 
 // =============================================================================
 // --- B. Model Parameters ---

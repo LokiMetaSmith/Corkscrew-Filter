@@ -37,6 +37,7 @@ module ModularFilterAssembly(tube_id, total_length) {
     // Screw segments are intersections of the MasterHollowHelix and a defining cylinder.
     // Spacer holes are differences of the MasterSolidHelix.
 
+    color(USE_TRANSLUCENCY ? [0.9, 0.9, 0.9, 0.5] : "Gainsboro")
     union() {
         // --- Create the screw segments (bins) ---
         for (i = [0 : num_bins - 1]) {
@@ -44,9 +45,16 @@ module ModularFilterAssembly(tube_id, total_length) {
             rot = twist_rate * z_pos;
 
             translate([0, 0, z_pos]) rotate([0, 0, rot]) {
-                 intersection() {
-                    rotate([0, 0, -rot]) translate([0, 0, -z_pos]) MasterHollowHelix();
-                    cylinder(h = bin_length + 0.1, d = tube_id * 2, center = true);
+                 difference() {
+                     intersection() {
+                        rotate([0, 0, -rot]) translate([0, 0, -z_pos]) MasterHollowHelix();
+                        cylinder(h = bin_length + 0.1, d = tube_id * 2, center = true);
+                     }
+                     if (slit_type == "simple") {
+                         SimpleSlitCutter(bin_length, twist_rate * bin_length, 2 * (helix_path_radius_mm + helix_profile_radius_mm), 1);
+                     } else if (slit_type == "ramped") {
+                         RampedSlitKnife(bin_length, twist_rate * bin_length, 2 * (helix_path_radius_mm + helix_profile_radius_mm), 1);
+                     }
                  }
             }
         }

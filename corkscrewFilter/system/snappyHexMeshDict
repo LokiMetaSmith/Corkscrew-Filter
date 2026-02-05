@@ -91,7 +91,7 @@ addLayersControls
 snapControls
 {
     nSmoothPatch 3;
-    tolerance 2.0;
+    tolerance 1.0;
     nSolveIter 30;
     nRelaxIter 5;
 }

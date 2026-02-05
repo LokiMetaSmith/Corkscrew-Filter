@@ -202,7 +202,7 @@ functions
         with open(control_dict, 'w') as f:
             f.write(content)
 
-    def update_blockMesh(self, bounds, margin=(1.2, 1.2, 0.95)):
+    def update_blockMesh(self, bounds, margin=(1.2, 1.2, 0.9)):
         """
         Updates system/blockMeshDict with new bounds.
         """
@@ -253,28 +253,32 @@ functions
         with open(bm_path, 'w') as f:
             f.write(content)
 
-    def update_snappyHexMesh_location(self, bounds):
+    def update_snappyHexMesh_location(self, bounds, custom_location=None):
         """
         Updates locationInMesh in system/snappyHexMeshDict to be inside the fluid domain.
-        Assumes fluid is an annulus/void inside a tube, so we pick a point near the outer boundary.
+        If custom_location is provided (tuple/list of x,y,z), it uses that.
+        Otherwise, assumes fluid is an annulus/void inside a tube.
         """
-        if bounds is None or bounds[0] is None:
-             return
+        if custom_location:
+            location = f"({custom_location[0]:.3f} {custom_location[1]:.3f} {custom_location[2]:.3f})"
+        else:
+            if bounds is None or bounds[0] is None:
+                return
 
-        min_pt, max_pt = bounds
+            min_pt, max_pt = bounds
 
-        # Calculate a safe point.
-        # We assume the geometry is centered at (0,0,Z).
-        # We want a point at radius ~80% of the bounds.
-        # max_pt[0] is roughly the radius.
+            # Calculate a safe point.
+            # We assume the geometry is centered at (0,0,Z).
+            # We want a point at radius ~80% of the bounds.
+            # max_pt[0] is roughly the radius.
 
-        x_target = max_pt[0] * 0.8
+            x_target = max_pt[0] * 0.8
 
-        # Ensure it's not too small (e.g. if bounds are tiny)
-        if x_target < 2.0:
-            x_target = 5.0
+            # Ensure it's not too small (e.g. if bounds are tiny)
+            if x_target < 2.0:
+                x_target = 5.0
 
-        location = f"({x_target:.3f} 0 0)"
+            location = f"({x_target:.3f} 0 0)"
 
         shm_path = os.path.join(self.case_dir, "system", "snappyHexMeshDict")
         if not os.path.exists(shm_path):
