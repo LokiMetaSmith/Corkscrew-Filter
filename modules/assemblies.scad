@@ -22,6 +22,7 @@ module ModularFilterAssembly(tube_id, total_length) {
 
     // --- Master Helix Definitions ---
     module MasterSolidHelix() { Corkscrew(total_length + 2, twist_rate * (total_length + 2), void = false); }
+    module MasterVoidHelix() { Corkscrew(total_length + 2, twist_rate * (total_length + 2), void = true); }
     module MasterHollowHelix() {
         HollowHelicalShape(
             total_length + 2,
@@ -62,8 +63,8 @@ module ModularFilterAssembly(tube_id, total_length) {
                 union() {
                     difference() {
                         cylinder(d = spacer_od, h = spacer_height_mm, center = true);
-                        // Cut with MasterSolidHelix
-                        rotate([0, 0, -rot]) translate([0, 0, -z_pos]) MasterSolidHelix();
+                        // Cut with MasterVoidHelix (cut the inner channel, leaving the wall material)
+                        rotate([0, 0, -rot]) translate([0, 0, -z_pos]) MasterVoidHelix();
                         union(){
                             OringGroove_OD_Cutter(spacer_od, oring_cross_section_mm);
                             if ((is_top || is_base) && inlet_type != "none") {
