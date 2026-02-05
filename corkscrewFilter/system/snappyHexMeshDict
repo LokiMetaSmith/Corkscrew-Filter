@@ -21,8 +21,6 @@ castellatedMesh true;
 snap            true;
 addLayers       true;
 
-mergeTolerance  1e-6;
-
 geometry
 {
     corkscrew_fluid.stl
@@ -34,6 +32,7 @@ geometry
 
 castellatedMeshControls
 {
+    allowFreeStandingZoneFaces true;
     maxLocalCells 1000000;
     maxGlobalCells 2000000;
     minRefinementCells 10;
