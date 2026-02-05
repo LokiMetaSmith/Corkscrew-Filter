@@ -48,8 +48,8 @@ def test_internal_point_and_location_update():
 
         foam_driver = FoamDriver(case_dir)
 
-        # Update with our point
-        foam_driver.update_snappyHexMesh_location(point)
+        # Update with our point using new signature
+        foam_driver.update_snappyHexMesh_location(None, custom_location=point)
 
         # Check file content
         with open(shm_path, "r") as f:

@@ -17,7 +17,8 @@ class TestSimulationIntegration(unittest.TestCase):
 
         # Setup return values
         mock_scad.generate_stl.return_value = True
-        mock_scad.get_bounds.return_value = ([-10, -10, -10], [10, 10, 10])
+        bounds = ([-10, -10, -10], [10, 10, 10])
+        mock_scad.get_bounds.return_value = bounds
         # Simulate finding a point
         internal_point = [1.0, 2.0, 3.0]
         mock_scad.get_internal_point.return_value = internal_point
@@ -40,7 +41,8 @@ class TestSimulationIntegration(unittest.TestCase):
         mock_scad.get_internal_point.assert_called()
 
         # Verify update_snappyHexMesh_location was called with the point
-        mock_foam.update_snappyHexMesh_location.assert_called_with(internal_point)
+        # The new signature is (bounds, custom_location=internal_point)
+        mock_foam.update_snappyHexMesh_location.assert_called_with(bounds, custom_location=internal_point)
 
         print("Integration test passed: update_snappyHexMesh_location called with internal point.")
 
@@ -66,7 +68,7 @@ class TestSimulationIntegration(unittest.TestCase):
 
         mock_scad.get_internal_point.assert_called()
 
-        # Verify update_snappyHexMesh_location was called with bounds
+        # Verify update_snappyHexMesh_location was called with bounds only
         mock_foam.update_snappyHexMesh_location.assert_called_with(bounds)
 
         print("Integration fallback test passed: update_snappyHexMesh_location called with bounds.")

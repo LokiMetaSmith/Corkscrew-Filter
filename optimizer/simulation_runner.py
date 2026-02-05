@@ -1,5 +1,6 @@
 import os
 import time
+import math
 from utils import Timer
 
 def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False, skip_cfd=False, iteration=0, reuse_mesh=False):
@@ -70,12 +71,14 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
             else:
                 foam_driver.update_blockMesh(bounds)
 
-                # Try to find an internal point
+                # Try to find an internal point using robust ray tracing (trimesh)
                 internal_point = scad_driver.get_internal_point(stl_path)
                 if internal_point:
-                    foam_driver.update_snappyHexMesh_location(internal_point)
+                    # Pass internal point as custom_location
+                    foam_driver.update_snappyHexMesh_location(bounds, custom_location=internal_point)
                 else:
                     print("Warning: Could not find internal point. Falling back to bounds-based location.")
+                    # Fallback to legacy behavior (derived from bounds)
                     foam_driver.update_snappyHexMesh_location(bounds)
         else:
             print("[Reuse Mesh] Skipping BlockMesh update.")
