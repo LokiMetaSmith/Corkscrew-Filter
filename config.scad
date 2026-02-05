@@ -12,7 +12,7 @@
 // This variable controls which component is rendered.
 part_options = ["modular_filter_assembly", "hex_array_filter", "single_cell_filter", "hose_adapter_cap", "flat_end_screw", "filter_holder", "custom_coupling"];
 // We use is_undef to prevent overwriting if this file is included after variables are set.
-default_part_to_generate = part_options[5];
+default_part_to_generate = part_options[0];
 
 // --- 2. Feature Flags ---
 // These flags toggle optional features on the selected model.
@@ -25,14 +25,14 @@ ADD_HELICAL_SUPPORT = true;      // If true, adds a lattice-like support structu
 
 // --- Hex/Single Cell Features ---
 slit_options = ["none", "simple", "ramped"];
-slit_type = slit_options[2];            // Defines the type of slit cut into the helical ramps. ["none", "simple", "ramped"]
+slit_type = slit_options[1];            // Defines the type of slit cut into the helical ramps. ["none", "simple", "ramped"]
 ADD_OUTER_O_RINGS = true;        // If true, adds O-Ring grooves to the outer hexagonal casing.
-ADD_DEBRIS_EXIT_CHANNELS = false; // NEW: If true, cuts channels for debris to exit the hex array frame.
+ADD_DEBRIS_EXIT_CHANNELS = true; // NEW: If true, cuts channels for debris to exit the hex array frame.
 
 // --- Visual/Debug Options ---
 SHOW_O_RINGS = true;             // If true, renders red O-rings in their grooves for visualization.
-USE_TRANSLUCENCY = false;        // If true, makes certain parts semi-transparent to see internal geometry.
-CUT_FOR_VISIBILITY = false;      // If true, cuts the model in half (removes Y>0) to allow inspection of internal geometry.
+USE_TRANSLUCENCY = true;        // If true, makes certain parts semi-transparent to see internal geometry.
+CUT_FOR_VISIBILITY = true;      // If true, cuts the model in half (removes Y>0) to allow inspection of internal geometry.
 
 // =============================================================================
 // --- B. Model Parameters ---
@@ -51,7 +51,7 @@ $fn = $preview ? low_res_fn : _actual_high_res_fn; // OpenSCAD automatically use
 tube_od_mm = 32;                 // The outer diameter of the tube the filter assembly will be inserted into.
 tube_wall_mm = 1;                // The wall thickness of the tube. Used to calculate the inner diameter.
 insert_length_mm = 50 ;      // The total length of the filter insert from end to end.
-num_bins = 1;                    // The number of separate helical screw segments in the modular assembly.
+num_bins = 3;                    // The number of separate helical screw segments in the modular assembly.
 
 // --- Helical Screw Parameters ---
 number_of_complete_revolutions = 1; // How many full 360-degree turns the screw makes over its total length.
