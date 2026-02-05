@@ -71,37 +71,45 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
             else:
                 foam_driver.update_blockMesh(bounds)
 
-                # Calculate custom location for snappyHexMesh to ensure we seed inside the helical channel
-                custom_location = None
-                part = params.get("part_to_generate", "modular_filter_assembly")
-                if part == "modular_filter_assembly":
-                    try:
-                        L = float(params.get("insert_length_mm", 50))
-                        revs = float(params.get("number_of_complete_revolutions", 2))
-                        path_r = float(params.get("helix_path_radius_mm", 1.8))
+                # 1. Try to find an internal point using robust ray tracing (trimesh)
+                custom_location = scad_driver.get_internal_point(stl_path)
 
-                        # Calculate twist angle at Z=0 (center)
-                        # The helix rotates by total_twist over height H.
-                        # Total height of helix is L + 2 (from MasterHollowHelix logic).
-                        # Twist rate = 360 * revs / L.
-                        # Total twist = twist_rate * (L + 2).
-                        # At center (Z=0), rotation is total_twist / 2 (assuming linear_extrude center=true).
+                if custom_location:
+                    print(f"Using ray-traced internal point: {custom_location}")
+                else:
+                    print("Warning: Could not find internal point using ray tracing. Attempting fallback calculation.")
 
-                        twist_rate = 360.0 * revs / L
-                        total_twist = twist_rate * (L + 2.0)
-                        angle_at_center_deg = total_twist / 2.0
+                    # 2. Fallback to analytic calculation
+                    part = params.get("part_to_generate", "modular_filter_assembly")
+                    if part == "modular_filter_assembly":
+                        try:
+                            L = float(params.get("insert_length_mm", 50))
+                            revs = float(params.get("number_of_complete_revolutions", 2))
+                            path_r = float(params.get("helix_path_radius_mm", 1.8))
 
-                        theta_rad = math.radians(angle_at_center_deg)
+                            # Calculate twist angle at Z=0 (center)
+                            # The helix rotates by total_twist over height H.
+                            # Total height of helix is L + 2 (from MasterHollowHelix logic).
+                            # Twist rate = 360 * revs / L.
+                            # Total twist = twist_rate * (L + 2).
+                            # At center (Z=0), rotation is total_twist / 2 (assuming linear_extrude center=true).
 
-                        # Calculate position
-                        x = path_r * math.cos(theta_rad)
-                        y = path_r * math.sin(theta_rad)
-                        z = 0.0
-                        custom_location = (x, y, z)
-                        print(f"Calculated custom seed location for channel: {custom_location}")
-                    except Exception as e:
-                        print(f"Warning: Failed to calculate custom location: {e}")
+                            twist_rate = 360.0 * revs / L
+                            total_twist = twist_rate * (L + 2.0)
+                            angle_at_center_deg = total_twist / 2.0
 
+                            theta_rad = math.radians(angle_at_center_deg)
+
+                            # Calculate position
+                            x = path_r * math.cos(theta_rad)
+                            y = path_r * math.sin(theta_rad)
+                            z = 0.0
+                            custom_location = (x, y, z)
+                            print(f"Calculated custom seed location for channel: {custom_location}")
+                        except Exception as e:
+                            print(f"Warning: Failed to calculate custom location: {e}")
+
+                # Update location (if custom_location is None, foam_driver defaults to bounds-based legacy logic)
                 foam_driver.update_snappyHexMesh_location(bounds, custom_location=custom_location)
         else:
             print("[Reuse Mesh] Skipping BlockMesh update.")

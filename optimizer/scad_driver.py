@@ -198,6 +198,78 @@ class ScadDriver:
             print(f"Error reading STL bounds: {e}")
             return None, None
 
+    def get_internal_point(self, stl_path):
+        """
+        Finds a point strictly inside the mesh using ray tracing.
+
+        Args:
+            stl_path (str): Path to the STL file.
+
+        Returns:
+            list: [x, y, z] coordinate strictly inside the mesh, or None if failed.
+        """
+        try:
+            if not os.path.exists(stl_path):
+                print(f"STL path does not exist: {stl_path}")
+                return None
+
+            mesh = trimesh.load(stl_path)
+            # Handle Scene objects
+            if isinstance(mesh, trimesh.Scene):
+                if len(mesh.geometry) == 0:
+                    return None
+                mesh = trimesh.util.concatenate(tuple(mesh.geometry.values()))
+
+            # robust ray casting
+            min_pt, max_pt = mesh.bounds
+            center = (min_pt + max_pt) / 2.0
+
+            # Start a ray from outside the bounds
+            # Move significantly outside to ensure we are outside
+            start_point = min_pt - (max_pt - min_pt) * 0.5
+
+            # Aim at centroid
+            direction = center - start_point
+            direction = direction / np.linalg.norm(direction)
+
+            # Use ray-mesh intersection
+            intersector = trimesh.ray.ray_triangle.RayMeshIntersector(mesh)
+            locations, index_ray, index_tri = intersector.intersects_location(
+                ray_origins=[start_point],
+                ray_directions=[direction]
+            )
+
+            if len(locations) >= 2:
+                # Sort intersections by distance from start
+                dists = np.linalg.norm(locations - start_point, axis=1)
+                sorted_indices = np.argsort(dists)
+
+                # The ray enters at index 0, exits at index 1 (ideally)
+                p1 = locations[sorted_indices[0]]
+                p2 = locations[sorted_indices[1]]
+
+                # Midpoint should be inside
+                midpoint = (p1 + p2) / 2.0
+                return list(midpoint)
+
+            elif len(locations) == 1:
+                # Only found one intersection (maybe mesh is open or ray didn't exit)
+                # Step slightly past the intersection
+                p1 = locations[0]
+                # Step 1mm or 5% of bounding box diagonal
+                diag = np.linalg.norm(max_pt - min_pt)
+                step = max(0.1, diag * 0.01)
+
+                point = p1 + direction * step
+                return list(point)
+
+            print("Warning: Could not find intersection for internal point.")
+            return None
+
+        except Exception as e:
+            print(f"Error calculating internal point: {e}")
+            return None
+
 if __name__ == "__main__":
     # Test stub
     driver = ScadDriver("corkscrew.scad")
