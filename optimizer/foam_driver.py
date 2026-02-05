@@ -5,6 +5,7 @@ import glob
 import re
 import math
 import sys
+import numpy as np
 from utils import run_command_with_spinner
 
 class FoamDriver:
@@ -201,7 +202,7 @@ functions
         with open(control_dict, 'w') as f:
             f.write(content)
 
-    def update_blockMesh(self, bounds, margin=1.2):
+    def update_blockMesh(self, bounds, margin=(1.2, 1.2, 0.95)):
         """
         Updates system/blockMeshDict with new bounds.
         """
@@ -212,8 +213,18 @@ functions
 
         self.bounds = bounds
         min_pt, max_pt = bounds
+
+        # Ensure margin is array-like
+        try:
+            # Check if iterable
+            iter(margin)
+            margin_arr = np.array(margin)
+        except TypeError:
+            # Scalar
+            margin_arr = np.array([margin, margin, margin])
+
         center = (min_pt + max_pt) / 2
-        size = (max_pt - min_pt) * margin
+        size = (max_pt - min_pt) * margin_arr
 
         new_min = center - size / 2
         new_max = center + size / 2
