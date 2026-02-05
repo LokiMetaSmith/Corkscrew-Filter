@@ -312,6 +312,18 @@ functions
         except subprocess.CalledProcessError:
             if not log_file:
                 print(f"Command {' '.join(cmd)} failed.")
+            else:
+                # Print tail of log file
+                if os.path.exists(target_log):
+                    print(f"\n--- Log tail for failed command: {' '.join(cmd)} ---")
+                    try:
+                        with open(target_log, 'r') as f:
+                            lines = f.readlines()
+                            for line in lines[-20:]:
+                                print(line, end='')
+                    except Exception as e:
+                        print(f"Error reading log file: {e}")
+                    print("----------------------------------------------------\n")
 
             if not ignore_error:
                 return False
