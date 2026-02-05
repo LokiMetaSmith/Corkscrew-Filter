@@ -85,6 +85,7 @@ addLayersControls
     nSmoothSurfaceNormals 1;
     nSmoothNormals 3;
     nSmoothThickness 10;
+    nRelaxIter 5;
 }
 
 snapControls
