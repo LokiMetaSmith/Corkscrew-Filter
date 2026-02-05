@@ -77,6 +77,9 @@ addLayersControls
     minThickness 0.1;
     nGrow 0;
     featureAngle 130;
+    maxFaceThicknessRatio 0.5;
+    maxThicknessToMedialRatio 0.3;
+    minMedianAxisAngle 90;
 }
 
 snapControls
