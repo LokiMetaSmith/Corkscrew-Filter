@@ -55,6 +55,9 @@ castellatedMeshControls
         }
     }
 
+    refinementRegions
+    {}
+
     resolveFeatureAngle 30;
 
     locationInMesh (10 0 0); // A point inside the fluid volume (annulus)
