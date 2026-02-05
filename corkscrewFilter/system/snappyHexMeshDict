@@ -81,6 +81,7 @@ addLayersControls
     maxThicknessToMedialRatio 0.3;
     minMedianAxisAngle 90;
     nBufferCellsNoExtrude 0;
+    nLayerIter 50;
 }
 
 snapControls
