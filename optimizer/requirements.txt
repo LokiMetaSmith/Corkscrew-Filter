@@ -4,3 +4,4 @@ trimesh
 pandas
 scipy
 Pillow
+Rtree
