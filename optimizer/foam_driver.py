@@ -202,7 +202,7 @@ functions
         with open(control_dict, 'w') as f:
             f.write(content)
 
-    def update_blockMesh(self, bounds, margin=(1.2, 1.2, 0.95)):
+    def update_blockMesh(self, bounds, margin=(1.2, 1.2, 0.9)):
         """
         Updates system/blockMeshDict with new bounds.
         """
