@@ -124,6 +124,12 @@ class FoamDriver:
         tri_surface = os.path.join(self.case_dir, "constant", "triSurface")
         os.makedirs(tri_surface, exist_ok=True)
 
+        # Ensure extendedFeatureEdgeMesh exists for surfaceFeatureExtract
+        edge_mesh = os.path.join(self.case_dir, "constant", "extendedFeatureEdgeMesh")
+        if os.path.exists(edge_mesh):
+            shutil.rmtree(edge_mesh)
+        os.makedirs(edge_mesh, exist_ok=True)
+
         # Clean previous results
         self.run_command(["foamListTimes", "-rm"], ignore_error=True)
 
@@ -199,7 +205,8 @@ functions
         """
         Updates system/blockMeshDict with new bounds.
         """
-        if not bounds or bounds[0] is None:
+        # Check for None explicitly to handle numpy array ambiguity
+        if bounds is None or bounds[0] is None:
             print("Invalid bounds, skipping blockMesh update.")
             return
 
@@ -233,6 +240,44 @@ functions
             content = pattern.sub(f"vertices\n(\n    {new_vertices_str}\n);", content)
 
         with open(bm_path, 'w') as f:
+            f.write(content)
+
+    def update_snappyHexMesh_location(self, bounds):
+        """
+        Updates locationInMesh in system/snappyHexMeshDict to be inside the fluid domain.
+        Assumes fluid is an annulus/void inside a tube, so we pick a point near the outer boundary.
+        """
+        if bounds is None or bounds[0] is None:
+             return
+
+        min_pt, max_pt = bounds
+
+        # Calculate a safe point.
+        # We assume the geometry is centered at (0,0,Z).
+        # We want a point at radius ~80% of the bounds.
+        # max_pt[0] is roughly the radius.
+
+        x_target = max_pt[0] * 0.8
+
+        # Ensure it's not too small (e.g. if bounds are tiny)
+        if x_target < 2.0:
+            x_target = 5.0
+
+        location = f"({x_target:.3f} 0 0)"
+
+        shm_path = os.path.join(self.case_dir, "system", "snappyHexMeshDict")
+        if not os.path.exists(shm_path):
+            return
+
+        with open(shm_path, 'r') as f:
+            content = f.read()
+
+        # Regex to find locationInMesh (x y z);
+        pattern = re.compile(r"locationInMesh\s+\(.*\);")
+        if pattern.search(content):
+            content = pattern.sub(f"locationInMesh {location};", content)
+
+        with open(shm_path, 'w') as f:
             f.write(content)
 
     def run_meshing(self, log_file=None):

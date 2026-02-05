@@ -69,6 +69,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                 print("Failed to get bounds. Using default.")
             else:
                 foam_driver.update_blockMesh(bounds)
+                foam_driver.update_snappyHexMesh_location(bounds)
         else:
             print("[Reuse Mesh] Skipping BlockMesh update.")
     elif skip_cfd:
