@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import mimetypes
 from google import genai
 from google.genai import types
@@ -238,7 +239,11 @@ You must respond with valid JSON only.
                 # Adjust start to skip line
                 first_newline = text.find("\n", start)
                 if first_newline != -1 and first_newline < end:
-                    return text[first_newline:end].strip()
+                    text = text[first_newline:end].strip()
+
+        # Cleaning: Escape backslashes that are not part of a valid escape sequence
+        # This fixes "Invalid \escape" errors common in LLM output (e.g. file paths or LaTeX)
+        text = re.sub(r'\\(?![/u"\\bfnrt])', r'\\\\', text)
         return text.strip()
 
 if __name__ == "__main__":
