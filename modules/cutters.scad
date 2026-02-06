@@ -9,9 +9,9 @@
  * Description: Creates a simple rectangular helical cutting tool for making slits.
  * Arguments: (Same as MultiHelixRamp)
  */
-module SimpleSlitCutter(h, twist, dia, helices) {
+module SimpleSlitCutter(h, twist, dia, helices, offset_angle=ramp_width_degrees/2) {
     for (i = [0 : helices - 1]) {
-        rotate([0, 0, i * (360 / helices) + ramp_width_degrees / 2])
+        rotate([0, 0, i * (360 / helices) + offset_angle])
         linear_extrude(height = h, twist = twist, center = true, slices = h > 0 ? h * 2 : 1)
             translate([dia / 2 - slit_depth_mm / 2, 0])
                 square([slit_depth_mm, slit_width_mm], center = true);
@@ -23,13 +23,13 @@ module SimpleSlitCutter(h, twist, dia, helices) {
  * Description: Creates a more complex cutting tool for making slits with a ramped lead-in.
  * Arguments: (Same as MultiHelixRamp)
  */
-module RampedSlitKnife(h, twist, dia, helices) {
+module RampedSlitKnife(h, twist, dia, helices, offset_angle=ramp_width_degrees/2) {
     twist_per_mm = twist / h;
     ramp_len = slit_ramp_length_mm;
     open_len = slit_open_length_mm;
 
     for (i = [0 : helices - 1]) {
-        rotate([0, 0, i * (360 / helices) + ramp_width_degrees/2]) {
+        rotate([0, 0, i * (360 / helices) + offset_angle]) {
             translate([0, 0, -h/2]) {
                 union() {
                     // 1. The Ramp using hull (interpolates between start surface and full depth)
