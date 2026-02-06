@@ -229,6 +229,17 @@ functions
         new_min = center - size / 2
         new_max = center + size / 2
 
+        # Calculate cell counts based on target resolution
+        target_cell_size = 1.5  # mm. Target feature size is ~1.0mm radius.
+        nx = max(1, int(math.ceil(size[0] / target_cell_size)))
+        ny = max(1, int(math.ceil(size[1] / target_cell_size)))
+        nz = max(1, int(math.ceil(size[2] / target_cell_size)))
+
+        # Ensure minimum resolution
+        nx = max(10, nx)
+        ny = max(10, ny)
+        nz = max(10, nz)
+
         vertices = [
             f"({new_min[0]} {new_min[1]} {new_min[2]})",
             f"({new_max[0]} {new_min[1]} {new_min[2]})",
@@ -249,6 +260,12 @@ functions
 
         if pattern.search(content):
             content = pattern.sub(f"vertices\n(\n    {new_vertices_str}\n);", content)
+
+        # Update blocks with calculated resolution
+        # Matches: hex (0 1 2 3 4 5 6 7) (20 20 20)
+        pattern_blocks = re.compile(r"hex\s*\([^\)]+\)\s*\(\s*\d+\s+\d+\s+\d+\s*\)", re.DOTALL)
+        if pattern_blocks.search(content):
+             content = pattern_blocks.sub(f"hex (0 1 2 3 4 5 6 7) ({nx} {ny} {nz})", content)
 
         with open(bm_path, 'w') as f:
             f.write(content)
