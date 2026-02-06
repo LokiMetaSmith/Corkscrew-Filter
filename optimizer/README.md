@@ -11,6 +11,23 @@ The optimization loop consists of the following steps:
 4.  **Analysis & Suggestion**: `llm_agent.py` sends the simulation results to the Gemini LLM, which analyzes the data and proposes new parameters to test.
 5.  **Iteration**: The process repeats for a specified number of iterations.
 
+## How the AI Agent Works
+
+The `LLMAgent` (using Google Gemini) is designed to function as an autonomous engineer. Instead of treating the optimization as a black-box numerical search (like Genetic Algorithms), it reasons through the problem using physics and engineering constraints.
+
+### Inputs
+The Agent receives a rich context for every iteration:
+*   **Design History**: A JSON log of all previous runs, including parameters used and the resulting metrics.
+*   **Simulation Metrics**: Key performance indicators from OpenFOAM, such as **Pressure Drop** (energy cost) and **Particle Residuals** (simulation convergence).
+*   **Visual Feedback**: 3D renderings (screenshots) of the generated STL. This allows the model to "see" geometrical errors (e.g., walls that are too thin, disconnected helices) that purely numerical data would miss.
+*   **Physics Constraints**: A system prompt that explicitly defines the governing equations (e.g., Centrifugal Force $$F = mv^2/r$$) and design goals.
+
+### Chain-of-Thought Reasoning
+The agent is instructed to output its response in a structured JSON format that includes a `reasoning` field. It must:
+1.  **Analyze Trends**: Look at the history (e.g., "Increasing pitch last time reduced pressure drop but hurt efficiency").
+2.  **Apply Physics**: Relate the trends to theory (e.g., "To recover efficiency without increasing pressure, we should increase the helix radius to boost centrifugal force while keeping the pitch constant").
+3.  **Propose Parameters**: Only after this reasoning step does it generate the numerical parameters for the next run.
+
 ## Prerequisites
 
 To run the optimization script, you need the following installed and configured:

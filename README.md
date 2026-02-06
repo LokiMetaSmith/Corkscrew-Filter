@@ -2,9 +2,25 @@
 
 A 3D-printable inertial filter for separating particles from a fluid stream, based on Dr. John Graf's "Thirsty Corkscrew" design. This project includes the OpenSCAD models for generating the filter and instructions for running a CFD simulation to analyze its performance.
 
-## How it Works
+## Theory of Operation
 
-The Thirsty Corkscrew uses the principle of inertial separation. As the fluid (e.g., air) flows through the corkscrew-shaped channels, its direction changes rapidly. Due to their inertia, heavier particles (e.g., dust, water droplets) cannot follow the sharp turns and are ejected through slits in the channel walls into a collection bin. The lighter fluid continues to flow through the channels.
+This project combines advanced fluid dynamics principles with modern AI-driven engineering to optimize the design of inertial filters.
+
+### Physics of Inertial Separation
+
+The core mechanism of the Thirsty Corkscrew is **inertial separation**. As fluid traverses the helical channel, it is subjected to rapid changes in direction. This induces specific forces that separate particles based on mass and density:
+
+1.  **Centrifugal Force ($$F_c = m \frac{v^2}{r}$$)**: The helical geometry acts as a continuous centrifuge. The curvature forces the fluid to accelerate radially. Heavier particles (like dust or water droplets) possess greater inertia and are flung toward the outer wall of the channel with a force proportional to the square of the velocity ($$v^2$$) and inversely proportional to the radius ($$r$$).
+2.  **Dean Vortices**: In curved pipes, the velocity differential between the inner and outer walls creates secondary flows known as Dean Vortices. These counter-rotating vortices spiral down the channel, effectively sweeping the cross-section and transporting particles toward the trapping zones.
+3.  **"Clog-Free" Trapping**: Unlike barrier filters (e.g., HEPA) that trap particles *in* the flow path (leading to pressure buildup), this design uses "stepped traps" or slits. Particles are ejected *out* of the main flow stream into a quiescent collection bin. Because the storage volume is decoupled from the flow path, the filter can accumulate significant amounts of debris without increasing the pressure drop, maintaining constant system performance until the bin is physically full.
+
+### AI-Powered Design Optimization
+
+The design of such a filter involves a complex trade-off between **separation efficiency** (maximizing particle capture) and **energy efficiency** (minimizing pressure drop). To solve this non-linear problem, we employ an autonomous **AI Agent**.
+
+*   **Virtual Engineer**: The AI (Google Gemini) does not merely guess parameters. It acts as an engineer, analyzing the results of previous CFD simulations. It uses **Chain-of-Thought** reasoning to hypothesize why a design performed poorly (e.g., "The pressure drop is too high, likely due to the twist rate being too aggressive") and proposes logical adjustments.
+*   **Physics-Informed**: The AI is explicitly prompted with the governing physics equations. It understands that increasing the helix radius will lower the centrifugal force, or that tightening the pitch will increase capture efficiency at the cost of higher backpressure.
+*   **Multimodal Feedback**: The agent is not limited to numbers. It analyzes **3D renderings** of the generated geometry to detect visual defects—such as disconnected helical segments or unprintable wall thicknesses—that might not be immediately obvious from numerical simulation data alone.
 
 ## Getting Started: Generating the 3D Models
 
