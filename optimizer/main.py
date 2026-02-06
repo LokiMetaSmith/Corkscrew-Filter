@@ -82,10 +82,10 @@ def main():
         if "error" in metrics:
             if metrics["error"] == "environment_missing_tools":
                 print("\nCRITICAL ERROR: OpenFOAM tools not found.")
-                print("Please install OpenFOAM (simpleFoam, blockMesh) or Docker.")
-                print("Alternatively, run with --skip-cfd to generate geometry without simulation, or --dry-run for a mock test.")
-                print("Aborting optimization.")
-                break
+                print("Switching to geometry-only mode (--skip-cfd) for remaining iterations.")
+                print("Please fix your OpenFOAM/Container environment to resume CFD simulations.")
+                args.skip_cfd = True
+                continue
             elif metrics["error"] == "geometry_generation_failed":
                 print("Skipping this iteration due to geometry failure.")
                 continue
