@@ -79,12 +79,15 @@ class FoamDriver:
 
         # 3. Docker
         if self.container_engine in ["auto", "docker"]:
-            if shutil.which("docker") and self._is_tool_usable("docker"):
-                print("Using Docker wrapper.")
-                self.has_tools = True
-                self.container_tool = "docker"
-                self.use_container = True
-                return
+            if shutil.which("docker"):
+                if self._is_tool_usable("docker"):
+                    print("Using Docker wrapper.")
+                    self.has_tools = True
+                    self.container_tool = "docker"
+                    self.use_container = True
+                    return
+            elif self.container_engine == "docker":
+                print("Debug: 'docker' executable not found in PATH.")
 
         # Fallback / Failure
         # Diagnostic messages
