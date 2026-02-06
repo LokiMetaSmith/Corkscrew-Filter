@@ -19,11 +19,12 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Skip actual OpenFOAM execution (mocks everything)")
     parser.add_argument("--skip-cfd", action="store_true", help="Generate geometry but skip CFD simulation")
     parser.add_argument("--reuse-mesh", action="store_true", help="Reuse existing mesh (skips geometry generation and meshing)")
+    parser.add_argument("--container-engine", type=str, default="auto", choices=["auto", "podman", "docker"], help="Force specific container engine")
     args = parser.parse_args()
 
     # Initialize components
     scad = ScadDriver(args.scad_file)
-    foam = FoamDriver(args.case_dir)
+    foam = FoamDriver(args.case_dir, container_engine=args.container_engine)
     agent = LLMAgent() # Expects GEMINI_API_KEY env var
     store = DataStore()
 
