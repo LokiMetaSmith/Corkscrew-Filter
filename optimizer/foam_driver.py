@@ -202,7 +202,7 @@ functions
         with open(control_dict, 'w') as f:
             f.write(content)
 
-    def update_blockMesh(self, bounds, margin=(1.2, 1.2, 0.9)):
+    def update_blockMesh(self, bounds, margin=(1.2, 1.2, 0.9), target_cell_size=1.5):
         """
         Updates system/blockMeshDict with new bounds.
         """
@@ -230,7 +230,7 @@ functions
         new_max = center + size / 2
 
         # Calculate cell counts based on target resolution
-        target_cell_size = 1.5  # mm. Target feature size is ~1.0mm radius.
+        # target_cell_size is passed in (default 1.5mm)
         nx = max(1, int(math.ceil(size[0] / target_cell_size)))
         ny = max(1, int(math.ceil(size[1] / target_cell_size)))
         nz = max(1, int(math.ceil(size[2] / target_cell_size)))
