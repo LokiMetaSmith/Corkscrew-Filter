@@ -59,7 +59,7 @@ castellatedMeshControls
 
     resolveFeatureAngle 30;
 
-    locationInMesh (12.000 0 0); // A point inside the fluid volume (annulus)
+    locationInMesh (0.000 0.000 0.000); // A point inside the fluid volume (annulus)
 }
 
 addLayersControls
