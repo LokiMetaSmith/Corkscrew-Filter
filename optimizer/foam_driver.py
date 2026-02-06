@@ -9,7 +9,7 @@ import numpy as np
 from utils import run_command_with_spinner
 
 class FoamDriver:
-    def __init__(self, case_dir, template_dir=None):
+    def __init__(self, case_dir, template_dir=None, container_engine="auto"):
         self.case_dir = os.path.abspath(case_dir)
         self.template_dir = os.path.abspath(template_dir) if template_dir else self.case_dir
         self.log_file = os.path.join(self.case_dir, "run_foam.log")
@@ -17,6 +17,7 @@ class FoamDriver:
         self.has_tools = False
         self.container_tool = None
         self.use_container = False
+        self.container_engine = container_engine
         self._check_execution_environment()
 
     def _is_tool_usable(self, tool):
@@ -34,12 +35,22 @@ class FoamDriver:
     def _try_start_podman(self):
         print("Attempting to start Podman machine...")
         try:
-            subprocess.run(["podman", "machine", "start"], check=True, timeout=120)
+            # Capture output to print specific errors
+            result = subprocess.run(
+                ["podman", "machine", "start"],
+                check=True,
+                timeout=120,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
             print("Podman machine start command finished. Verifying...")
             if self._is_tool_usable("podman"):
                 return True
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
-            pass
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to start Podman: {e.stderr.strip()}")
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            print(f"Failed to start Podman: {e}")
 
         print("Failed to auto-start Podman.")
         return False
@@ -49,32 +60,43 @@ class FoamDriver:
         Determines the execution environment (Native, Podman, or Docker).
         Sets self.has_tools, self.container_tool, and self.use_container.
         """
-        if shutil.which("simpleFoam"):
+        # 1. Native OpenFOAM (Preferred unless forced otherwise)
+        if self.container_engine == "auto" and shutil.which("simpleFoam"):
             print("Native OpenFOAM found.")
             self.has_tools = True
             self.container_tool = None
             self.use_container = False
-        elif shutil.which("podman") and (self._is_tool_usable("podman") or self._try_start_podman()):
-            print("Native OpenFOAM not found. Using Podman wrapper.")
-            self.has_tools = True
-            self.container_tool = "podman"
-            self.use_container = True
-        elif shutil.which("docker") and self._is_tool_usable("docker"):
-            print("Native OpenFOAM not found. Using Docker wrapper.")
-            self.has_tools = True
-            self.container_tool = "docker"
-            self.use_container = True
-        else:
-            # Diagnostic messages
-            if shutil.which("podman"):
-                print("Warning: Podman found but not responsive. Check 'podman machine start'.")
-            if shutil.which("docker"):
-                print("Warning: Docker found but not responsive. Check Docker Desktop/daemon.")
+            return
 
-            print("Warning: Neither native OpenFOAM, responsive Podman, nor Docker found.")
-            self.has_tools = False
-            self.container_tool = None
-            self.use_container = False
+        # 2. Podman
+        if self.container_engine in ["auto", "podman"]:
+            if shutil.which("podman") and (self._is_tool_usable("podman") or self._try_start_podman()):
+                print("Using Podman wrapper.")
+                self.has_tools = True
+                self.container_tool = "podman"
+                self.use_container = True
+                return
+
+        # 3. Docker
+        if self.container_engine in ["auto", "docker"]:
+            if shutil.which("docker") and self._is_tool_usable("docker"):
+                print("Using Docker wrapper.")
+                self.has_tools = True
+                self.container_tool = "docker"
+                self.use_container = True
+                return
+
+        # Fallback / Failure
+        # Diagnostic messages
+        if self.container_engine in ["auto", "podman"] and shutil.which("podman"):
+            print("Warning: Podman found but not responsive. Check 'podman machine start'.")
+        if self.container_engine in ["auto", "docker"] and shutil.which("docker"):
+            print("Warning: Docker found but not responsive. Check Docker Desktop/daemon.")
+
+        print("Warning: No usable OpenFOAM environment found.")
+        self.has_tools = False
+        self.container_tool = None
+        self.use_container = False
 
     def _get_container_command(self, cmd, cwd):
         """
