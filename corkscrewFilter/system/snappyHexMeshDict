@@ -100,12 +100,12 @@ meshQualityControls
 {
     nSmoothScale 4;
     errorReduction 0.75;
-    maxNonOrtho 65;
-    maxBoundarySkewness 20;
+    maxNonOrtho 75;
+    maxBoundarySkewness 30;
     maxInternalSkewness 4;
     maxConcave 80;
     minFlatness 0.5;
-    minVol 1e-13;
+    minVol 1e-20;
     minTetQuality 1e-30;
     minArea -1;
     minTwist 0.02;
