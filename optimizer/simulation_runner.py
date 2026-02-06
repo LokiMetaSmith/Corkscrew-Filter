@@ -69,7 +69,19 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
             if bounds[0] is None:
                 print("Failed to get bounds. Using default.")
             else:
-                foam_driver.update_blockMesh(bounds)
+                # Calculate dynamic target cell size based on smallest feature
+                target_cell_size = 1.5
+                void_r = params.get("helix_void_profile_radius_mm")
+                if void_r:
+                    try:
+                        # Ensure resolution is sufficient for small channels (at least ~2-3 cells radius)
+                        # We use 0.8 * radius to be safe (diameter / 2.5)
+                        target_cell_size = min(1.5, float(void_r) * 0.8)
+                    except (ValueError, TypeError):
+                        pass
+
+                print(f"Updating blockMesh with target_cell_size={target_cell_size:.3f}mm")
+                foam_driver.update_blockMesh(bounds, target_cell_size=target_cell_size)
 
                 # 1. Try to find an internal point using robust ray tracing (trimesh)
                 custom_location = scad_driver.get_internal_point(stl_path)
