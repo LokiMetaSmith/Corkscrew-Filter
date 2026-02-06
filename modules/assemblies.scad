@@ -51,9 +51,9 @@ module ModularFilterAssembly(tube_id, total_length) {
                         cylinder(h = bin_length + 0.1, d = tube_id * 2, center = true);
                      }
                      if (slit_type == "simple") {
-                         SimpleSlitCutter(bin_length, twist_rate * bin_length, 2 * (helix_path_radius_mm + helix_profile_radius_mm), 1);
+                         SimpleSlitCutter(bin_length, twist_rate * bin_length, 2 * (helix_path_radius_mm + helix_profile_radius_mm), 1, offset_angle=0);
                      } else if (slit_type == "ramped") {
-                         RampedSlitKnife(bin_length, twist_rate * bin_length, 2 * (helix_path_radius_mm + helix_profile_radius_mm), 1);
+                         RampedSlitKnife(bin_length, twist_rate * bin_length, 2 * (helix_path_radius_mm + helix_profile_radius_mm), 1, offset_angle=0);
                      }
                  }
             }

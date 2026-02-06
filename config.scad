@@ -126,7 +126,7 @@ outer_casing_wall_mm = 3;        // The wall thickness of the hexagonal casing f
 
 // --- Slit Parameters ---
 slit_ramp_length_mm = 5;         // The length of the ramped portion of a slit (for "ramped" `slit_type`).
-slit_open_length_mm = 10;        // The length of the fully open portion of a slit.
+slit_open_length_mm = 5;         // The length of the fully open portion of a slit.
 slit_width_mm = 2;               // The width of the slit opening.
 slit_depth_mm = 2;               // The depth of the slit cut into the ramp.
 slit_axial_length_mm = 1.5;      // The height (Z-axis) of the slit cut for CorkscrewSlitKnife.
