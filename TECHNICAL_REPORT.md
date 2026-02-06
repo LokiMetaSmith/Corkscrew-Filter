@@ -106,6 +106,11 @@ The agent utilizes the Google Generative AI SDK (`gemini-1.5-flash`). Unlike a t
 *   **Reasoning:** The system prompts the model to "Analyze the history. Identify trends."
 *   **Why it matters:** The design space is likely non-convex and discontinuous (e.g., changing the number of bins is a discrete step). A gradient-based solver might get stuck in local minima, whereas the LLM can "reason" its way out of a local trap by proposing a novel parameter combination based on the trend data.
 
+### 6.2. Multimodal Feedback Loop
+A significant advancement in the current iteration is the integration of visual feedback. The optimization pipeline captures multi-view screenshots of the generated STL geometry and feeds them into the multimodal LLM (Gemini).
+*   **Visual Defect Detection:** The agent can identify geometric failures—such as disconnected helical segments, wall thinning, or printability issues—that purely numerical CFD metrics (like pressure drop) might fail to capture or would misinterpret as "infinite resistance."
+*   **Physics-Informed Prompting:** The system prompt has been refined to explicitly encode the governing physics ($$F_c = mv^2/r$$), instructing the agent to correlate visual features (e.g., "helix radius is too tight") with physical outcomes ("centrifugal force is high, but flow is choked").
+
 ## 7. Manual Fabrication and Evaluation
 
 This section describes the manual fabrication and evaluation tests performed. In particular, we tested a 1/4" tube, a 3/4" tube, a single bin, a three bin, and a multi corkscrew configuration.
