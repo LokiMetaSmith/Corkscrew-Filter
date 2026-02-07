@@ -7,6 +7,7 @@ CONSTRAINTS = """
     - insert_length_mm should be around 50.
     - helix_path_radius_mm > helix_void_profile_radius_mm (to ensure structural integrity if solid, but for fluid volume this defines the channel).
     - helix_profile_radius_mm must be > helix_void_profile_radius_mm (e.g., by at least 1mm) to generate valid geometry.
+    - helix_profile_radius_mm must be <= helix_path_radius_mm to prevent self-intersection at the center axis.
     - num_bins should be integer >= 1.
     - Optimization Goal: Maximize particle collection efficiency (trap moon dust) while minimizing pressure drop.
     - Consider increasing number_of_complete_revolutions to increase centrifugal force.
