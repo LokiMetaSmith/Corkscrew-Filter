@@ -9,9 +9,19 @@ from utils import run_command_with_spinner
 class ScadDriver:
     def __init__(self, scad_file_path, force_native=False):
         self.scad_file_path = scad_file_path
-        # User requested favoring export.js.
-        # Only use native if explicitly forced or if node is missing (unlikely in this env).
-        self.use_native = force_native and (shutil.which("openscad") is not None)
+
+        has_native = shutil.which("openscad") is not None
+        has_node = shutil.which("node") is not None
+
+        # Determine preference:
+        # Default to WASM (use_native=False) unless forced or Node is missing.
+        self.use_native = False
+
+        if force_native and has_native:
+            self.use_native = True
+        elif not has_node and has_native:
+            # Fallback to native if node is missing but native exists
+            self.use_native = True
 
         if self.use_native:
             print("Using Native OpenSCAD.")
