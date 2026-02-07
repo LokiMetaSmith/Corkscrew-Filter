@@ -30,10 +30,12 @@ def validate_parameters(params):
         # 2. Check for Self-Intersection at Center
         # The profile is centered at x=path_r. If profile_r > path_r, it crosses x=0.
         # When twisted, this creates a self-intersecting geometry.
-        if profile_r > path_r:
+        # Additionally, for WASM/CGAL stability, we strictly require profile_r < path_r
+        # to avoid grazing contact singularities at x=0.
+        if profile_r >= path_r:
             return False, (
-                f"Invalid Geometry: Helix profile radius ({profile_r}mm) is larger than "
-                f"helix path radius ({path_r}mm). This causes self-intersection at the center axis."
+                f"Invalid Geometry: Helix profile radius ({profile_r}mm) must be strictly less than "
+                f"helix path radius ({path_r}mm) to avoid center-axis singularity."
             )
 
         # 3. Check for Wall Thickness (Solid vs Void)

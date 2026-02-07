@@ -10,11 +10,12 @@ from parameter_validator import validate_parameters
 class TestParameterValidator(unittest.TestCase):
     def setUp(self):
         # Baseline valid parameters (from config.scad defaults)
+        # Updated to 1.7 profile radius to avoid center singularity (strictly < path 1.8)
         self.base_params = {
             "tube_od_mm": 32,
             "tube_wall_mm": 1.5,
             "helix_path_radius_mm": 1.8,
-            "helix_profile_radius_mm": 1.8,
+            "helix_profile_radius_mm": 1.7,
             "helix_void_profile_radius_mm": 1.0,
             "insert_length_mm": 50
         }
@@ -31,7 +32,8 @@ class TestParameterValidator(unittest.TestCase):
 
         is_valid, msg = validate_parameters(params)
         self.assertFalse(is_valid)
-        self.assertIn("self-intersection", msg.lower())
+        # Updated error message check
+        self.assertTrue("singularity" in msg.lower() or "self-intersection" in msg.lower())
 
     def test_wall_thickness(self):
         # Void >= Profile -> no wall
@@ -78,7 +80,8 @@ class TestParameterValidator(unittest.TestCase):
         }
         is_valid, msg = validate_parameters(params)
         self.assertFalse(is_valid)
-        self.assertIn("self-intersection", msg.lower())
+        # Updated error message check
+        self.assertTrue("singularity" in msg.lower() or "self-intersection" in msg.lower())
 
 if __name__ == '__main__':
     unittest.main()

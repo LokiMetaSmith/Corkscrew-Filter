@@ -54,7 +54,7 @@ def main():
         "num_bins": 1,
         "number_of_complete_revolutions": 2,
         "helix_path_radius_mm": 1.8,
-        "helix_profile_radius_mm": 1.8,
+        "helix_profile_radius_mm": 1.7, # Reduced from 1.8 to avoid center singularity (WASM crash)
         "helix_void_profile_radius_mm": 1.0,
         "helix_profile_scale_ratio": 1.4,
         "tube_od_mm": 32,
