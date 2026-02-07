@@ -20,6 +20,7 @@ def main():
     # Check if agent has model
     if not agent.client:
         print("Error: No LLM available (check GEMINI_API_KEY). Cannot generate campaign.")
+        print("Please export GEMINI_API_KEY='your_key_here' and try again.")
         return
 
     parameter_sets = agent.suggest_campaign(history, CONSTRAINTS, count=args.count)
