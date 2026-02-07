@@ -97,8 +97,9 @@ class LLMAgent:
         path_radius = round(random.uniform(max(1.5, void_radius + 0.5), 5.0), 2)
         new_params["helix_path_radius_mm"] = path_radius
 
-        # helix_profile_radius_mm: > void + 0.5
-        profile_radius = round(random.uniform(max(1.5, void_radius + 0.5), 5.0), 2)
+        # helix_profile_radius_mm: > void + 0.5 AND <= path_radius
+        min_profile = max(1.5, void_radius + 0.5)
+        profile_radius = round(random.uniform(min_profile, path_radius), 2)
         new_params["helix_profile_radius_mm"] = profile_radius
 
         # helix_profile_scale_ratio: 1.0 - 2.0
