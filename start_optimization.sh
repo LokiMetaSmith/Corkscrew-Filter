@@ -22,11 +22,15 @@ fi
 
 # 2. Check API Key
 if [ -z "$GEMINI_API_KEY" ]; then
-    echo "Warning: GEMINI_API_KEY is not set. The optimizer will run in 'dry-run' or 'random' mode without LLM guidance."
-    read -p "Do you want to continue without LLM? (y/n) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
+    if [[ "$*" == *"--no-llm"* ]] || [ "$NON_INTERACTIVE" == "1" ]; then
+        echo "Warning: GEMINI_API_KEY is not set. Proceeding in dry-run/random mode (prompt suppressed)."
+    else
+        echo "Warning: GEMINI_API_KEY is not set. The optimizer will run in 'dry-run' or 'random' mode without LLM guidance."
+        read -p "Do you want to continue without LLM? (y/n) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
     fi
 fi
 

@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import random
 import mimetypes
 from google import genai
 from google.genai import types
@@ -71,6 +72,49 @@ class LLMAgent:
         except Exception as e:
             print(f"Failed to list models: {e}")
 
+    def _generate_random_parameters(self, current_params: Dict[str, Any], constraints_str: str) -> Dict[str, Any]:
+        """
+        Generates random parameters within valid ranges when LLM is unavailable.
+        This provides a basic random search strategy.
+        """
+        print("Using random search strategy...")
+        new_params = current_params.copy()
+
+        # Define ranges (based on config.scad and constraints.py)
+
+        # insert_length_mm: 40 - 60
+        new_params["insert_length_mm"] = round(random.uniform(40.0, 60.0), 2)
+
+        # number_of_complete_revolutions: 1 - 4
+        new_params["number_of_complete_revolutions"] = random.randint(1, 4)
+
+        # helix_void_profile_radius_mm: 0.5 - 2.0
+        void_radius = round(random.uniform(0.5, 2.0), 2)
+        new_params["helix_void_profile_radius_mm"] = void_radius
+
+        # helix_path_radius_mm: > void + 0.5
+        # Range 1.5 - 5.0, but must be > void
+        path_radius = round(random.uniform(max(1.5, void_radius + 0.5), 5.0), 2)
+        new_params["helix_path_radius_mm"] = path_radius
+
+        # helix_profile_radius_mm: > void + 0.5
+        profile_radius = round(random.uniform(max(1.5, void_radius + 0.5), 5.0), 2)
+        new_params["helix_profile_radius_mm"] = profile_radius
+
+        # helix_profile_scale_ratio: 1.0 - 2.0
+        new_params["helix_profile_scale_ratio"] = round(random.uniform(1.0, 2.0), 2)
+
+        # Slit parameters (explicitly adding them as they are optimization targets)
+        slit_axial = round(random.uniform(1.0, 3.0), 2)
+        new_params["slit_axial_length_mm"] = slit_axial
+        # slit_chamfer_height < slit_axial_length_mm
+        new_params["slit_chamfer_height"] = round(random.uniform(0.1, min(1.0, slit_axial - 0.1)), 2)
+
+        # num_bins: 1 - 3 (integer)
+        new_params["num_bins"] = random.randint(1, 3)
+
+        return new_params
+
     def suggest_parameters(self, current_params: Dict[str, Any], metrics: Dict[str, Any], constraints: str = "", image_paths: List[str] = None, history: List[Dict] = None) -> Dict[str, Any]:
         """
         Asks the LLM for the next set of parameters.
@@ -84,8 +128,8 @@ class LLMAgent:
 
         if not self.client:
             # Fallback if no API key
-            print("No LLM available. Returning current parameters.")
-            return current_params
+            print("No LLM available. Generating random parameters for exploration.")
+            return self._generate_random_parameters(current_params, constraints)
 
         # Use provided history if available, otherwise use internal history
         history_to_use = history if history is not None else self.history
