@@ -18,6 +18,8 @@ class LLMAgent:
 
         if not api_key:
             print("Warning: GEMINI_API_KEY not found. LLM features will be disabled.")
+            print("To use LLM features, please set the GEMINI_API_KEY environment variable.")
+            print("Example: export GEMINI_API_KEY='your_api_key_here'")
             self.client = None
         else:
             self.client = genai.Client(api_key=api_key)

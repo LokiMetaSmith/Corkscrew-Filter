@@ -23,6 +23,7 @@ def debug_models():
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         print("GEMINI_API_KEY not found. Cannot perform live list.")
+        print("Please export GEMINI_API_KEY='your_key_here' and try again.")
         return
 
     client = genai.Client(api_key=api_key)
