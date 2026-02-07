@@ -2,6 +2,7 @@ import os
 import time
 import math
 from utils import Timer
+from parameter_validator import validate_parameters
 
 def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False, skip_cfd=False, iteration=0, reuse_mesh=False):
     """
@@ -37,6 +38,12 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
     mesh_log = os.path.join(log_dir, "meshing.log")
     solver_log = os.path.join(log_dir, "solver.log")
     vis_log = os.path.join(log_dir, "visualization.log")
+
+    # 0. Validate Parameters
+    is_valid, error_msg = validate_parameters(params)
+    if not is_valid:
+        print(f"Parameter Validation Failed: {error_msg}")
+        return {"error": "invalid_parameters", "details": error_msg}, []
 
     # 1. Generate Geometry (Fluid Volume for CFD)
     stl_path = os.path.join(foam_driver.case_dir, "constant", "triSurface", output_stl_name)
