@@ -40,10 +40,23 @@ def validate_parameters(params):
 
         # 3. Check for Wall Thickness (Solid vs Void)
         # We need some wall thickness.
-        if void_r >= profile_r:
+        # The void radius is increased by tolerance_channel (0.1mm) in the SCAD file.
+        tolerance_channel = 0.1
+        effective_void_r = void_r + tolerance_channel
+
+        if effective_void_r >= profile_r:
              return False, (
-                f"Invalid Geometry: Void radius ({void_r}mm) is >= Profile radius ({profile_r}mm). "
-                "This results in zero or negative wall thickness."
+                f"Invalid Geometry: Effective void radius ({effective_void_r}mm) is >= Profile radius ({profile_r}mm). "
+                f"This results in zero or negative wall thickness (void_r={void_r} + tol={tolerance_channel})."
+            )
+
+        # 4. Check for Void Singularity
+        # The void channel also twists around the center.
+        # If effective_void_r >= path_r, the void self-intersects at the center axis, creating a singularity.
+        if effective_void_r >= path_r:
+            return False, (
+                f"Invalid Geometry: Effective void radius ({effective_void_r}mm) must be strictly less than "
+                f"helix path radius ({path_r}mm) to avoid void channel singularity."
             )
 
         # 4. Check for Tube Fit

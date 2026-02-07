@@ -37,13 +37,16 @@ class TestParameterValidator(unittest.TestCase):
 
     def test_wall_thickness(self):
         # Void >= Profile -> no wall
+        # Accounts for 0.1mm tolerance
         params = self.base_params.copy()
-        params["helix_profile_radius_mm"] = 1.5
+        params["helix_profile_radius_mm"] = 1.6
         params["helix_void_profile_radius_mm"] = 1.5
+        # effective_void = 1.5 + 0.1 = 1.6 == profile. Fails.
 
         is_valid, msg = validate_parameters(params)
         self.assertFalse(is_valid)
         self.assertIn("wall thickness", msg.lower())
+
 
     def test_tube_fit(self):
         # Helix too big for tube
