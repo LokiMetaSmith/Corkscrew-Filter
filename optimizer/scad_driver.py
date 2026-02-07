@@ -172,6 +172,43 @@ class ScadDriver:
             if hasattr(e, 'stderr'): print(e.stderr)
             return []
 
+    def _load_clean_mesh(self, stl_path):
+        """
+        Loads a mesh and cleans degenerate faces.
+
+        Args:
+            stl_path (str): Path to the STL file.
+
+        Returns:
+            trimesh.Trimesh: The loaded and cleaned mesh, or None if failed.
+        """
+        try:
+            if not os.path.exists(stl_path):
+                return None
+
+            mesh = trimesh.load(stl_path)
+
+            # Handle Scene objects
+            if isinstance(mesh, trimesh.Scene):
+                if len(mesh.geometry) == 0:
+                    return None
+                # Combine all geometries
+                mesh = trimesh.util.concatenate(tuple(mesh.geometry.values()))
+
+            # Clean mesh: remove degenerate faces
+            # This prevents RuntimeWarnings like "divide by zero encountered in divide"
+            # during barycentric coordinate calculations in RayMeshIntersector.
+            mesh.update_faces(mesh.nondegenerate_faces())
+            mesh.remove_unreferenced_vertices()
+
+            if len(mesh.faces) == 0:
+                return None
+
+            return mesh
+        except Exception as e:
+            print(f"Error loading mesh {stl_path}: {e}")
+            return None
+
     def get_bounds(self, stl_path):
         """
         Calculates the bounding box of the STL file.
@@ -183,16 +220,11 @@ class ScadDriver:
             tuple: (min_point, max_point) where each is a numpy array [x, y, z].
                    Returns (None, None) if file read fails.
         """
-        try:
-            mesh = trimesh.load(stl_path)
-            # trimesh.load might return a Scene or a Trimesh object.
-            # If it's a scene, we dump all geometry.
-            if isinstance(mesh, trimesh.Scene):
-                if len(mesh.geometry) == 0:
-                     return None, None
-                # Combine all geometries
-                mesh = trimesh.util.concatenate(tuple(mesh.geometry.values()))
+        mesh = self._load_clean_mesh(stl_path)
+        if mesh is None:
+            return None, None
 
+        try:
             return mesh.bounds[0], mesh.bounds[1]
         except Exception as e:
             print(f"Error reading STL bounds: {e}")
@@ -209,16 +241,10 @@ class ScadDriver:
             list: [x, y, z] coordinate strictly inside the mesh, or None if failed.
         """
         try:
-            if not os.path.exists(stl_path):
-                print(f"STL path does not exist: {stl_path}")
+            mesh = self._load_clean_mesh(stl_path)
+            if mesh is None:
+                print(f"Could not load valid mesh from: {stl_path}")
                 return None
-
-            mesh = trimesh.load(stl_path)
-            # Handle Scene objects
-            if isinstance(mesh, trimesh.Scene):
-                if len(mesh.geometry) == 0:
-                    return None
-                mesh = trimesh.util.concatenate(tuple(mesh.geometry.values()))
 
             # robust ray casting
             min_pt, max_pt = mesh.bounds
