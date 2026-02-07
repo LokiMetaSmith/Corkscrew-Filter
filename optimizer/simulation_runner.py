@@ -81,9 +81,11 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                 void_r = params.get("helix_void_profile_radius_mm")
                 if void_r:
                     try:
-                        # Ensure resolution is sufficient for small channels (at least ~2-3 cells radius)
-                        # We use 0.8 * radius to be safe (diameter / 2.5)
-                        target_cell_size = min(1.5, float(void_r) * 0.8)
+                        # Ensure resolution is sufficient for small channels (at least ~2.5 cells radius)
+                        # We use 0.4 * radius to be safe (diameter / 5), clamped between 0.4mm and 1.2mm
+                        # This ensures small inlet patches are captured by snappyHexMesh
+                        calculated_size = float(void_r) * 0.4
+                        target_cell_size = max(0.4, min(1.2, calculated_size))
                     except (ValueError, TypeError):
                         pass
 

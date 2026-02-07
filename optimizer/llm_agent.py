@@ -168,9 +168,15 @@ class LLMAgent:
                 return data["parameters"]
             else:
                 print("LLM response did not contain 'parameters' field.")
+                if "error" in metrics:
+                    print("Previous run failed and LLM returned invalid/no parameters. Falling back to random strategy.")
+                    return self._generate_random_parameters(current_params, constraints)
                 return current_params
         except Exception as e:
             print(f"LLM generation failed after retries: {e}")
+            if "error" in metrics:
+                print("Previous run failed and LLM generation failed. Falling back to random strategy to break error loop.")
+                return self._generate_random_parameters(current_params, constraints)
             return current_params
 
     def suggest_campaign(self, history: List[Dict], constraints: str, count: int = 5) -> List[Dict[str, Any]]:
@@ -229,6 +235,19 @@ You must respond with valid JSON only.
     def _construct_prompt(self, constraints, history, has_images=False):
         history_str = json.dumps(history, indent=2)
 
+        error_instruction = ""
+        if history and "metrics" in history[-1] and "error" in history[-1]["metrics"]:
+            last_error = history[-1]["metrics"]["error"]
+            details = history[-1]["metrics"].get("details", "No details")
+            error_instruction = f"""
+CRITICAL WARNING:
+The previous run FAILED with error: "{last_error}".
+Details: {details}
+YOU MUST ADJUST PARAMETERS TO FIX THIS ERROR.
+If the error was 'invalid_parameters', you violated a geometric constraint.
+If 'helix_void_profile_radius_mm' >= 'helix_profile_radius_mm', you MUST decrease void radius or increase profile radius significantly.
+"""
+
         visual_instruction = ""
         if has_images:
             visual_instruction = """
@@ -251,6 +270,8 @@ GOAL: Optimize the design parameters to MAXIMIZE particle collection efficiency 
 
 CONSTRAINTS:
 {constraints}
+
+{error_instruction}
 
 {visual_instruction}
 
