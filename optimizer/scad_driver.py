@@ -3,6 +3,7 @@ import os
 import shutil
 import trimesh
 import numpy as np
+import warnings
 from utils import run_command_with_spinner
 
 class ScadDriver:
@@ -186,25 +187,30 @@ class ScadDriver:
             if not os.path.exists(stl_path):
                 return None
 
-            mesh = trimesh.load(stl_path)
+            # Suppress RuntimeWarning from trimesh during load/process
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=RuntimeWarning, module='trimesh')
 
-            # Handle Scene objects
-            if isinstance(mesh, trimesh.Scene):
-                if len(mesh.geometry) == 0:
+                mesh = trimesh.load(stl_path)
+
+                # Handle Scene objects
+                if isinstance(mesh, trimesh.Scene):
+                    if len(mesh.geometry) == 0:
+                        return None
+                    # Combine all geometries
+                    mesh = trimesh.util.concatenate(tuple(mesh.geometry.values()))
+
+                # Enhanced cleaning
+                # process() removes duplicates, unreferenced vertices, etc.
+                mesh.process()
+
+                # Explicitly remove degenerate faces (area check)
+                mesh.update_faces(mesh.nondegenerate_faces())
+
+                if len(mesh.faces) == 0:
                     return None
-                # Combine all geometries
-                mesh = trimesh.util.concatenate(tuple(mesh.geometry.values()))
 
-            # Clean mesh: remove degenerate faces
-            # This prevents RuntimeWarnings like "divide by zero encountered in divide"
-            # during barycentric coordinate calculations in RayMeshIntersector.
-            mesh.update_faces(mesh.nondegenerate_faces())
-            mesh.remove_unreferenced_vertices()
-
-            if len(mesh.faces) == 0:
-                return None
-
-            return mesh
+                return mesh
         except Exception as e:
             print(f"Error loading mesh {stl_path}: {e}")
             return None
@@ -259,11 +265,15 @@ class ScadDriver:
             direction = direction / np.linalg.norm(direction)
 
             # Use ray-mesh intersection
-            intersector = trimesh.ray.ray_triangle.RayMeshIntersector(mesh)
-            locations, index_ray, index_tri = intersector.intersects_location(
-                ray_origins=[start_point],
-                ray_directions=[direction]
-            )
+            # Suppress warnings during ray tracing (e.g., if sliver faces remain)
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=RuntimeWarning, module='trimesh')
+
+                intersector = trimesh.ray.ray_triangle.RayMeshIntersector(mesh)
+                locations, index_ray, index_tri = intersector.intersects_location(
+                    ray_origins=[start_point],
+                    ray_directions=[direction]
+                )
 
             if len(locations) >= 2:
                 # Sort intersections by distance from start
@@ -276,7 +286,7 @@ class ScadDriver:
 
                 # Midpoint should be inside
                 midpoint = (p1 + p2) / 2.0
-                return list(midpoint)
+                return midpoint.tolist()
 
             elif len(locations) == 1:
                 # Only found one intersection (maybe mesh is open or ray didn't exit)
@@ -287,7 +297,7 @@ class ScadDriver:
                 step = max(0.1, diag * 0.01)
 
                 point = p1 + direction * step
-                return list(point)
+                return point.tolist()
 
             print("Warning: Could not find intersection for internal point.")
             return None
