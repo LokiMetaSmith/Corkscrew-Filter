@@ -4,20 +4,24 @@ set -e
 echo "=== Corkscrew Filter Optimization Startup ==="
 
 # 1. Check Dependencies
-if ! command -v openscad &> /dev/null; then
-    if ! command -v node &> /dev/null; then
-        echo "Error: Neither 'openscad' nor 'node' found. Please install one of them."
-        exit 1
-    else
-        echo "Native OpenSCAD not found, will use Node.js fallback (openscad-wasm)."
-        # Ensure dependencies for export.js are installed
-        if [ ! -d "node_modules" ]; then
+HAS_OPENSCAD=false
+if command -v openscad &> /dev/null; then
+    echo "Found native OpenSCAD."
+    HAS_OPENSCAD=true
+fi
+
+# Always check for Node and install deps if needed (even if OpenSCAD is present)
+if command -v node &> /dev/null; then
+    # Ensure dependencies for export.js are installed if package.json exists
+    if [ -f "package.json" ]; then
+         if [ ! -d "node_modules" ]; then
             echo "Installing Node.js dependencies..."
             npm install
-        fi
+         fi
     fi
-else
-    echo "Found native OpenSCAD."
+elif [ "$HAS_OPENSCAD" = false ]; then
+    echo "Error: Neither 'openscad' nor 'node' found. Please install one of them."
+    exit 1
 fi
 
 # 2. Check API Key
