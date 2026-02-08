@@ -31,6 +31,7 @@ ADD_DEBRIS_EXIT_CHANNELS = true; // NEW: If true, cuts channels for debris to ex
 
 // --- Visual/Debug Options ---
 SHOW_O_RINGS = true;             // If true, renders red O-rings in their grooves for visualization.
+SHOW_TUBE = true;                // If true, renders a translucent tube around the filter for visualization.
 USE_TRANSLUCENCY = true;        // If true, makes certain parts semi-transparent to see internal geometry.
 CUT_FOR_VISIBILITY = false;      // If true, cuts the model in half (removes Y>0) to allow inspection of internal geometry.
 
@@ -50,6 +51,7 @@ $fn = $preview ? low_res_fn : _actual_high_res_fn; // OpenSCAD automatically use
 // --- Tube & Main Assembly Parameters ---
 tube_od_mm = 32;                 // The outer diameter of the tube the filter assembly will be inserted into.
 tube_wall_mm = 1;                // The wall thickness of the tube. Used to calculate the inner diameter.
+tube_length_override = 0;        // Custom length for the visualized tube (0 = auto/match component).
 insert_length_mm = 50 ;      // The total length of the filter insert from end to end.
 num_bins = 3;                    // The number of separate helical screw segments in the modular assembly.
 

@@ -115,6 +115,13 @@ module ModularFilterAssembly(tube_id, total_length) {
                 }
             }
         }
+
+        if (SHOW_TUBE) {
+            visual_tube_len = (tube_length_override > total_length) ? tube_length_override : total_length;
+            // tube_id is passed as arg, which corresponds to the inner diameter of the tube.
+            // We reconstruct the OD using the global tube_wall_mm.
+            TubeVisualizer(tube_id + 2 * tube_wall_mm, tube_wall_mm, visual_tube_len, center = true);
+        }
     }
 }
 
@@ -273,6 +280,12 @@ module HoseAdapterEndCap(tube_od, hose_id, oring_cs, tube_wall = tube_wall_mm, a
             translate([0, 0, cap_sleeve_height - groove_depth / 2]) OringVisualizer_Face(groove_center_dia, oring_cs);
         }
 
+        if (SHOW_TUBE) {
+            visual_tube_len = (tube_length_override > 0) ? tube_length_override : (cap_sleeve_height + 50);
+            translate([0, 0, cap_sleeve_height - visual_tube_len / 2])
+                TubeVisualizer(tube_od, tube_wall, visual_tube_len, center = true);
+        }
+
         translate([0, 0, cap_sleeve_height + cap_end_plate_thick + flange_height])
             Barb(hose_id = hose_id, hose_od = hose_id + 1.5, barb_count = 4);
 
@@ -296,6 +309,12 @@ module HoseAdapterEndCap(tube_od, hose_id, oring_cs, tube_wall = tube_wall_mm, a
 
         if (SHOW_O_RINGS) {
             translate([0, 0, cap_sleeve_height / 2]) OringVisualizer_ID(cap_inner_dia, oring_cs);
+        }
+
+        if (SHOW_TUBE) {
+            visual_tube_len = (tube_length_override > 0) ? tube_length_override : (cap_sleeve_height + 50);
+            translate([0, 0, cap_sleeve_height - visual_tube_len / 2])
+                TubeVisualizer(tube_od, tube_wall, visual_tube_len, center = true);
         }
 
         translate([0, 0, cap_sleeve_height + cap_end_plate_thick + flange_height])
