@@ -246,6 +246,29 @@ class ScadDriver:
             print(f"Error reading STL bounds: {e}")
             return None, None
 
+    def scale_mesh(self, stl_path, scale_factor):
+        """
+        Scales the mesh in-place by the given factor.
+
+        Args:
+            stl_path (str): Path to the STL file.
+            scale_factor (float): The scaling factor (e.g., 0.001 for mm -> m).
+
+        Returns:
+            bool: True if successful, False otherwise.
+        """
+        mesh = self._load_clean_mesh(stl_path)
+        if mesh is None:
+            return False
+
+        try:
+            mesh.apply_scale(scale_factor)
+            mesh.export(stl_path)
+            return True
+        except Exception as e:
+            print(f"Error scaling mesh: {e}")
+            return False
+
     def get_internal_point(self, stl_path):
         """
         Finds a point strictly inside the mesh using ray tracing.

@@ -54,6 +54,14 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
             with Timer("Geometry Generation"):
                 success = scad_driver.generate_stl(params, stl_path, log_file=geom_log)
 
+                # Scale STL to meters immediately after generation
+                if success:
+                    SCALE_FACTOR = 0.001
+                    print(f"Scaling mesh by factor {SCALE_FACTOR} (mm -> m)...")
+                    if not scad_driver.scale_mesh(stl_path, SCALE_FACTOR):
+                        print("Failed to scale mesh. Aborting.")
+                        success = False
+
             if not success:
                 print(f"Geometry generation failed. Check {geom_log} for details.")
                 return {"error": "geometry_generation_failed"}, []
@@ -76,23 +84,26 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
             if bounds[0] is None:
                 print("Failed to get bounds. Using default.")
             else:
+                SCALE_FACTOR = 0.001 # mm to meters
                 # Calculate dynamic target cell size based on smallest feature
-                target_cell_size = 1.5
+                target_cell_size = 1.5 * SCALE_FACTOR # Default scaled
                 void_r = params.get("helix_void_profile_radius_mm")
                 if void_r:
                     try:
                         # Ensure resolution is sufficient for small channels (at least ~2.5 cells radius)
                         # We use 0.4 * radius to be safe (diameter / 5), clamped between 0.4mm and 1.2mm
                         # This ensures small inlet patches are captured by snappyHexMesh
-                        calculated_size = float(void_r) * 0.4
-                        target_cell_size = max(0.4, min(1.2, calculated_size))
+                        calculated_size_mm = float(void_r) * 0.4
+                        target_cell_size_mm = max(0.4, min(1.2, calculated_size_mm))
+                        target_cell_size = target_cell_size_mm * SCALE_FACTOR
                     except (ValueError, TypeError):
                         pass
 
-                print(f"Updating blockMesh with target_cell_size={target_cell_size:.3f}mm")
+                print(f"Updating blockMesh with target_cell_size={target_cell_size:.6f}m")
                 foam_driver.update_blockMesh(bounds, target_cell_size=target_cell_size)
 
                 # 1. Try to find an internal point using robust ray tracing (trimesh)
+                # The bounds and mesh are already scaled to meters, so this returns meters.
                 custom_location = scad_driver.get_internal_point(stl_path)
 
                 if custom_location:
@@ -125,7 +136,8 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                             x = path_r * math.cos(theta_rad)
                             y = path_r * math.sin(theta_rad)
                             z = 0.0
-                            custom_location = (x, y, z)
+                            # Scale fallback calculation to meters
+                            custom_location = (x * SCALE_FACTOR, y * SCALE_FACTOR, z * SCALE_FACTOR)
                             print(f"Calculated custom seed location for channel: {custom_location}")
                         except Exception as e:
                             print(f"Warning: Failed to calculate custom location: {e}")
