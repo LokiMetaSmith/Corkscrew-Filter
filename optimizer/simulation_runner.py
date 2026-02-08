@@ -82,15 +82,15 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                 if void_r:
                     try:
                         # Ensure resolution is sufficient for small channels (at least ~2.5 cells radius)
-                        # We use 0.4 * radius to be safe (diameter / 5), clamped between 0.4mm and 1.2mm
+                        # We use 0.3 * radius to be safe (diameter / 6), clamped between 0.2mm and 0.8mm
                         # This ensures small inlet patches are captured by snappyHexMesh
-                        calculated_size = float(void_r) * 0.4
-                        target_cell_size = max(0.4, min(1.2, calculated_size))
+                        calculated_size = float(void_r) * 0.3
+                        target_cell_size = max(0.2, min(0.8, calculated_size))
                     except (ValueError, TypeError):
                         pass
 
                 print(f"Updating blockMesh with target_cell_size={target_cell_size:.3f}mm")
-                foam_driver.update_blockMesh(bounds, target_cell_size=target_cell_size)
+                foam_driver.update_blockMesh(bounds, margin=(1.2, 1.2, 0.95), target_cell_size=target_cell_size)
 
                 # 1. Try to find an internal point using robust ray tracing (trimesh)
                 custom_location = scad_driver.get_internal_point(stl_path)
