@@ -42,7 +42,7 @@ castellatedMeshControls
     (
         {
             file "corkscrew_fluid.eMesh";
-            level 2;
+            level 1;
         }
     );
 
@@ -50,7 +50,7 @@ castellatedMeshControls
     {
         corkscrew
         {
-            level (2 2);
+            level (1 1);
         }
     }
 

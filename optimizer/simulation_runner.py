@@ -86,6 +86,8 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                 print("Failed to get bounds. Using default.")
             else:
                 SCALE_FACTOR = 0.001 # mm to meters
+                REFINEMENT_LEVEL = 1 # Match level set in snappyHexMeshDict
+
                 # Calculate dynamic target cell size based on smallest feature
                 target_cell_size = 1.5 * SCALE_FACTOR # Default scaled
                 void_r = params.get("helix_void_profile_radius_mm")
@@ -96,7 +98,11 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                         # This ensures small inlet patches are captured by snappyHexMesh
                         calculated_size_mm = float(void_r) * 0.3
                         target_cell_size_mm = max(0.2, min(0.8, calculated_size_mm))
-                        target_cell_size = target_cell_size_mm * SCALE_FACTOR
+
+                        # Adjust target size by refinement factor because blockMesh is coarser
+                        # The final surface resolution will be target_cell_size / (2^REFINEMENT_LEVEL)
+                        # So we multiply here to set blockMesh size.
+                        target_cell_size = target_cell_size_mm * SCALE_FACTOR * (2 ** REFINEMENT_LEVEL)
                     except (ValueError, TypeError):
                         pass
 
@@ -111,9 +117,11 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
 
                 estimated_cells = block_volume / (target_cell_size ** 3)
 
-                if estimated_cells > 1_000_000:
-                    new_size = (block_volume / 1_000_000) ** (1/3)
-                    print(f"Warning: Estimated cell count {estimated_cells:.0f} exceeds 1M limit. Increasing target_cell_size from {target_cell_size:.5f}m to {new_size:.5f}m to prevent OOM.")
+                # Reduced limit from 1M to 300k to prevent OOM on memory-constrained systems
+                MAX_CELLS = 300_000
+                if estimated_cells > MAX_CELLS:
+                    new_size = (block_volume / MAX_CELLS) ** (1/3)
+                    print(f"Warning: Estimated cell count {estimated_cells:.0f} exceeds {MAX_CELLS} limit. Increasing target_cell_size from {target_cell_size:.5f}m to {new_size:.5f}m to prevent OOM.")
                     target_cell_size = new_size
 
                 print(f"Updating blockMesh with target_cell_size={target_cell_size:.3f}m")
