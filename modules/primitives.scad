@@ -111,4 +111,19 @@ module OringGroove_Face_Cutter(groove_center_dia, oring_cs) {
     rotate_extrude(convexity = 10) translate([groove_center_dia / 2, 0, 0]) square([groove_width, groove_depth], center = true);
 }
 
-
+/**
+ * Module: TubeVisualizer
+ * Description: Renders a translucent tube for visualization purposes.
+ * Arguments:
+ * tube_od:   The outer diameter of the tube.
+ * tube_wall: The wall thickness of the tube.
+ * length:    The length of the tube section to render.
+ * center:    (boolean) If true, centers the tube on the Z-axis. Default: true.
+ */
+module TubeVisualizer(tube_od, tube_wall, length, center=true) {
+    color([0.6, 0.8, 1.0, 0.3]) // Light Blue, Translucent
+    difference() {
+        cylinder(d = tube_od, h = length, center = center);
+        cylinder(d = tube_od - 2 * tube_wall, h = length + 1, center = center);
+    }
+}
