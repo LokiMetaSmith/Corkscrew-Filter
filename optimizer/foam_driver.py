@@ -374,22 +374,151 @@ functions
 
         return True
 
+    def _generate_topoSetDict(self):
+        """
+        Generates system/topoSetDict to select inlet and outlet faces based on normals.
+        Assumes Z-axis alignment: Outlet (top) normal (0 0 1), Inlet (bottom) normal (0 0 -1).
+        """
+        content = """/*--------------------------------*- C++ -*----------------------------------*\\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2406                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      topoSetDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+actions
+(
+    // 1. Select all faces in 'corkscrew' patch (if it exists) or all boundary faces
+    // Since snappyHexMesh puts everything in 'corkscrew' (from STL name), start with that.
+    {
+        name    corkscrewFaces;
+        type    faceSet;
+        action  new;
+        source  patchToFace;
+        patch   corkscrew;
+    }
+
+    // 2. Select Inlet Faces (Bottom, Normal 0 0 -1)
+    {
+        name    inletFaces;
+        type    faceSet;
+        action  new;
+        source  normalToFace;
+        normal  (0 0 -1);
+        cos     0.8; // Tolerance (allow some deviation)
+    }
+    // Intersect with corkscrew boundary faces
+    {
+        name    inletFaces;
+        type    faceSet;
+        action  subset;
+        source  faceToFace;
+        set     corkscrewFaces;
+    }
+
+    // 3. Select Outlet Faces (Top, Normal 0 0 1)
+    {
+        name    outletFaces;
+        type    faceSet;
+        action  new;
+        source  normalToFace;
+        normal  (0 0 1);
+        cos     0.8;
+    }
+    {
+        name    outletFaces;
+        type    faceSet;
+        action  subset;
+        source  faceToFace;
+        set     corkscrewFaces;
+    }
+);
+
+// ************************************************************************* //
+"""
+        with open(os.path.join(self.case_dir, "system", "topoSetDict"), 'w') as f:
+            f.write(content)
+
+    def _generate_createPatchDict(self):
+        """
+        Generates system/createPatchDict to create 'inlet' and 'outlet' patches from face sets.
+        """
+        content = """/*--------------------------------*- C++ -*----------------------------------*\\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2406                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      createPatchDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+pointSync false;
+
+patches
+(
+    {
+        name inlet;
+        patchInfo
+        {
+            type patch;
+            inGroups (inlet);
+        }
+        constructFrom set;
+        set inletFaces;
+    }
+    {
+        name outlet;
+        patchInfo
+        {
+            type patch;
+            inGroups (outlet);
+        }
+        constructFrom set;
+        set outletFaces;
+    }
+);
+
+// ************************************************************************* //
+"""
+        with open(os.path.join(self.case_dir, "system", "createPatchDict"), 'w') as f:
+            f.write(content)
+
     def run_meshing(self, log_file=None):
         """
         Runs the meshing pipeline.
         """
-        # Ensure we capture output
-        cmds = [
-            ["blockMesh"],
-            ["surfaceFeatureExtract"],
-            ["snappyHexMesh", "-overwrite"],
-            ["checkMesh"]
-        ]
+        # Generate patch creation configs
+        self._generate_topoSetDict()
+        self._generate_createPatchDict()
 
-        for cmd in cmds:
-            # Pass command name as description
-            if not self.run_command(cmd, log_file=log_file, description=f"Meshing ({cmd[0]})"):
-                return False
+        # Ensure we capture output
+        # Step 1: Base Mesh
+        if not self.run_command(["blockMesh"], log_file=log_file, description="Meshing (blockMesh)"): return False
+        if not self.run_command(["surfaceFeatureExtract"], log_file=log_file, description="Meshing (surfaceFeatureExtract)"): return False
+        if not self.run_command(["snappyHexMesh", "-overwrite"], log_file=log_file, description="Meshing (snappyHexMesh)"): return False
+
+        # Step 2: Create Patches
+        if not self.run_command(["topoSet"], log_file=log_file, description="Meshing (topoSet)"): return False
+        if not self.run_command(["createPatch", "-overwrite"], log_file=log_file, description="Meshing (createPatch)"): return False
+
+        # Step 3: Check
+        if not self.run_command(["checkMesh"], log_file=log_file, description="Meshing (checkMesh)"): return False
 
         # Post-meshing verification
         if not self._check_boundary_patches():
