@@ -265,6 +265,8 @@ functions
         ny = max(10, ny)
         nz = max(10, nz)
 
+        print(f"Calculated blockMesh resolution: ({nx} {ny} {nz})")
+
         vertices = [
             f"({new_min[0]} {new_min[1]} {new_min[2]})",
             f"({new_max[0]} {new_min[1]} {new_min[2]})",
@@ -337,6 +339,41 @@ functions
         with open(shm_path, 'w') as f:
             f.write(content)
 
+    def _check_boundary_patches(self):
+        """
+        Checks if inlet and outlet patches exist and have faces.
+        Returns True if valid, False otherwise.
+        """
+        boundary_file = os.path.join(self.case_dir, "constant", "polyMesh", "boundary")
+        if not os.path.exists(boundary_file):
+            print("Error: polyMesh/boundary file not found.")
+            return False
+
+        with open(boundary_file, 'r') as f:
+            content = f.read()
+
+        for patch in ["inlet", "outlet"]:
+            # Match: patch_name { ... nFaces X; ... }
+            # Use DOTALL to match across lines
+            # Pattern: patch \s* \{ .*? nFaces \s+ (\d+) ;
+            pattern = re.compile(rf"{patch}\s*\{{.*?nFaces\s+(\d+);", re.DOTALL)
+            match = pattern.search(content)
+            if not match:
+                # OpenFOAM sometimes quotes patch names in boundary file
+                pattern_quoted = re.compile(rf'"{patch}"\s*\{{.*?nFaces\s+(\d+);', re.DOTALL)
+                match = pattern_quoted.search(content)
+
+            if not match:
+                print(f"Error: Patch '{patch}' not found in boundary file.")
+                return False
+
+            n_faces = int(match.group(1))
+            if n_faces <= 0:
+                print(f"Error: Patch '{patch}' has 0 faces.")
+                return False
+
+        return True
+
     def run_meshing(self, log_file=None):
         """
         Runs the meshing pipeline.
@@ -353,6 +390,12 @@ functions
             # Pass command name as description
             if not self.run_command(cmd, log_file=log_file, description=f"Meshing ({cmd[0]})"):
                 return False
+
+        # Post-meshing verification
+        if not self._check_boundary_patches():
+            print("Meshing failed verification: missing or empty inlet/outlet patches.")
+            return False
+
         return True
 
     def run_solver(self, log_file=None):
@@ -421,7 +464,7 @@ functions
                     try:
                         with open(target_log, 'r') as f:
                             lines = f.readlines()
-                            for line in lines[-20:]:
+                            for line in lines[-50:]:
                                 print(line, end='')
                     except Exception as e:
                         print(f"Error reading log file: {e}")
