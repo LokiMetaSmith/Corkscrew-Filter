@@ -4,6 +4,8 @@ import time
 import os
 import datetime
 import threading
+import json
+import shutil
 
 class Timer:
     def __init__(self, description=None):
@@ -96,3 +98,62 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
             reader_thread.join()
             sys.stdout.write("\nProcess interrupted by user.\n")
             raise
+
+def get_container_memory_gb(container_tool=None):
+    """
+    Estimates the available memory for the container engine in GB.
+    If container_tool is None (Native), returns host available memory.
+    """
+    try:
+        import psutil
+        # Use available memory for native execution (safer than total)
+        mem_gb = psutil.virtual_memory().available / (1024**3)
+    except ImportError:
+        print("Warning: psutil not installed. Assuming 4GB RAM.")
+        mem_gb = 4.0
+    except Exception as e:
+        print(f"Warning: Error getting host memory: {e}. Assuming 4GB.")
+        mem_gb = 4.0
+
+    if container_tool == "podman":
+        try:
+            # podman info --format json
+            # Returns huge JSON. Look for host.memTotal
+            result = subprocess.run(
+                ["podman", "info", "--format", "json"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                info = json.loads(result.stdout)
+                # Structure varies by version, but usually host -> memTotal (in bytes)
+                mem_bytes = info.get("host", {}).get("memTotal")
+                if mem_bytes:
+                    mem_gb = float(mem_bytes) / (1024**3)
+        except Exception as e:
+            print(f"Warning: Failed to query Podman memory: {e}")
+
+    elif container_tool == "docker":
+        try:
+            # docker info --format '{{.MemTotal}}'
+            # Returns bytes, e.g. 8364236800
+            result = subprocess.run(
+                ["docker", "info", "--format", "{{.MemTotal}}"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                output = result.stdout.strip()
+                # Sometimes output includes units or formatting? usually raw bytes if specified
+                # If raw bytes, just int()
+                if output.isdigit():
+                    mem_bytes = int(output)
+                    mem_gb = float(mem_bytes) / (1024**3)
+        except Exception as e:
+            print(f"Warning: Failed to query Docker memory: {e}")
+
+    return mem_gb
