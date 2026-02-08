@@ -40,17 +40,18 @@ def get_machine_info():
         pass
     return None
 
-def resize_podman_machine(memory_mb, cpus=None, machine_name="podman-machine-default"):
+def resize_podman_machine(memory_mb, cpus=None, machine_name="podman-machine-default", yes=False):
     if not check_podman():
         return
 
     print(f"Preparing to resize Podman machine '{machine_name}' to {memory_mb}MB RAM" + (f" and {cpus} CPUs" if cpus else "") + ".")
     print("Warning: This requires restarting the Podman machine. Active containers will be stopped.")
 
-    confirm = input("Do you want to continue? (y/n) ").strip().lower()
-    if confirm != 'y':
-        print("Aborted.")
-        return
+    if not yes:
+        confirm = input("Do you want to continue? (y/n) ").strip().lower()
+        if confirm != 'y':
+            print("Aborted.")
+            return
 
     # 1. Stop Machine
     print("Stopping Podman machine...")
@@ -84,6 +85,7 @@ def main():
     parser.add_argument("--memory", type=int, default=8192, help="Target memory in MB (default: 8192)")
     parser.add_argument("--cpus", type=int, help="Target CPU count")
     parser.add_argument("--machine", type=str, default="podman-machine-default", help="Machine name (default: podman-machine-default)")
+    parser.add_argument("-y", "--yes", action="store_true", help="Automatically confirm all prompts")
 
     args = parser.parse_args()
 
@@ -92,11 +94,12 @@ def main():
         print("Note: On Linux, Podman typically uses host memory/CPUs natively.")
         print("This script is intended for Podman Machine (Windows/Mac/WSL2).")
         print("To limit memory on Linux, use 'podman run --memory ...'.")
-        confirm = input("Are you sure you want to proceed? (y/n) ").strip().lower()
-        if confirm != 'y':
-            return
+        if not args.yes:
+            confirm = input("Are you sure you want to proceed? (y/n) ").strip().lower()
+            if confirm != 'y':
+                return
 
-    resize_podman_machine(args.memory, args.cpus, args.machine)
+    resize_podman_machine(args.memory, args.cpus, args.machine, yes=args.yes)
 
 if __name__ == "__main__":
     main()
