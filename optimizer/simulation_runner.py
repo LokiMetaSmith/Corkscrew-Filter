@@ -2,7 +2,7 @@ import os
 import time
 import math
 import numpy as np
-from utils import Timer
+from utils import Timer, get_container_memory_gb
 from parameter_validator import validate_parameters
 
 def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False, skip_cfd=False, iteration=0, reuse_mesh=False):
@@ -117,11 +117,36 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
 
                 estimated_cells = block_volume / (target_cell_size ** 3)
 
-                # Reduced limit from 1M to 300k to prevent OOM on memory-constrained systems
-                MAX_CELLS = 300_000
+                # Dynamic Memory Limit
+                try:
+                    # Estimate available RAM in GB
+                    ram_gb = get_container_memory_gb(foam_driver.container_tool)
+                    print(f"Detected available memory: {ram_gb:.2f} GB")
+
+                    if ram_gb < 8.0 and foam_driver.container_tool == "podman":
+                        print("Tip: Your container memory is low (<8GB). You can increase it by running:")
+                        print("     python optimizer/setup_machine.py --memory 8192")
+
+                except Exception as e:
+                    print(f"Warning: Failed to detect memory ({e}). Using default.")
+                    ram_gb = 4.0 # Conservative default
+
+                # Heuristic: 25,000 background cells per GB of RAM.
+                # Background cells are multiplied by ~8x in final mesh.
+                # 4GB -> 100k block cells -> ~800k final cells.
+                # 16GB -> 400k block cells -> ~3.2M final cells.
+
+                calculated_limit = int(ram_gb * 25000)
+
+                # Clamp limits
+                MIN_LIMIT = 50_000
+                MAX_LIMIT = 500_000 # Cap at 500k to avoid excessive runtimes even on big machines
+
+                MAX_CELLS = max(MIN_LIMIT, min(calculated_limit, MAX_LIMIT))
+
                 if estimated_cells > MAX_CELLS:
                     new_size = (block_volume / MAX_CELLS) ** (1/3)
-                    print(f"Warning: Estimated cell count {estimated_cells:.0f} exceeds {MAX_CELLS} limit. Increasing target_cell_size from {target_cell_size:.5f}m to {new_size:.5f}m to prevent OOM.")
+                    print(f"Warning: Estimated cell count {estimated_cells:.0f} exceeds {MAX_CELLS} limit (RAM: {ram_gb:.1f}GB). Increasing target_cell_size from {target_cell_size:.5f}m to {new_size:.5f}m to prevent OOM.")
                     target_cell_size = new_size
 
                 print(f"Updating blockMesh with target_cell_size={target_cell_size:.3f}m")
