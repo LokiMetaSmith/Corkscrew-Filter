@@ -248,6 +248,9 @@ If the error was 'invalid_parameters', you violated a geometric constraint.
 If 'helix_void_profile_radius_mm' >= 'helix_profile_radius_mm', you MUST decrease void radius or increase profile radius significantly.
 """
 
+        # Strict constraint reminder
+        constraints += "\nCONSTRAINT: `helix_profile_radius_mm` must be STRICTLY LESS than `helix_path_radius_mm` (e.g. at least 0.5mm less) to avoid center-axis singularities. Do not set them equal."
+
         visual_instruction = ""
         if has_images:
             visual_instruction = """
@@ -308,6 +311,12 @@ You must respond with valid JSON only.
                 first_newline = text.find("\n", start)
                 if first_newline != -1 and first_newline < end:
                     text = text[first_newline:end].strip()
+
+        # Try to find the JSON object using regex (outermost curly braces) if it looks like there's extra text
+        # This handles cases where the LLM adds commentary outside the code block or forgets the code block
+        match = re.search(r'\{.*\}', text, re.DOTALL)
+        if match:
+            text = match.group(0)
 
         # Cleaning: Escape backslashes that are not part of a valid escape sequence
         # This fixes "Invalid \escape" errors common in LLM output (e.g. file paths or LaTeX)
