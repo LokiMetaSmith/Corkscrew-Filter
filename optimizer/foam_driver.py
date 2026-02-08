@@ -536,12 +536,55 @@ functions
                             current_parcels = int(m.group(1))
                         break
 
+            # 4. Try to parse explicit Parcel fate table (more accurate)
+            escaped_parcels = 0
+            stuck_parcels = 0
+            found_fate_table = False
+
+            with open(target_log, 'r') as f:
+                content = f.read()
+                # Look for "Parcel fate (number, mass)" block
+                if "Parcel fate" in content:
+                    # Regex for escape and stick counts
+                    # Pattern: - escape      : 123, ...
+                    escape_match = re.search(r"\s*-\s+escape\s+:\s+(\d+)", content)
+                    stick_match = re.search(r"\s*-\s+stick\s+:\s+(\d+)", content)
+
+                    if escape_match:
+                        escaped_parcels = int(escape_match.group(1))
+                        found_fate_table = True
+                    if stick_match:
+                        stuck_parcels = int(stick_match.group(1))
+                        found_fate_table = True
+
             if total_injected > 0:
-                # Efficiency: Percentage of particles remaining (stuck to walls)
-                # Assumption: Outlet/Inlet are 'escape', Walls are 'stick'.
-                metrics['separation_efficiency'] = (current_parcels / total_injected) * 100.0
-                metrics['particles_injected'] = total_injected
-                metrics['particles_captured'] = current_parcels
+                if found_fate_table:
+                    # Use explicit fate counts
+                    # Captured = Stuck + (Current - Escaped? No, Current is remaining in domain)
+                    # Actually, if the simulation finished, Current should be small/zero if everything settled.
+                    # But if we treat 'stuck' as captured (on bin walls) and 'escape' as lost.
+
+                    # Separation Efficiency = 1 - (Escaped / Injected)
+                    metrics['separation_efficiency'] = (1.0 - (escaped_parcels / total_injected)) * 100.0
+                    metrics['particles_injected'] = total_injected
+                    metrics['particles_captured'] = stuck_parcels # Explicitly stuck
+                    metrics['particles_escaped'] = escaped_parcels
+                    metrics['particles_remaining'] = current_parcels # Suspended in flow
+
+                    # Total captured could be interpreted as Stuck + Remaining (if remaining are in bin)
+                    # For now, let's report strict "Stuck" as captured, unless the user considers residence as capture.
+                    # The user said "measure ... total particulate that gets captured in the volume".
+                    # So 'current' particles might be captured.
+                    # Let's add a combined metric.
+                    metrics['total_retained'] = stuck_parcels + current_parcels
+
+                else:
+                    # Fallback to legacy logic (Efficiency = Remaining / Injected)
+                    # This assumes all non-remaining particles escaped.
+                    metrics['separation_efficiency'] = (current_parcels / total_injected) * 100.0
+                    metrics['particles_injected'] = total_injected
+                    metrics['particles_captured'] = current_parcels
+                    metrics['note'] = "Using legacy tracking (implicit escape)"
 
         return metrics
 

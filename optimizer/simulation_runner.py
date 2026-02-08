@@ -139,10 +139,21 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                 calculated_limit = int(ram_gb * 25000)
 
                 # Clamp limits
-                MIN_LIMIT = 50_000
+                MIN_LIMIT = 100_000
                 MAX_LIMIT = 500_000 # Cap at 500k to avoid excessive runtimes even on big machines
 
                 MAX_CELLS = max(MIN_LIMIT, min(calculated_limit, MAX_LIMIT))
+
+                # Check for minimum resolution requirement (void_r)
+                if void_r:
+                    # Require at least 4 cells across the channel diameter (radius / 2)
+                    # This ensures features aren't completely lost
+                    min_res_cell_size = (float(void_r) * SCALE_FACTOR) / 2.0
+                    min_required_cells = block_volume / (min_res_cell_size ** 3)
+
+                    if min_required_cells > MAX_CELLS:
+                        print(f"Warning: Minimum resolution requires ~{min_required_cells:.0f} cells, which exceeds memory limit {MAX_CELLS}. Ignoring memory limit to preserve geometry.")
+                        MAX_CELLS = int(min_required_cells)
 
                 if estimated_cells > MAX_CELLS:
                     new_size = (block_volume / MAX_CELLS) ** (1/3)
