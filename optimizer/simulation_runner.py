@@ -1,6 +1,7 @@
 import os
 import time
 import math
+import numpy as np
 from utils import Timer
 from parameter_validator import validate_parameters
 
@@ -99,8 +100,24 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                     except (ValueError, TypeError):
                         pass
 
+                # Estimate cell count to prevent OOM
+                BLOCK_MARGIN = np.array([1.2, 1.2, 0.95])
+                # Ensure bounds are numpy arrays for subtraction
+                bounds_arr = [np.array(b) for b in bounds]
+                size = bounds_arr[1] - bounds_arr[0]
+
+                block_size = size * BLOCK_MARGIN
+                block_volume = np.prod(block_size)
+
+                estimated_cells = block_volume / (target_cell_size ** 3)
+
+                if estimated_cells > 1_000_000:
+                    new_size = (block_volume / 1_000_000) ** (1/3)
+                    print(f"Warning: Estimated cell count {estimated_cells:.0f} exceeds 1M limit. Increasing target_cell_size from {target_cell_size:.5f}m to {new_size:.5f}m to prevent OOM.")
+                    target_cell_size = new_size
+
                 print(f"Updating blockMesh with target_cell_size={target_cell_size:.3f}m")
-                foam_driver.update_blockMesh(bounds, margin=(1.2, 1.2, 0.95), target_cell_size=target_cell_size)
+                foam_driver.update_blockMesh(bounds, margin=BLOCK_MARGIN, target_cell_size=target_cell_size)
 
                 # 1. Try to find an internal point using robust ray tracing (trimesh)
                 # The bounds and mesh are already scaled to meters, so this returns meters.

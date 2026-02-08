@@ -470,6 +470,9 @@ functions
                         print(f"Error reading log file: {e}")
                     print("----------------------------------------------------\n")
 
+            if cmd[0] == "blockMesh":
+                print("Hint: If blockMesh failed with no error message, it likely ran out of memory. The mesh resolution has been automatically adjusted, but try reducing mesh resolution further if the error persists.")
+
             if not ignore_error:
                 return False
             return True
