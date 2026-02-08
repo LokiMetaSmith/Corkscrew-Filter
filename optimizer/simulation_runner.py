@@ -111,13 +111,14 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
 
                 estimated_cells = block_volume / (target_cell_size ** 3)
 
-                if estimated_cells > 1_000_000:
-                    new_size = (block_volume / 1_000_000) ** (1/3)
-                    print(f"Warning: Estimated cell count {estimated_cells:.0f} exceeds 1M limit. Increasing target_cell_size from {target_cell_size:.5f}m to {new_size:.5f}m to prevent OOM.")
+                MAX_CELLS = 250_000
+                if estimated_cells > MAX_CELLS:
+                    new_size = (block_volume / MAX_CELLS) ** (1/3)
+                    print(f"Warning: Estimated cell count {estimated_cells:.0f} exceeds {MAX_CELLS} limit. Increasing target_cell_size from {target_cell_size:.5f}m to {new_size:.5f}m to prevent OOM.")
                     target_cell_size = new_size
 
                 print(f"Updating blockMesh with target_cell_size={target_cell_size:.3f}m")
-                foam_driver.update_blockMesh(bounds, margin=BLOCK_MARGIN, target_cell_size=target_cell_size)
+                foam_driver.update_blockMesh(bounds, margin=tuple(BLOCK_MARGIN), target_cell_size=target_cell_size)
 
                 # 1. Try to find an internal point using robust ray tracing (trimesh)
                 # The bounds and mesh are already scaled to meters, so this returns meters.
