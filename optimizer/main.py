@@ -229,14 +229,15 @@ def main():
         full_history.append(run_data)
         agent.history = full_history
 
-        # 6. Cleanup Artifacts (Keep Top 10)
-        top_runs = store.get_top_runs(10)
-        store.clean_artifacts(top_runs)
-
         # 7. Ask LLM for next step or Stop
         # We check stop condition from LLM
 
         new_params_or_meta = agent.suggest_parameters(current_params, metrics, CONSTRAINTS, image_paths=png_paths, history=full_history)
+
+        # 6. Cleanup Artifacts (Keep Top 10)
+        # Moved after LLM step to ensure images are available for analysis
+        top_runs = store.get_top_runs(10)
+        store.clean_artifacts(top_runs)
 
         stop_opt = False
         if "stop_optimization" in new_params_or_meta:
