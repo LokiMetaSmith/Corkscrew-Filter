@@ -28,6 +28,16 @@ class DataStore:
         if "timestamp" not in result:
             result["timestamp"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
+        # Mandatory fields
+        required_fields = ["id", "timestamp", "status", "parameters"]
+        for field in required_fields:
+            if field not in result:
+                raise ValueError(f"Missing required field: {field}")
+
+        # Explicit validation for parameters
+        if not isinstance(result["parameters"], dict) or not result["parameters"]:
+            raise ValueError("Invalid parameters: must be a non-empty dictionary.")
+
         # Write to file
         with open(self.log_file, "a") as f:
             f.write(json.dumps(result) + "\n")
@@ -117,10 +127,23 @@ class DataStore:
 if __name__ == "__main__":
     # Test stub
     store = DataStore("test_log.jsonl")
-    store.append_result({
-        "status": "test",
-        "parameters": {"a": 1}
-    })
-    print(store.load_history())
+    try:
+        # Should fail
+        store.append_result({
+            "status": "fail_test"
+        })
+    except ValueError as e:
+        print(f"Caught expected error: {e}")
+
+    try:
+        # Should succeed
+        store.append_result({
+            "status": "success_test",
+            "parameters": {"a": 1}
+        })
+        print("Success test passed.")
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+
     if os.path.exists("test_log.jsonl"):
         os.remove("test_log.jsonl")
