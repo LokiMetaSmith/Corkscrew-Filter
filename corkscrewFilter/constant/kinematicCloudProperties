@@ -64,6 +64,7 @@ subModels
         {
             type            patchInjection;
             patchName       inlet;
+            parcelBasisType number;
             parcelsPerSecond 1000;
             duration        1; // Inject for 1 second
             noi             1;
