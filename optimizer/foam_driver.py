@@ -9,7 +9,7 @@ import numpy as np
 from utils import run_command_with_spinner
 
 class FoamDriver:
-    def __init__(self, case_dir, template_dir=None, container_engine="auto"):
+    def __init__(self, case_dir, template_dir=None, container_engine="auto", num_processors=1):
         self.case_dir = os.path.abspath(case_dir)
         self.template_dir = os.path.abspath(template_dir) if template_dir else self.case_dir
         self.log_file = os.path.join(self.case_dir, "run_foam.log")
@@ -18,6 +18,7 @@ class FoamDriver:
         self.container_tool = None
         self.use_container = False
         self.container_engine = container_engine
+        self.num_processors = num_processors
         self._check_execution_environment()
 
     def _is_tool_usable(self, tool):
@@ -169,6 +170,35 @@ class FoamDriver:
 
         # Add function objects to controlDict if not present
         self._inject_function_objects()
+
+    def _generate_decomposeParDict(self):
+        """
+        Generates system/decomposeParDict for parallel execution.
+        """
+        content = f"""/*--------------------------------*- C++ -*----------------------------------*\\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2406                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      decomposeParDict;
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+numberOfSubdomains {self.num_processors};
+
+method          scotch;
+
+// ************************************************************************* //
+"""
+        with open(os.path.join(self.case_dir, "system", "decomposeParDict"), 'w') as f:
+            f.write(content)
 
     def _inject_function_objects(self):
         """
@@ -531,7 +561,25 @@ patches
         """
         Runs the solver.
         """
-        return self.run_command(["simpleFoam"], log_file=log_file, description="Solving CFD")
+        if self.num_processors > 1:
+            self._generate_decomposeParDict()
+
+            # 1. Decompose
+            if not self.run_command(["decomposePar", "-force"], log_file=log_file, description="Decomposing Domain"): return False
+
+            # 2. Run Parallel
+            # Note: mpirun might be named differently (e.g. mpiexec). OpenFOAM containers usually have mpirun.
+            cmd = ["mpirun", "-np", str(self.num_processors), "simpleFoam", "-parallel"]
+
+            if not self.run_command(cmd, log_file=log_file, description=f"Solving CFD (Parallel {self.num_processors} CPUs)"): return False
+
+            # 3. Reconstruct
+            # Reconstruct latest time for particle tracking and visualization
+            if not self.run_command(["reconstructPar", "-latestTime"], log_file=log_file, description="Reconstructing Domain"): return False
+
+            return True
+        else:
+            return self.run_command(["simpleFoam"], log_file=log_file, description="Solving CFD")
 
     def run_particle_tracking(self, log_file=None):
         """

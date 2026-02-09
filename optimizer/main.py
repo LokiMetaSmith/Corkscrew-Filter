@@ -20,12 +20,13 @@ def main():
     parser.add_argument("--skip-cfd", action="store_true", help="Generate geometry but skip CFD simulation")
     parser.add_argument("--reuse-mesh", action="store_true", help="Reuse existing mesh (skips geometry generation and meshing)")
     parser.add_argument("--container-engine", type=str, default="auto", choices=["auto", "podman", "docker"], help="Force specific container engine")
+    parser.add_argument("--cpus", type=int, default=1, help="Number of CPUs to use for parallel execution (default: 1)")
     parser.add_argument("--no-llm", action="store_true", help="Explicitly disable LLM and use random/fallback strategy (also suppresses prompts in startup script)")
     args = parser.parse_args()
 
     # Initialize components
     scad = ScadDriver(args.scad_file)
-    foam = FoamDriver(args.case_dir, container_engine=args.container_engine)
+    foam = FoamDriver(args.case_dir, container_engine=args.container_engine, num_processors=args.cpus)
 
     # Handle --no-llm logic: explicitly disable by unsetting env var
     if args.no_llm and "GEMINI_API_KEY" in os.environ:
