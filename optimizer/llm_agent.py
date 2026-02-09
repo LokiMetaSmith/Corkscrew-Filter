@@ -3,8 +3,14 @@ import json
 import re
 import random
 import mimetypes
-from google import genai
-from google.genai import types
+try:
+    from google import genai
+    from google.genai import types
+except ImportError:
+    print("Warning: google-genai library not found. LLM features will be disabled.")
+    genai = None
+    types = None
+
 from typing import Dict, List, Any
 try:
     from PIL import Image
@@ -23,7 +29,11 @@ class LLMAgent:
             print("Example: export GEMINI_API_KEY='your_api_key_here'")
             self.client = None
         else:
-            self.client = genai.Client(api_key=api_key)
+            if genai:
+                self.client = genai.Client(api_key=api_key)
+            else:
+                self.client = None
+                print("Warning: google-genai library missing, skipping client initialization.")
 
         self.model_name = model_name
         self.fallback_models = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-flash-latest", "gemini-pro-latest", "gemini-1.5-flash"]
@@ -160,9 +170,8 @@ class LLMAgent:
         try:
             response = self._generate_with_retry(content)
             text = response.text
-            # Extract JSON from potential markdown code blocks
-            clean_text = self._extract_json(text)
-            data = json.loads(clean_text)
+
+            data = self._parse_json_safely(text)
 
             if "parameters" in data:
                 return data["parameters"]
@@ -219,8 +228,8 @@ You must respond with valid JSON only.
         try:
             response = self._generate_with_retry([prompt])
             text = response.text
-            clean_text = self._extract_json(text)
-            data = json.loads(clean_text)
+
+            data = self._parse_json_safely(text)
 
             if "jobs" in data and isinstance(data["jobs"], list):
                 # Extract just the parameters from each job
@@ -322,6 +331,50 @@ You must respond with valid JSON only.
         # This fixes "Invalid \escape" errors common in LLM output (e.g. file paths or LaTeX)
         text = re.sub(r'\\(?![/u"\\bfnrt])', r'\\\\', text)
         return text.strip()
+
+    def _repair_json(self, text):
+        """
+        Attempts to repair common JSON syntax errors.
+        """
+        # 1. Remove comments
+        text = re.sub(r'//.*', '', text)
+        text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
+
+        # 2. Add missing commas after string values
+        # Matches "key": "value" followed by "next_key"
+        pattern_string = r'("[^"]*"\s*:\s*"(?:[^"\\]|\\.)*")\s*(?=")'
+        text = re.sub(pattern_string, r'\1,', text)
+
+        # 3. Add missing commas after primitive values (number, bool, null)
+        pattern_primitive = r'("[^"]*"\s*:\s*(?:true|false|null|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?))\s*(?=")'
+        text = re.sub(pattern_primitive, r'\1,', text)
+
+        # 4. Add missing commas after closing braces/brackets
+        pattern_structure = r'([}\]])\s*(?=")'
+        text = re.sub(pattern_structure, r'\1,', text)
+
+        # 5. Remove trailing commas before closing braces/brackets
+        text = re.sub(r',\s*([}\]])', r'\1', text)
+
+        return text
+
+    def _parse_json_safely(self, text):
+        """
+        Extracts JSON, tries to parse, and falls back to repair if needed.
+        """
+        clean_text = self._extract_json(text)
+        try:
+            return json.loads(clean_text)
+        except json.JSONDecodeError as e:
+            print(f"JSON Parse Error: {e}. Attempting repair...")
+            repaired_text = self._repair_json(clean_text)
+            try:
+                return json.loads(repaired_text)
+            except json.JSONDecodeError as e2:
+                print(f"Repair failed: {e2}")
+                # Print snippet for debugging
+                print(f"Failed JSON snippet: {clean_text[:500]}...")
+                raise e
 
 if __name__ == "__main__":
     agent = LLMAgent(api_key="TEST_KEY") # Won't work without valid key
