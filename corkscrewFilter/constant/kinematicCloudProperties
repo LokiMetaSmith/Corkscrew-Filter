@@ -106,6 +106,8 @@ subModels
         );
     }
 
+    collisionModel none;
+
     stochasticCollisionModel none;
 
     surfaceFilmModel none;
