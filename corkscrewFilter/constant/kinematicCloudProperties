@@ -64,11 +64,13 @@ subModels
         {
             type            patchInjection;
             patch           inlet;
+            flowRateProfile constant 1;
             parcelBasisType number;
             parcelsPerSecond 1000;
             duration        1; // Inject for 1 second
             noi             1;
             massFlowRate    1e-5;
+            flowRateProfile constant 1;
             U0              (0 0 5);
             sizeDistribution
             {
