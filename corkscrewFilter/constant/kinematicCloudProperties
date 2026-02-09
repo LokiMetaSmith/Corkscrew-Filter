@@ -85,9 +85,10 @@ subModels
 
     dispersionModel none;
 
-    patchInteractionModel
+    patchInteractionModel localInteraction;
+
+    localInteractionCoeffs
     {
-        type localInteraction;
         patches
         (
             corkscrew
