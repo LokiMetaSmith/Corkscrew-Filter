@@ -18,3 +18,8 @@ logs/
 corkscrewFilter/constant/extendedFeatureEdgeMesh/
 corkscrewFilter/constant/polyMesh/
 corkscrewFilter/constant/triSurface/*.eMesh
+
+# Ignore OpenFOAM simulation time directories (start with non-zero digit)
+corkscrewFilter/[1-9]*
+# Ignore Mintty terminal screenshots
+mintty*.png
