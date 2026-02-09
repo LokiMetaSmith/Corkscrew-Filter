@@ -52,14 +52,13 @@ rho0            3000; // kg/m^3
 
 subModels
 {
-    // Fix: Move collisionModel to top to prevent IO Error in v2406
-    collisionModel none;
-
     particleForces
     {
         sphereDrag;
         gravity;
     }
+
+    collisionModel none;
 
     injectionModels
     {
@@ -107,8 +106,6 @@ subModels
             }
         );
     }
-
-    stochasticCollisionModel none;
 
     surfaceFilmModel none;
 }
