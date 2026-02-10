@@ -3,6 +3,7 @@ import json
 import re
 import random
 import mimetypes
+import time
 try:
     from google import genai
     from google.genai import types
@@ -36,29 +37,62 @@ class LLMAgent:
                 print("Warning: google-genai library missing, skipping client initialization.")
 
         self.model_name = model_name
-        self.fallback_models = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-flash-latest", "gemini-pro-latest", "gemini-1.5-flash"]
+        # Updated fallback models based on user request ("gemini-2.5-flash" or "gemini-3-flash")
+        # Removing 2.0 as it does not exist.
+        self.fallback_models = ["gemini-2.5-flash", "gemini-3.0-flash", "gemini-1.5-flash"]
         self.history = []
 
     def _generate_with_retry(self, contents):
         """
         Attempts to generate content, retrying with fallback models if a 404 or other client error occurs.
+        Handles 429 RESOURCE_EXHAUSTED errors by waiting for the specified retry duration.
         """
         models_to_try = [self.model_name] + self.fallback_models
 
+        # Deduplicate models while preserving order
+        unique_models = []
+        seen = set()
+        for m in models_to_try:
+            if m not in seen:
+                unique_models.append(m)
+                seen.add(m)
+        models_to_try = unique_models
+
         for model in models_to_try:
-            try:
-                print(f"Attempting to generate with model: {model}")
-                response = self.client.models.generate_content(
-                    model=model,
-                    contents=contents
-                )
-                return response
-            except Exception as e:
-                print(f"Model {model} failed: {e}")
-                # If it's a 404 Not Found, try next.
-                # For other errors, we might also want to try next or fail.
-                # Assuming try next for robustness.
-                continue
+            # Try each model with retries for 429
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    print(f"Attempting to generate with model: {model} (Attempt {attempt+1}/{max_retries})")
+                    response = self.client.models.generate_content(
+                        model=model,
+                        contents=contents
+                    )
+                    return response
+                except Exception as e:
+                    error_str = str(e)
+                    print(f"Model {model} failed: {error_str}")
+
+                    # Check for 429 / Resource Exhausted
+                    if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                        # Extract retry delay: "Please retry in 21.979520586s."
+                        match = re.search(r"retry in ([0-9.]+)s", error_str)
+                        if match:
+                            wait_time = float(match.group(1)) + 1.0 # Add 1s buffer
+                            print(f"Rate limit hit. Waiting for {wait_time:.2f} seconds before retrying...")
+                            time.sleep(wait_time)
+                            continue # Retry strictly with the SAME model
+                        else:
+                            # Fallback if we can't parse time
+                            print("Rate limit hit, but could not parse retry time. Waiting 30s...")
+                            time.sleep(30)
+                            continue
+
+                    # If it's not a 429 (e.g. 404), break inner loop and try next model
+                    break
+
+            # If we exhausted retries for this model (or hit non-429 error), try next model
+            print(f"Moving to next fallback model after failure with {model}...")
 
         self._list_available_models()
         raise Exception("All models failed to generate content.")
@@ -130,14 +164,6 @@ class LLMAgent:
         """
         Asks the LLM for the next set of parameters.
         Returns just the new parameters dict, or (parameters, stop_flag) if requested by caller logic.
-        But to keep API compatible, we'll return parameters and include a '_meta' key or similar if needed,
-        or just rely on the main loop checking for 'stop_optimization' in the returned dict if we merge it.
-
-        Wait, suggest_parameters typically returns just the parameter dict that is merged into current_params.
-        I should return the FULL response object or handle the 'stop_optimization' key inside this dictionary.
-
-        Refactored: Returns a dict of parameters. If 'stop_optimization' is in the LLM response,
-        it will be included in the returned dict.
         """
         # Add last run to history
         if current_params:
@@ -202,9 +228,10 @@ class LLMAgent:
                 return self._generate_random_parameters(current_params, constraints)
             return current_params
 
-    def suggest_campaign(self, history: List[Dict], constraints: str, count: int = 5) -> List[Dict[str, Any]]:
+    def suggest_campaign(self, history: List[Dict], constraints: str, count: int = 5, image_paths: List[str] = None) -> List[Dict[str, Any]]:
         """
         Asks the LLM to generate a batch of parameter sets to explore different regions of the design space.
+        Includes support for images (multimodal) from the most recent run.
         """
         if not self.client:
             print("No LLM available.")
@@ -212,42 +239,110 @@ class LLMAgent:
 
         history_str = json.dumps(history, indent=2)
 
+        # Check for errors in the last run
+        error_instruction = ""
+        if history and "metrics" in history[-1] and "error" in history[-1]["metrics"]:
+            last_error = history[-1]["metrics"]["error"]
+            details = history[-1]["metrics"].get("details", "No details")
+            error_instruction = f"""
+CRITICAL WARNING:
+The previous run FAILED with error: "{last_error}".
+Details: {details}
+YOU MUST ADJUST PARAMETERS TO FIX THIS ERROR.
+If the error was 'invalid_parameters', you violated a geometric constraint.
+If 'helix_void_profile_radius_mm' >= 'helix_profile_radius_mm', you MUST decrease void radius or increase profile radius significantly.
+"""
+
+        visual_instruction = ""
+        if image_paths:
+            visual_instruction = """
+VISUAL INSPECTION:
+I have provided images of the solid model generated by the MOST RECENT run.
+Please visually inspect them for:
+1. Structural integrity (no disconnected parts).
+2. Proper geometry formation (e.g. helical continuity).
+3. "Christmas Tree" barb shape on the inlet/outlet (if visible).
+4. General printability (wall thickness, etc).
+If you see any visual defects, adjust the parameters to fix them in the next batch.
+"""
+
         prompt = f"""
-You are an expert engineer optimizing a 3D printed inertial filter (corkscrew shape).
-GOAL: Generate {count} DISTINCT sets of parameters to explore the design space effectively.
-Focus on varying key parameters (radius, twist, screw pitch) to understand their impact on separation efficiency and pressure drop.
+You are an expert engineer optimizing a 3D printed inertial filter (corkscrew shape) using OpenSCAD and OpenFOAM.
+The application is separating MOON DUST (Lunar Regolith, density ~3000 kg/m^3, particle size ~20 microns) from air.
+The mechanism is inertial separation via centrifugal force generated by the helical screw.
+
+GOAL: Optimize the design parameters to meet the following STRICT SUCCESS CRITERIA:
+1. Particle Collection Efficiency > 99.95%
+2. Pressure Drop < 0.7 PSI
+
+Maximize efficiency first, then minimize pressure drop.
 
 CONSTRAINTS:
 {constraints}
+CONSTRAINT: `helix_profile_radius_mm` must be STRICTLY LESS than `helix_path_radius_mm` (e.g. at least 0.5mm less) to avoid center-axis singularities. Do not set them equal.
+
+{error_instruction}
+
+{visual_instruction}
 
 HISTORY OF RUNS:
 {history_str}
 
 TASK:
-Propose {count} parameter sets. They should be diverse (explore different strategies).
+Analyze the history and visual feedback (if any). Identify trends.
+Propose a CAMPAIGN of {count} DISTINCT sets of parameters to explore the design space effectively.
+These sets should be diverse enough to learn more about the landscape but focused on improving the best results so far.
 
 RESPONSE FORMAT:
 You must respond with valid JSON only.
 {{
-    "campaign_reasoning": "Explain the overall strategy...",
+    "campaign_reasoning": "Explain the overall strategy for this batch...",
+    "stop_optimization": false,  // Set to true ONLY if success criteria are met and converged
     "jobs": [
         {{
             "reasoning": "Why this specific set...",
-            "parameters": {{ ... }}
+            "parameters": {{
+                "param_name": value,
+                ...
+            }}
         }},
         ...
     ]
 }}
 """
+        content = [prompt]
+
+        # Load images if provided
+        if image_paths:
+            for path in image_paths:
+                try:
+                    print(f"Loading image for LLM: {path}")
+                    with open(path, "rb") as f:
+                        image_data = f.read()
+                    mime_type, _ = mimetypes.guess_type(path)
+                    if not mime_type:
+                        mime_type = "image/png"
+                    content.append(types.Part.from_bytes(data=image_data, mime_type=mime_type))
+                except Exception as e:
+                    print(f"Failed to load image {path}: {e}")
+
         try:
-            response = self._generate_with_retry([prompt])
+            response = self._generate_with_retry(content)
             text = response.text
 
             data = self._parse_json_safely(text)
 
+            if data.get("stop_optimization") is True:
+                print("LLM signaled to STOP optimization.")
+                return [{"stop_optimization": True}]
+
             if "jobs" in data and isinstance(data["jobs"], list):
                 # Extract just the parameters from each job
-                return [job["parameters"] for job in data["jobs"] if "parameters" in job]
+                params_list = []
+                for job in data["jobs"]:
+                    if "parameters" in job:
+                        params_list.append(job["parameters"])
+                return params_list
             else:
                 print("LLM response did not contain valid 'jobs' list.")
                 return []
