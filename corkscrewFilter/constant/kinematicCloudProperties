@@ -59,6 +59,7 @@ subModels
     }
 
     collisionModel none;
+    stochasticCollisionModel none;
 
     injectionModels
     {
