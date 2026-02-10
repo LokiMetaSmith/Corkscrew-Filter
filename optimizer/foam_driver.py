@@ -666,6 +666,60 @@ boundaryField
         # 5. Create phi (Flux) if missing?
         # simpleFoam creates phi.
 
+    def _update_controlDict_for_particles(self, start_time_val):
+        """
+        Updates controlDict for particle tracking:
+        - startFrom latestTime (or specific time)
+        - endTime = start + duration
+        - deltaT = small
+        """
+        control_dict = os.path.join(self.case_dir, "system", "controlDict")
+        if not os.path.exists(control_dict):
+            return
+
+        with open(control_dict, 'r') as f:
+            content = f.read()
+
+        # Update application
+        if "application" in content:
+            content = re.sub(r"application\s+.*?;", "application icoUncoupledKinematicParcelFoam;", content)
+
+        # Update startFrom
+        if "startFrom" in content:
+            content = re.sub(r"startFrom\s+.*?;", "startFrom latestTime;", content)
+
+        # Update startTime (optional, but good practice)
+        if "startTime" in content:
+            content = re.sub(r"startTime\s+.*?;", f"startTime {start_time_val};", content)
+
+        # Update endTime
+        try:
+            current_t = float(start_time_val)
+        except ValueError:
+            current_t = 0.0
+
+        # Duration: 15 seconds (slightly > maxTrackTime 10s + duration 1s)
+        end_t = current_t + 15.0
+
+        if "stopAt" in content:
+            content = re.sub(r"stopAt\s+.*?;", "stopAt endTime;", content)
+
+        if "endTime" in content:
+            content = re.sub(r"endTime\s+.*?;", f"endTime {end_t};", content)
+
+        # Update deltaT
+        # 1ms time step
+        if "deltaT" in content:
+            content = re.sub(r"deltaT\s+.*?;", "deltaT 0.001;", content)
+
+        # Update writeInterval to avoid spamming disk with particle positions every step
+        # Write every 0.1s => 100 steps
+        if "writeInterval" in content:
+            content = re.sub(r"writeInterval\s+.*?;", "writeInterval 100;", content)
+
+        with open(control_dict, 'w') as f:
+            f.write(content)
+
     def run_particle_tracking(self, log_file=None):
         """
         Runs particle tracking (Lagrangian).
@@ -698,7 +752,10 @@ boundaryField
         # Generate fields
         self._generate_particle_tracking_fields(latest_time)
 
-        return self.run_command(["icoUncoupledKinematicParcelFoam", "-latestTime"], log_file=log_file, description="Particle Tracking")
+        # Update controlDict to run from latestTime with small deltaT
+        self._update_controlDict_for_particles(latest_time)
+
+        return self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking")
 
     def run_command(self, cmd, log_file=None, ignore_error=False, description="Running command"):
         if not self.has_tools:
