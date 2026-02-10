@@ -581,6 +581,91 @@ patches
         else:
             return self.run_command(["simpleFoam"], log_file=log_file, description="Solving CFD")
 
+    def _create_constant_field(self, time_dir, field_name, value, dimensions, class_type="volScalarField"):
+        """
+        Creates a uniform field file in the specified time directory.
+        Used to create 'rho' and 'mu' for particle tracking.
+        """
+        header = f"""/*--------------------------------*- C++ -*----------------------------------*\\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2406                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       {class_type};
+    location    "{time_dir}";
+    object      {field_name};
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      {dimensions};
+
+internalField   uniform {value};
+
+boundaryField
+{{
+    ".*"
+    {{
+        type            calculated;
+        value           uniform {value};
+    }}
+}}
+
+// ************************************************************************* //
+"""
+        file_path = os.path.join(self.case_dir, str(time_dir), field_name)
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+        with open(file_path, 'w') as f:
+            f.write(header)
+
+    def _generate_particle_tracking_fields(self, time_dir):
+        """
+        Generates missing fields (rho, mu) required for kinematicCloud.
+        """
+        # 1. Get properties from transportProperties if available, else defaults
+        rho_val = 1.2
+        nu_val = 1.48e-5
+
+        tp_path = os.path.join(self.case_dir, "constant", "transportProperties")
+        if os.path.exists(tp_path):
+            try:
+                with open(tp_path, 'r') as f:
+                    content = f.read()
+                    # Parse rhoInf
+                    m_rho = re.search(r"rhoInf\s+.*?([\d\.e\-\+]+);", content)
+                    if m_rho:
+                        rho_val = float(m_rho.group(1))
+
+                    # Parse nu (kinematic viscosity)
+                    m_nu = re.search(r"nu\s+.*?([\d\.e\-\+]+);", content)
+                    if m_nu:
+                        nu_val = float(m_nu.group(1))
+            except Exception as e:
+                print(f"Warning: Failed to parse transportProperties: {e}. Using defaults.")
+
+        mu_val = rho_val * nu_val
+
+        print(f"Generating particle tracking fields at time {time_dir}: rho={rho_val}, mu={mu_val:.3e}")
+
+        # 2. Create rho (Density) [1 -3 0 0 0 0 0]
+        self._create_constant_field(time_dir, "rho", rho_val, "[1 -3 0 0 0 0 0]")
+
+        # 3. Create mu (Dynamic Viscosity) [1 -1 -1 0 0 0 0]
+        self._create_constant_field(time_dir, "mu", mu_val, "[1 -1 -1 0 0 0 0]")
+
+        # 4. Create U (Velocity) if missing (unlikely, but ensures existence)
+        # Actually U should be there from the solver.
+
+        # 5. Create phi (Flux) if missing?
+        # simpleFoam creates phi.
+
     def run_particle_tracking(self, log_file=None):
         """
         Runs particle tracking (Lagrangian).
@@ -592,7 +677,28 @@ patches
             print("Warning: kinematicCloudProperties not found. Skipping particle tracking.")
             return False
 
-        return self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking")
+        # Find latest time directory
+        # List all items in case_dir, filter for numbers
+        dirs = [d for d in os.listdir(self.case_dir) if os.path.isdir(os.path.join(self.case_dir, d)) and d.replace('.', '', 1).isdigit()]
+
+        if not dirs:
+            print("Error: No time directories found for particle tracking.")
+            return False
+
+        # Sort numerically
+        try:
+            latest_time = max(dirs, key=float)
+        except ValueError:
+            latest_time = dirs[-1] # Fallback
+
+        # Skip 0 if possible, unless it's the only one
+        if latest_time == "0" and len(dirs) > 1:
+            print("Warning: Only found time 0. Solver might have failed.")
+
+        # Generate fields
+        self._generate_particle_tracking_fields(latest_time)
+
+        return self.run_command(["icoUncoupledKinematicParcelFoam", "-latestTime"], log_file=log_file, description="Particle Tracking")
 
     def run_command(self, cmd, log_file=None, ignore_error=False, description="Running command"):
         if not self.has_tools:
