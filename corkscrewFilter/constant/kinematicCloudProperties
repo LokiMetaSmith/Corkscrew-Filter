@@ -27,7 +27,7 @@ solution
     interpolationSchemes
     {
         rho             cell;
-        U               cellPoint;
+        U               cell;     // Use cell center values for robustness
         mu              cell;
     }
 
