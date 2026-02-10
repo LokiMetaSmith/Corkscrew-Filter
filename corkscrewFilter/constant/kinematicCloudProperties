@@ -1,10 +1,10 @@
-/*--------------------------------*- C++ -*----------------------------------*\\
+/*--------------------------------*- C++ -*----------------------------------*\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
 |  \\    /   O peration     | Version:  v2406                                 |
 |   \\  /    A nd           | Website:  www.openfoam.com                      |
 |    \\/     M anipulation  |                                                 |
-\\*---------------------------------------------------------------------------*/
+\*---------------------------------------------------------------------------*/
 FoamFile
 {
     version     2.0;
@@ -58,13 +58,14 @@ subModels
         gravity;
     }
 
+    collisionModel none;
+
     injectionModels
     {
         model1
         {
             type            patchInjection;
             patch           inlet;
-            flowRateProfile constant 1;
             parcelBasisType number;
             parcelsPerSecond 1000;
             duration        1; // Inject for 1 second
@@ -105,8 +106,6 @@ subModels
             }
         );
     }
-
-    stochasticCollisionModel none;
 
     surfaceFilmModel none;
 }
