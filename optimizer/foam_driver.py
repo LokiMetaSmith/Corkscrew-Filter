@@ -708,14 +708,21 @@ boundaryField
             content = re.sub(r"endTime\s+.*?;", f"endTime {end_t};", content)
 
         # Update deltaT
-        # 1ms time step
+        # 0.1ms time step (reduced from 1ms to ensure particle Co < 1)
+        # 5 m/s * 0.0001s = 0.5mm (vs ~2mm cell size)
         if "deltaT" in content:
-            content = re.sub(r"deltaT\s+.*?;", "deltaT 0.001;", content)
+            content = re.sub(r"deltaT\s+.*?;", "deltaT 0.0001;", content)
 
         # Update writeInterval to avoid spamming disk with particle positions every step
-        # Write every 0.1s => 100 steps
+        # Write every 0.1s => 1000 steps
         if "writeInterval" in content:
-            content = re.sub(r"writeInterval\s+.*?;", "writeInterval 100;", content)
+            content = re.sub(r"writeInterval\s+.*?;", "writeInterval 1000;", content)
+
+        # Disable function objects (like pressure probes) during particle tracking
+        # as they might fail or slow down the transient tracking loop
+        if "functions" in content:
+            # Simple hack: Rename the block so OpenFOAM ignores it
+            content = content.replace("functions", "functions_disabled")
 
         with open(control_dict, 'w') as f:
             f.write(content)
