@@ -4,52 +4,70 @@ import re
 import random
 import mimetypes
 import time
+import base64
+from typing import Dict, List, Any, Union, Tuple
+
+# Attempt imports for providers
 try:
     from google import genai
     from google.genai import types
 except ImportError:
-    print("Warning: google-genai library not found. LLM features will be disabled.")
     genai = None
     types = None
 
-from typing import Dict, List, Any, Union, Tuple
+try:
+    import openai
+except ImportError:
+    openai = None
+
 try:
     from PIL import Image
 except ImportError:
-    print("Warning: Pillow not found. Image features will be disabled.")
+    # Optional for simple usage, but good to have
     Image = None
 
-class LLMAgent:
-    def __init__(self, api_key=None, model_name="gemini-2.5-flash"):
-        if not api_key:
-            api_key = os.environ.get("GEMINI_API_KEY")
+class LLMProvider:
+    """Abstract base class for LLM providers."""
+    def generate(self, prompt: str, image_paths: List[str] = None) -> str:
+        raise NotImplementedError
 
-        if not api_key:
-            print("Warning: GEMINI_API_KEY not found. LLM features will be disabled.")
-            print("To use LLM features, please set the GEMINI_API_KEY environment variable.")
-            print("Example: export GEMINI_API_KEY='your_api_key_here'")
-            self.client = None
-        else:
-            if genai:
-                self.client = genai.Client(api_key=api_key)
-            else:
-                self.client = None
-                print("Warning: google-genai library missing, skipping client initialization.")
+    def list_models(self) -> List[str]:
+        return []
 
+    def get_name(self) -> str:
+        return "Unknown Provider"
+
+
+class GoogleGenAIProvider(LLMProvider):
+    def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash"):
+        if not genai:
+            raise ImportError("google-genai library not installed.")
+        self.client = genai.Client(api_key=api_key)
         self.model_name = model_name
-        # Updated fallback models based on user request ("gemini-2.5-flash" or "gemini-3-flash")
-        # Removing 2.0 as it does not exist.
         self.fallback_models = ["gemini-2.5-flash", "gemini-3.0-flash", "gemini-1.5-flash"]
-        self.history = []
 
-    def _generate_with_retry(self, contents):
-        """
-        Attempts to generate content, retrying with fallback models if a 404 or other client error occurs.
-        Handles 429 RESOURCE_EXHAUSTED errors by waiting for the specified retry duration.
-        """
+    def get_name(self) -> str:
+        return f"Google GenAI ({self.model_name})"
+
+    def generate(self, prompt: str, image_paths: List[str] = None) -> str:
+        # Prepare content
+        content = [prompt]
+        if image_paths:
+            for path in image_paths:
+                try:
+                    # print(f"Loading image for LLM: {path}")
+                    with open(path, "rb") as f:
+                        image_data = f.read()
+                    mime_type, _ = mimetypes.guess_type(path)
+                    if not mime_type:
+                        mime_type = "image/png"
+                    content.append(types.Part.from_bytes(data=image_data, mime_type=mime_type))
+                except Exception as e:
+                    print(f"Failed to load image {path}: {e}")
+
+        # Retry logic with fallbacks
         models_to_try = [self.model_name] + self.fallback_models
-
-        # Deduplicate models while preserving order
+        # Deduplicate
         unique_models = []
         seen = set()
         for m in models_to_try:
@@ -59,62 +77,208 @@ class LLMAgent:
         models_to_try = unique_models
 
         for model in models_to_try:
-            # Try each model with retries for 429
             max_retries = 3
             for attempt in range(max_retries):
                 try:
-                    print(f"Attempting to generate with model: {model} (Attempt {attempt+1}/{max_retries})")
+                    # print(f"Attempting to generate with Google model: {model} (Attempt {attempt+1}/{max_retries})")
                     response = self.client.models.generate_content(
                         model=model,
-                        contents=contents
+                        contents=content
                     )
-                    return response
+                    return response.text
                 except Exception as e:
                     error_str = str(e)
-                    print(f"Model {model} failed: {error_str}")
+                    # print(f"Model {model} failed: {error_str}")
 
-                    # Check for 429 / Resource Exhausted
                     if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                        # Extract retry delay: "Please retry in 21.979520586s."
                         match = re.search(r"retry in ([0-9.]+)s", error_str)
                         if match:
-                            wait_time = float(match.group(1)) + 1.0 # Add 1s buffer
-                            print(f"Rate limit hit. Waiting for {wait_time:.2f} seconds before retrying...")
+                            wait_time = float(match.group(1)) + 1.0
+                            print(f"Rate limit hit. Waiting for {wait_time:.2f} seconds...")
                             time.sleep(wait_time)
-                            continue # Retry strictly with the SAME model
+                            continue
                         else:
-                            # Fallback if we can't parse time
-                            print("Rate limit hit, but could not parse retry time. Waiting 30s...")
+                            print("Rate limit hit. Waiting 30s...")
                             time.sleep(30)
                             continue
+                    break # Not a rate limit, try next model
 
-                    # If it's not a 429 (e.g. 404), break inner loop and try next model
-                    break
+            # If exhausted retries for this model, continue to next fallback
 
-            # If we exhausted retries for this model (or hit non-429 error), try next model
-            print(f"Moving to next fallback model after failure with {model}...")
+        raise Exception("All Google models failed.")
 
-        self._list_available_models()
-        raise Exception("All models failed to generate content.")
-
-    def _list_available_models(self):
-        """
-        Lists available models to help debug 404/not-found errors.
-        """
+    def list_models(self) -> List[str]:
+        models = []
         try:
-            print("\n--- Available Models ---")
             for m in self.client.models.list():
-                # Check supported_actions (newer API) or supported_generation_methods (older API)
                 actions = getattr(m, "supported_actions", None)
                 methods = getattr(m, "supported_generation_methods", None)
-
-                if actions and "generateContent" in actions:
-                    print(f"- {m.name}")
-                elif methods and "generateContent" in methods:
-                    print(f"- {m.name}")
-            print("------------------------\n")
+                if (actions and "generateContent" in actions) or \
+                   (methods and "generateContent" in methods):
+                    models.append(m.name)
         except Exception as e:
-            print(f"Failed to list models: {e}")
+            print(f"Error listing Google models: {e}")
+        return models
+
+
+class OpenAIProvider(LLMProvider):
+    def __init__(self, api_key: str, base_url: str = None, model_name: str = "gpt-4o"):
+        if not openai:
+            raise ImportError("openai library not installed.")
+
+        self.client = openai.OpenAI(
+            api_key=api_key,
+            base_url=base_url
+        )
+        self.model_name = model_name
+
+    def get_name(self) -> str:
+        base = self.client.base_url
+        return f"OpenAI Compatible ({base}) - Model: {self.model_name}"
+
+    def _encode_image(self, image_path: str) -> str:
+        with open(image_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode('utf-8')
+
+    def generate(self, prompt: str, image_paths: List[str] = None) -> str:
+        messages = []
+
+        content_list = [{"type": "text", "text": prompt}]
+
+        if image_paths:
+            for path in image_paths:
+                try:
+                    # print(f"Loading image for LLM: {path}")
+                    base64_image = self._encode_image(path)
+                    mime_type, _ = mimetypes.guess_type(path)
+                    if not mime_type:
+                        mime_type = "image/png"
+
+                    content_list.append({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime_type};base64,{base64_image}"
+                        }
+                    })
+                except Exception as e:
+                    print(f"Failed to load image {path}: {e}")
+
+        messages.append({
+            "role": "user",
+            "content": content_list
+        })
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # print(f"Attempting to generate with OpenAI model: {self.model_name} (Attempt {attempt+1}/{max_retries})")
+                response = self.client.chat.completions.create(
+                    model=self.model_name,
+                    messages=messages
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                error_str = str(e)
+                print(f"OpenAI Provider failed: {error_str}")
+
+                # Handle Rate Limits (429)
+                if "429" in error_str or isinstance(e, openai.RateLimitError):
+                    print("Rate limit hit. Waiting 20s...")
+                    time.sleep(20)
+                    continue
+
+                # If not rate limit, generic retry?
+                # For network errors maybe. For invalid request, no.
+                # Assuming simple retry strategy.
+                time.sleep(5)
+
+        raise Exception(f"OpenAI Provider failed after {max_retries} attempts.")
+
+    def list_models(self) -> List[str]:
+        models = []
+        try:
+            resp = self.client.models.list()
+            for m in resp.data:
+                models.append(m.id)
+        except Exception as e:
+            print(f"Error listing OpenAI models: {e}")
+        return models
+
+
+class LLMAgent:
+    def __init__(self, api_key=None, model_name="gemini-2.5-flash"):
+        self.providers: List[LLMProvider] = []
+        self.history = []
+
+        # 1. Google GenAI Setup
+        # Use passed api_key if provided, else env var
+        gemini_key = api_key if api_key else os.environ.get("GEMINI_API_KEY")
+
+        if gemini_key and genai:
+            try:
+                # Use passed model_name if appropriate, otherwise default
+                p = GoogleGenAIProvider(gemini_key, model_name=model_name)
+                self.providers.append(p)
+                # print(f"Registered provider: {p.get_name()}")
+            except Exception as e:
+                print(f"Failed to initialize Google GenAI provider: {e}")
+        elif not genai and gemini_key:
+             print("Warning: GEMINI_API_KEY present but google-genai lib missing.")
+
+        # 2. OpenAI Compatible Setup
+        openai_key = os.environ.get("OPENAI_API_KEY")
+        openai_base = os.environ.get("OPENAI_BASE_URL")
+        openai_model = os.environ.get("OPENAI_MODEL", "gpt-4o") # Default to generic
+
+        # If using local/other, key might be arbitrary, base_url is key.
+        # Or key is real OpenAI key.
+        if (openai_key or openai_base) and openai:
+            # If no key provided but base_url exists (common for local), use dummy
+            if not openai_key and openai_base:
+                openai_key = "sk-no-key-required"
+
+            try:
+                p = OpenAIProvider(api_key=openai_key, base_url=openai_base, model_name=openai_model)
+                self.providers.append(p)
+                # print(f"Registered provider: {p.get_name()}")
+            except Exception as e:
+                print(f"Failed to initialize OpenAI provider: {e}")
+        elif not openai and (openai_key or openai_base):
+            print("Warning: OPENAI_API_KEY/BASE_URL present but openai lib missing.")
+
+        if not self.providers:
+            print("Warning: No LLM providers available (Missing Keys or Libraries). LLM features will be disabled.")
+            print("To enable, set GEMINI_API_KEY or OPENAI_API_KEY/OPENAI_BASE_URL.")
+
+    def _generate(self, prompt: str, image_paths: List[str] = None) -> str:
+        """Iterates through providers until one succeeds."""
+        if not self.providers:
+            raise Exception("No LLM providers available.")
+
+        errors = []
+        for provider in self.providers:
+            try:
+                print(f"Using provider: {provider.get_name()}")
+                return provider.generate(prompt, image_paths)
+            except Exception as e:
+                msg = f"Provider {provider.get_name()} failed: {e}"
+                print(msg)
+                errors.append(msg)
+
+        raise Exception(f"All providers failed. Errors: {errors}")
+
+    def list_available_models(self):
+        print("\n--- Available Models (All Providers) ---")
+        if not self.providers:
+            print("No providers configured.")
+            return
+
+        for provider in self.providers:
+            print(f"\nProvider: {provider.get_name()}")
+            models = provider.list_models()
+            for m in models:
+                print(f"- {m}")
+        print("----------------------------------------\n")
 
     def _generate_random_parameters(self, current_params: Dict[str, Any], constraints_str: str) -> Dict[str, Any]:
         """
@@ -172,8 +336,8 @@ class LLMAgent:
                 "metrics": metrics
             })
 
-        if not self.client:
-            # Fallback if no API key
+        if not self.providers:
+            # Fallback if no providers
             print("No LLM available. Generating random parameters for exploration.")
             return self._generate_random_parameters(current_params, constraints)
 
@@ -182,30 +346,8 @@ class LLMAgent:
 
         prompt = self._construct_prompt(constraints, history_to_use, has_images=bool(image_paths))
 
-        content = [prompt]
-
-        # Load images if provided
-        if image_paths:
-            for path in image_paths:
-                try:
-                    print(f"Loading image for LLM: {path}")
-                    # Read file directly as bytes
-                    with open(path, "rb") as f:
-                        image_data = f.read()
-
-                    # Determine mime type
-                    mime_type, _ = mimetypes.guess_type(path)
-                    if not mime_type:
-                        mime_type = "image/png" # Default fallback
-
-                    content.append(types.Part.from_bytes(data=image_data, mime_type=mime_type))
-                except Exception as e:
-                    print(f"Failed to load image {path}: {e}")
-
         try:
-            response = self._generate_with_retry(content)
-            text = response.text
-
+            text = self._generate(prompt, image_paths)
             data = self._parse_json_safely(text)
 
             # Check for stop signal
@@ -230,10 +372,9 @@ class LLMAgent:
 
     def suggest_campaign(self, history: List[Dict], constraints: str, count: int = 5, image_paths: List[str] = None) -> List[Dict[str, Any]]:
         """
-        Asks the LLM to generate a batch of parameter sets to explore different regions of the design space.
-        Includes support for images (multimodal) from the most recent run.
+        Asks the LLM to generate a batch of parameter sets.
         """
-        if not self.client:
+        if not self.providers:
             print("No LLM available.")
             return []
 
@@ -310,26 +451,8 @@ You must respond with valid JSON only.
     ]
 }}
 """
-        content = [prompt]
-
-        # Load images if provided
-        if image_paths:
-            for path in image_paths:
-                try:
-                    print(f"Loading image for LLM: {path}")
-                    with open(path, "rb") as f:
-                        image_data = f.read()
-                    mime_type, _ = mimetypes.guess_type(path)
-                    if not mime_type:
-                        mime_type = "image/png"
-                    content.append(types.Part.from_bytes(data=image_data, mime_type=mime_type))
-                except Exception as e:
-                    print(f"Failed to load image {path}: {e}")
-
         try:
-            response = self._generate_with_retry(content)
-            text = response.text
-
+            text = self._generate(prompt, image_paths)
             data = self._parse_json_safely(text)
 
             if data.get("stop_optimization") is True:
@@ -491,5 +614,6 @@ You must respond with valid JSON only.
                 raise e
 
 if __name__ == "__main__":
-    agent = LLMAgent(api_key="TEST_KEY") # Won't work without valid key
+    # Test initialization
+    agent = LLMAgent(api_key="TEST_KEY")
     print("LLMAgent initialized.")
