@@ -40,6 +40,7 @@ def main():
     parser.add_argument("--container-engine", type=str, default="auto", choices=["auto", "podman", "docker"], help="Force specific container engine")
     parser.add_argument("--cpus", type=int, default=1, help="Number of CPUs to use for parallel execution (default: 1)")
     parser.add_argument("--no-llm", action="store_true", help="Explicitly disable LLM and use random/fallback strategy (also suppresses prompts in startup script)")
+    parser.add_argument("--batch-size", type=int, default=5, help="Number of parameter sets to generate per LLM call")
     args = parser.parse_args()
 
     # Parse iterations argument
@@ -84,7 +85,7 @@ def main():
         git_commit = "unknown"
 
     # Initial parameters
-    current_params = {
+    initial_params = {
         "part_to_generate": "modular_filter_assembly",
         "num_bins": 1,
         "number_of_complete_revolutions": 2,
@@ -111,6 +112,18 @@ def main():
 
     print(f"Starting optimization loop... (Target: {max_iterations} iterations, Infinite: {infinite_mode})")
 
+    # Queue logic
+    parameter_queue = []
+
+    # If we have no history, start with default params
+    # If we have history, we can start by asking LLM (queue empty) OR verifying default hasn't been run.
+    # To keep it simple: Start with default params if they haven't been run.
+    if get_params_hash(initial_params) not in visited_params:
+        parameter_queue.append(initial_params)
+
+    # Keep track of the last valid run's images to feed to LLM
+    last_run_images = []
+
     i = 0
     while True:
         if not infinite_mode and i >= max_iterations:
@@ -118,52 +131,49 @@ def main():
 
         print(f"\n=== Iteration {i+1} ===")
 
-        # Deduplication Check
-        # If this is the very first run (i=0) and we haven't mutated, current_params is the default.
-        # If the default was already run in history, we should skip it and ask LLM.
-        # However, agent.suggest_parameters needs metrics to suggest something.
-        # If we have NO history, we run defaults.
-        # If we have history, we might want to start by asking the LLM immediately if defaults are visited.
+        # Refill Queue if empty
+        if not parameter_queue:
+            print(f"Parameter queue empty. Requesting {args.batch_size} new sets from LLM...")
 
-        param_hash = get_params_hash(current_params)
-        if param_hash in visited_params:
-            print(f"Parameters already visited (Hash: {param_hash}). Requesting new parameters from LLM...")
+            # Determine images to send (from last successful run in history if available)
+            # 'last_run_images' tracks the current session, but if we just started, we might want from history?
+            # For now, rely on session variable or empty.
 
-            # We need dummy metrics or use the last run's metrics to ask for next step?
-            # Or just tell LLM "Propose something new".
-            # The agent uses 'history' to decide.
+            campaign_params = agent.suggest_campaign(
+                history=full_history,
+                constraints=CONSTRAINTS,
+                count=args.batch_size,
+                image_paths=last_run_images
+            )
 
-            # Fallback: if we are stuck on duplicates, use random search
-            if agent.history:
-                last_run = agent.history[-1]
-                metrics_context = last_run.get("metrics", {})
-            else:
-                metrics_context = {"error": "duplicate_start"} # Should not happen if history loaded
-
-            # Ask LLM (or Random)
-            # We force it to suggest new params
-            new_params_or_meta = agent.suggest_parameters(current_params, metrics_context, CONSTRAINTS, history=full_history)
-
-            # Unpack response
-            stop_opt = False
-            if "stop_optimization" in new_params_or_meta:
-                 stop_opt = new_params_or_meta.pop("stop_optimization")
-
-            if stop_opt:
-                print("LLM signaled to STOP optimization during deduplication.")
+            # Check for stop signal (wrapped in list or dict?)
+            # suggest_campaign returns a list of dicts. If one has stop_opt, handle it.
+            if campaign_params and campaign_params[0].get("stop_optimization") is True:
+                print("\n>>> OPTIMIZATION COMPLETE: LLM signaled stop (Success criteria met). <<<")
                 break
 
-            # Update params
-            updated = current_params.copy()
-            updated.update(new_params_or_meta)
-            current_params = updated
+            if campaign_params:
+                print(f"LLM returned {len(campaign_params)} parameter sets.")
+                parameter_queue.extend(campaign_params)
+            else:
+                print("LLM failed to return valid parameters. Falling back to random generation.")
+                # Generate 1 random set to keep going
+                base_params = full_history[-1]["parameters"] if full_history else initial_params
+                random_params = agent._generate_random_parameters(base_params, CONSTRAINTS)
+                parameter_queue.append(random_params)
 
-            # Check again (simple 1-level retry loop or continue)
-            if get_params_hash(current_params) in visited_params:
-                print("LLM suggested duplicate again. Forcing random mutation.")
-                current_params = agent._generate_random_parameters(current_params, CONSTRAINTS)
+        # Pop next parameters
+        if not parameter_queue:
+            print("Error: Parameter queue is empty after refill attempt. Aborting loop to prevent infinite error spin.")
+            break
 
-            # Continue to next loop iteration to verify/run
+        current_params = parameter_queue.pop(0)
+
+        # Deduplication Check
+        param_hash = get_params_hash(current_params)
+        if param_hash in visited_params:
+            print(f"Skipping duplicate parameters (Hash: {param_hash}).")
+            # If queue is empty, we'll hit refill next loop. If not, we just take next.
             continue
 
         print(f"Testing parameters: {current_params}")
@@ -184,20 +194,20 @@ def main():
 
         print(f"Result metrics: {metrics}")
 
+        # Update images for next LLM call
+        if png_paths:
+            last_run_images = png_paths
+
         # Check for critical failure
         if "error" in metrics:
             if metrics["error"] == "environment_missing_tools":
                 print("\nCRITICAL ERROR: OpenFOAM tools not found.")
                 print("Switching to geometry-only mode (--skip-cfd) for remaining iterations.")
                 args.skip_cfd = True
-                # Don't skip loop, just continue with next params?
-                # Actually, if we skip CFD, metrics will be empty/skipped.
             elif metrics["error"] == "geometry_generation_failed":
                 print("Geometry generation failed.")
-                # We still record the failure so LLM knows it failed
 
         # Handle Artifact Archiving (STL)
-        # We need to save the STL to a unique path so we can keep it if it's a top run.
         unique_stl_path = None
         source_stl = os.path.join(args.case_dir, "constant", "triSurface", args.output_stl)
         if os.path.exists(source_stl):
@@ -210,7 +220,7 @@ def main():
                 print(f"Warning: Failed to archive STL: {e}")
                 unique_stl_path = None
 
-        # 5. Save Results
+        # Save Results
         run_data = {
             "id": hashlib.md5(f"{i}_{time.time()}".encode()).hexdigest(), # Unique ID
             "status": "completed",
@@ -225,36 +235,14 @@ def main():
         }
         store.append_result(run_data)
 
-        # Reload history to include this run (or just append locally)
+        # Reload history to include this run
         full_history.append(run_data)
         agent.history = full_history
 
-        # 7. Ask LLM for next step or Stop
-        # We check stop condition from LLM
-
-        new_params_or_meta = agent.suggest_parameters(current_params, metrics, CONSTRAINTS, image_paths=png_paths, history=full_history)
-
-        # 6. Cleanup Artifacts (Keep Top 10)
-        # Moved after LLM step to ensure images are available for analysis
+        # Cleanup Artifacts (Keep Top 10)
+        # We do this every run to save space
         top_runs = store.get_top_runs(10)
         store.clean_artifacts(top_runs)
-
-        stop_opt = False
-        if "stop_optimization" in new_params_or_meta:
-             stop_opt = new_params_or_meta.pop("stop_optimization")
-             # Clean key from dict so it doesn't pollute params
-
-        if stop_opt:
-            print("\n>>> OPTIMIZATION COMPLETE: LLM signaled stop (Success criteria met). <<<")
-            break
-
-        # Post-process types
-        if "num_bins" in new_params_or_meta:
-            new_params_or_meta["num_bins"] = int(new_params_or_meta["num_bins"])
-
-        updated_params = current_params.copy()
-        updated_params.update(new_params_or_meta)
-        current_params = updated_params
 
         i += 1
 
