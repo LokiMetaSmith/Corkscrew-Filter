@@ -21,5 +21,6 @@ corkscrewFilter/constant/triSurface/*.eMesh
 
 # Ignore OpenFOAM simulation time directories (start with non-zero digit)
 corkscrewFilter/[1-9]*
+corkscrewFilter/[0.1-0.9]*
 # Ignore Mintty terminal screenshots
 mintty*.png
