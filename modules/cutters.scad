@@ -24,39 +24,34 @@ module SimpleSlitCutter(h, twist, dia, helices) {
  * Arguments: (Same as MultiHelixRamp)
  */
 module RampedSlitKnife(h, twist, dia, helices) {
-    twist_per_mm = twist / h;
-    ramp_len = slit_ramp_length_mm;
-    open_len = slit_open_length_mm;
+    // Define the 3D shape of the cutting tool using a polyhedron
+    // This creates a single ramped cutter.
+    cutter_shape_points = [
+        // Bottom face (thin start of ramp)
+        [dia/2, -slit_width_mm/2, 0],                // 0
+        [dia/2,  slit_width_mm/2, 0],                // 1
+        [dia/2-0.1,  slit_width_mm/2, 0],            // 2
+        [dia/2-0.1, -slit_width_mm/2, 0],            // 3
+        // Top face (full size end of ramp)
+        [dia/2, -slit_width_mm/2, slit_ramp_length_mm], // 4
+        [dia/2,  slit_width_mm/2, slit_ramp_length_mm], // 5
+        [dia/2-slit_depth_mm,  slit_width_mm/2, slit_ramp_length_mm], // 6
+        [dia/2-slit_depth_mm, -slit_width_mm/2, slit_ramp_length_mm], // 7
+    ];
+    cutter_shape_faces = [
+        [0,1,2,3], [4,5,6,7], [0,1,5,4], [1,2,6,5], [2,3,7,6], [3,0,4,7]
+    ];
 
     for (i = [0 : helices - 1]) {
         rotate([0, 0, i * (360 / helices) + ramp_width_degrees/2]) {
-            translate([0, 0, -h/2]) {
-                union() {
-                    // 1. The Ramp using hull (interpolates between start surface and full depth)
-                    hull() {
-                        // Bottom slice: A thin rectangle at dia/2 (surface), depth ~0
-                        translate([0,0,0])
-                        rotate([0,0,0])
-                        translate([dia/2, 0])
-                        translate([-0.01, -slit_width_mm/2]) // Depth 0.01
-                            cube([0.01, slit_width_mm, 0.01]);
+            // Apply the same helical transformation as the ramp itself
+            linear_extrude(height=h, twist=twist, center=true, slices=h > 0 ? h*2 : 1) {
+                 // Place the ramp and slit cutters in the 2D space
+                 translate([dia/2 - slit_depth_mm, 0, -h/2 + slit_ramp_length_mm/2])
+                    polyhedron(points = cutter_shape_points, faces = cutter_shape_faces);
 
-                        // Top slice: A rectangle at dia/2 - depth, depth full
-                        // Rotated to match twist at ramp_len
-                        translate([0,0,ramp_len])
-                        rotate([0,0,twist_per_mm * ramp_len])
-                        translate([dia/2 - slit_depth_mm, -slit_width_mm/2, -0.01])
-                            cube([slit_depth_mm, slit_width_mm, 0.01]);
-                    }
-
-                    // 2. The Body (Open Slit)
-                     translate([0,0,ramp_len])
-                     rotate([0, 0, twist_per_mm * ramp_len])
-                     linear_extrude(height = open_len, twist = twist_per_mm * open_len, center=false) {
-                         translate([dia/2 - slit_depth_mm, -slit_width_mm/2])
-                             square([slit_depth_mm, slit_width_mm]);
-                     }
-                }
+                 translate([dia/2 - slit_depth_mm, 0, -h/2 + slit_ramp_length_mm + slit_open_length_mm/2])
+                    cube([slit_depth_mm, slit_width_mm, slit_open_length_mm], center=true);
             }
         }
     }

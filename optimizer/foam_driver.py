@@ -260,7 +260,7 @@ functions
         Otherwise, assumes fluid is an annulus/void inside a tube.
         """
         if custom_location:
-            location = f"({custom_location[0]:.3f} {custom_location[1]:.3f} {custom_location[2]:.3f})"
+            location = f"({custom_location[0]:.4f} {custom_location[1]:.4f} {custom_location[2]:.4f})"
         else:
             if bounds is None or bounds[0] is None:
                 return
