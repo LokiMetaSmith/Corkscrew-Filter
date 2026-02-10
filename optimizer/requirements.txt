@@ -6,3 +6,4 @@ scipy
 Pillow
 Rtree
 psutil
+openai

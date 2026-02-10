@@ -1,23 +1,23 @@
 import os
-from google import genai
+from llm_agent import LLMAgent
 
 def list_models():
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        print("Error: GEMINI_API_KEY environment variable not found.")
-        print("Please export GEMINI_API_KEY='your_key_here' and try again.")
+    print("Checking available models from configured providers...")
+
+    # Attempt to initialize agent with environment variables
+    # This will automatically pick up GEMINI_API_KEY, OPENAI_API_KEY, etc.
+    agent = LLMAgent()
+
+    # Check if we have any providers
+    if not agent.providers:
+        print("\nError: No LLM providers configured.")
+        print("Please set one of the following environment variables:")
+        print("  - GEMINI_API_KEY")
+        print("  - OPENAI_API_KEY (and optionally OPENAI_BASE_URL)")
         return
 
-    try:
-        client = genai.Client(api_key=api_key)
-        print("Listing available models:")
-        # client.models.list() returns an iterator
-        for model in client.models.list():
-            # Check if it supports content generation
-            if "generateContent" in model.supported_generation_methods:
-                print(f"- {model.name}")
-    except Exception as e:
-        print(f"Error listing models: {e}")
+    # Use the agent to list models
+    agent.list_available_models()
 
 if __name__ == "__main__":
     list_models()
