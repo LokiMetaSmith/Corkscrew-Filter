@@ -168,8 +168,21 @@ class FoamDriver:
                 shutil.rmtree(zero)
             shutil.copytree(zero_orig, zero)
 
+        # Restore system config if dirty from previous run
+        self._restore_system_config()
+
         # Add function objects to controlDict if not present
         self._inject_function_objects()
+
+    def _restore_system_config(self):
+        """
+        Restores system/controlDict and system/fvSchemes from .orig backups if they exist.
+        """
+        for filename in ["controlDict", "fvSchemes"]:
+            orig_path = os.path.join(self.case_dir, "system", f"{filename}.orig")
+            target_path = os.path.join(self.case_dir, "system", filename)
+            if os.path.exists(orig_path):
+                shutil.move(orig_path, target_path)
 
     def _generate_decomposeParDict(self):
         """
@@ -208,6 +221,9 @@ method          scotch;
         control_dict = os.path.join(self.case_dir, "system", "controlDict")
         if not os.path.exists(control_dict):
             return
+
+        # Backup
+        shutil.copy2(control_dict, control_dict + ".orig")
 
         with open(control_dict, 'r') as f:
             content = f.read()
@@ -666,6 +682,33 @@ boundaryField
         # 5. Create phi (Flux) if missing?
         # simpleFoam creates phi.
 
+    def _update_fvSchemes_for_particles(self):
+        """
+        Updates system/fvSchemes to use transient ddtSchemes (Euler) for particle tracking.
+        Backs up the original file to system/fvSchemes.orig.
+        """
+        schemes_path = os.path.join(self.case_dir, "system", "fvSchemes")
+        if not os.path.exists(schemes_path):
+            return
+
+        # Backup
+        shutil.copy2(schemes_path, schemes_path + ".orig")
+
+        with open(schemes_path, 'r') as f:
+            content = f.read()
+
+        # Replace default steadyState with default Euler
+        # Pattern: ddtSchemes { default steadyState; }
+        # We look for 'ddtSchemes' block
+        pattern = re.compile(r"ddtSchemes\s*\{[^}]*\}", re.DOTALL)
+        match = pattern.search(content)
+        if match:
+            new_block = "ddtSchemes\n{\n    default         Euler;\n}"
+            content = content.replace(match.group(0), new_block)
+
+        with open(schemes_path, 'w') as f:
+            f.write(content)
+
     def _update_controlDict_for_particles(self, start_time_val):
         """
         Updates controlDict for particle tracking:
@@ -676,6 +719,9 @@ boundaryField
         control_dict = os.path.join(self.case_dir, "system", "controlDict")
         if not os.path.exists(control_dict):
             return
+
+        # Backup
+        shutil.copy2(control_dict, control_dict + ".orig")
 
         with open(control_dict, 'r') as f:
             content = f.read()
@@ -708,15 +754,15 @@ boundaryField
             content = re.sub(r"endTime\s+.*?;", f"endTime {end_t};", content)
 
         # Update deltaT
-        # 0.1ms time step (reduced from 1ms to ensure particle Co < 1)
-        # 5 m/s * 0.0001s = 0.5mm (vs ~2mm cell size)
+        # 1ms time step (0.001s) - safe for most particle dynamics and faster than 0.1ms
+        # 5 m/s * 0.001s = 5mm (vs ~2mm cell size -> Co ~ 2.5, usually OK for Lagrangian)
         if "deltaT" in content:
-            content = re.sub(r"deltaT\s+.*?;", "deltaT 0.0001;", content)
+            content = re.sub(r"deltaT\s+.*?;", "deltaT 0.001;", content)
 
-        # Update writeInterval to avoid spamming disk with particle positions every step
-        # Write every 0.1s => 1000 steps
+        # Update writeInterval
+        # Write every 0.05s => 50 steps
         if "writeInterval" in content:
-            content = re.sub(r"writeInterval\s+.*?;", "writeInterval 1000;", content)
+            content = re.sub(r"writeInterval\s+.*?;", "writeInterval 50;", content)
 
         # Disable function objects (like pressure probes) during particle tracking
         # as they might fail or slow down the transient tracking loop
@@ -759,10 +805,17 @@ boundaryField
         # Generate fields
         self._generate_particle_tracking_fields(latest_time)
 
-        # Update controlDict to run from latestTime with small deltaT
-        self._update_controlDict_for_particles(latest_time)
+        try:
+            # Update controlDict to run from latestTime with small deltaT
+            self._update_controlDict_for_particles(latest_time)
 
-        return self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking")
+            # Update fvSchemes to ensure transient tracking (avoid steady state crash)
+            self._update_fvSchemes_for_particles()
+
+            return self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking")
+        finally:
+            # Restore configuration to ensure next run is clean
+            self._restore_system_config()
 
     def run_command(self, cmd, log_file=None, ignore_error=False, description="Running command"):
         if not self.has_tools:
