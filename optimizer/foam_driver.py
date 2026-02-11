@@ -660,11 +660,15 @@ boundaryField
         # 3. Create mu (Dynamic Viscosity) [1 -1 -1 0 0 0 0]
         self._create_constant_field(time_dir, "mu", mu_val, "[1 -1 -1 0 0 0 0]")
 
-        # 4. Create U (Velocity) if missing (unlikely, but ensures existence)
-        # Actually U should be there from the solver.
+        # 4. Check U (Velocity)
+        u_path = os.path.join(self.case_dir, str(time_dir), "U")
+        if not os.path.exists(u_path):
+            print(f"Warning: U field missing in {time_dir}. Particle tracking might fail.")
 
-        # 5. Create phi (Flux) if missing?
-        # simpleFoam creates phi.
+        # 5. Check phi (Flux)
+        phi_path = os.path.join(self.case_dir, str(time_dir), "phi")
+        if not os.path.exists(phi_path):
+             print(f"Warning: phi field missing in {time_dir}. Particle tracking might fail.")
 
     def _update_controlDict_for_particles(self, start_time_val):
         """
@@ -698,8 +702,9 @@ boundaryField
         except ValueError:
             current_t = 0.0
 
-        # Duration: 15 seconds (slightly > maxTrackTime 10s + duration 1s)
-        end_t = current_t + 15.0
+        # Duration: minimal (1-2 steps) for steady state tracking
+        # Steady state tracking processes all particles in one go.
+        end_t = current_t + 0.0002
 
         if "stopAt" in content:
             content = re.sub(r"stopAt\s+.*?;", "stopAt endTime;", content)
@@ -725,6 +730,28 @@ boundaryField
             content = content.replace("functions", "functions_disabled")
 
         with open(control_dict, 'w') as f:
+            f.write(content)
+
+    def _update_kinematicCloudProperties(self):
+        """
+        Updates constant/kinematicCloudProperties to ensure steady state tracking.
+        """
+        cloud_props = os.path.join(self.case_dir, "constant", "kinematicCloudProperties")
+        if not os.path.exists(cloud_props):
+            return
+
+        with open(cloud_props, 'r') as f:
+            content = f.read()
+
+        # Set transient to no (Force steady state tracking)
+        if "transient" in content:
+            content = re.sub(r"transient\s+.*?;", "transient no;", content)
+
+        # Set coupled to false
+        if "coupled" in content:
+            content = re.sub(r"coupled\s+.*?;", "coupled false;", content)
+
+        with open(cloud_props, 'w') as f:
             f.write(content)
 
     def run_particle_tracking(self, log_file=None):
@@ -761,6 +788,9 @@ boundaryField
 
         # Update controlDict to run from latestTime with small deltaT
         self._update_controlDict_for_particles(latest_time)
+
+        # Update kinematicCloudProperties
+        self._update_kinematicCloudProperties()
 
         return self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking")
 
