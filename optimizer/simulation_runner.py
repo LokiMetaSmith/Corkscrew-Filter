@@ -2,8 +2,18 @@ import os
 import time
 import math
 import numpy as np
+import shutil
 from utils import Timer, get_container_memory_gb
 from parameter_validator import validate_parameters
+
+def make_archive(source, destination):
+    base = os.path.basename(destination)
+    name = base.split('.')[0]
+    format = base.split('.')[1]
+    archive_from = os.path.dirname(source)
+    archive_to = os.path.basename(source.strip(os.sep))
+    shutil.make_archive(name, format, archive_from, archive_to)
+    shutil.move('%s.%s'%(name,format), destination)
 
 def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False, skip_cfd=False, iteration=0, reuse_mesh=False):
     """
@@ -25,9 +35,10 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         reuse_mesh (bool): If True, skips geometry generation and meshing, using existing mesh.
 
     Returns:
-        tuple: (metrics, image_paths)
+        tuple: (metrics, image_paths, vtk_zip_path)
             metrics (dict): Simulation results (delta_p, residuals, etc).
             image_paths (list): List of paths to generated PNG visualizations.
+            vtk_zip_path (str): Path to the zipped VTK directory (or None).
     """
 
     # Setup Log Directory
@@ -44,7 +55,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
     is_valid, error_msg = validate_parameters(params)
     if not is_valid:
         print(f"Parameter Validation Failed: {error_msg}")
-        return {"error": "invalid_parameters", "details": error_msg}, []
+        return {"error": "invalid_parameters", "details": error_msg}, [], None
 
     # 1. Generate Geometry (Fluid Volume for CFD)
     stl_path = os.path.join(foam_driver.case_dir, "constant", "triSurface", output_stl_name)
@@ -65,7 +76,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
 
             if not success:
                 print(f"Geometry generation failed. Check {geom_log} for details.")
-                return {"error": "geometry_generation_failed"}, []
+                return {"error": "geometry_generation_failed"}, [], None
         else:
             print("[Reuse Mesh] Skipping geometry generation.")
     else:
@@ -78,7 +89,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         # Early check for environment
         if not foam_driver.has_tools:
             print("OpenFOAM tools not found. Skipping simulation.")
-            return {"error": "environment_missing_tools", "details": "Neither OpenFOAM nor Docker found"}, []
+            return {"error": "environment_missing_tools", "details": "Neither OpenFOAM nor Docker found"}, [], None
 
         if not reuse_mesh:
             bounds = scad_driver.get_bounds(stl_path)
@@ -180,13 +191,6 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                             revs = float(params.get("number_of_complete_revolutions", 2))
                             path_r = float(params.get("helix_path_radius_mm", 1.8))
 
-                            # Calculate twist angle at Z=0 (center)
-                            # The helix rotates by total_twist over height H.
-                            # Total height of helix is L + 2 (from MasterHollowHelix logic).
-                            # Twist rate = 360 * revs / L.
-                            # Total twist = twist_rate * (L + 2).
-                            # At center (Z=0), rotation is total_twist / 2 (assuming linear_extrude center=true).
-
                             twist_rate = 360.0 * revs / L
                             total_twist = twist_rate * (L + 2.0)
                             angle_at_center_deg = total_twist / 2.0
@@ -214,12 +218,21 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
 
     # 3. Run Simulation
     metrics = {}
+    vtk_zip_path = None
+
     if not dry_run and not skip_cfd:
         foam_driver.prepare_case(keep_mesh=reuse_mesh)
 
+        # Prepare Bin Configuration for Meshing/Tracking
+        bin_config = {
+            "num_bins": int(params.get("num_bins", 1)),
+            "insert_length_mm": float(params.get("insert_length_mm", 50.0))
+        }
+
         if not reuse_mesh:
             with Timer("Meshing"):
-                success = foam_driver.run_meshing(log_file=mesh_log)
+                # Pass bin config to create bin patches
+                success = foam_driver.run_meshing(log_file=mesh_log, bin_config=bin_config)
         else:
             print("[Reuse Mesh] Skipping meshing pipeline.")
             success = True
@@ -229,11 +242,22 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                 success = foam_driver.run_solver(log_file=solver_log)
 
             if success:
-                # Attempt particle tracking (optional/experimental)
+                # Attempt particle tracking
                 with Timer("Particle Tracking"):
-                    foam_driver.run_particle_tracking(log_file=solver_log)
+                    # Pass bin config for injection/interaction setup
+                    foam_driver.run_particle_tracking(log_file=solver_log, bin_config=bin_config)
 
                 metrics = foam_driver.get_metrics(log_file=solver_log)
+
+                # Generate VTK
+                vtk_dir = foam_driver.generate_vtk()
+                if vtk_dir:
+                    timestamp = int(time.time())
+                    # Archive to exports/
+                    zip_name = os.path.join("exports", f"run_{timestamp}_vtk")
+                    print(f"Zipping VTK output to {zip_name}.zip...")
+                    shutil.make_archive(zip_name, 'zip', vtk_dir)
+                    vtk_zip_path = zip_name + ".zip"
             else:
                 print(f"Solver failed. Check {solver_log}")
                 metrics = {"error": "solver_failed"}
@@ -254,15 +278,6 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
 
     # 4. Generate Visualization (Solid Model for LLM/Human Review)
     png_paths = []
-    # Create an exports directory relative to current working directory
-    # We use a timestamp or iteration-based name?
-    # For a worker, we might not know the "iteration number" easily if we just process a job ID.
-    # Let's use a temp folder or the job ID if passed?
-    # For now, let's just use "exports/latest" or similar, but the caller might want to move it.
-    # Actually, main.py uses "iteration_{i}_solid".
-    # Let's make the output base a parameter or derive it.
-
-    # We'll default to a timestamped folder in exports/ to avoid overwrites
     timestamp = int(time.time())
     vis_base = os.path.join("exports", f"run_{timestamp}_solid")
     os.makedirs("exports", exist_ok=True)
@@ -277,8 +292,6 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
 
     else:
         print(f"[Dry Run] Generated Visualization at {vis_base}.png")
-        # Create dummy path for dry run consistency
-        # png_paths = [f"{vis_base}_view{v}.png" for v in range(3)]
         png_paths = []
 
-    return metrics, png_paths
+    return metrics, png_paths, vtk_zip_path

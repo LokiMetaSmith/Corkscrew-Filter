@@ -105,14 +105,6 @@ class DataStore:
                             print(f"Warning: Failed to delete {img_path}: {e}")
 
             # 2. Delete STLs
-            # STLs might not be explicitly listed in the run dict if they use a standard name.
-            # However, main.py passes 'output_stl' name.
-            # If main.py renames the STL to include ID/iteration, we need that path.
-            # Currently main.py overwrites 'corkscrew_fluid.stl' unless we change it.
-            # TODO: If we want to keep top 10 STLs, main.py MUST be saving unique STLs per run.
-            # If main.py is overwriting, then only the last one exists anyway.
-            # Assumption: main.py will be updated to save unique filenames for artifacts.
-
             stl_path = run.get("artifact_stl_path")
             if stl_path and os.path.exists(stl_path):
                 try:
@@ -120,6 +112,15 @@ class DataStore:
                     deleted_count += 1
                 except OSError as e:
                     print(f"Warning: Failed to delete {stl_path}: {e}")
+
+            # 3. Delete VTK Artifacts
+            vtk_path = run.get("artifact_vtk_path")
+            if vtk_path and os.path.exists(vtk_path):
+                try:
+                    os.remove(vtk_path)
+                    deleted_count += 1
+                except OSError as e:
+                    print(f"Warning: Failed to delete {vtk_path}: {e}")
 
         if deleted_count > 0:
             print(f"Cleanup: Deleted {deleted_count} artifact files from non-top runs.")

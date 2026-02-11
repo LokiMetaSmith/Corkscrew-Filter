@@ -405,12 +405,51 @@ functions
 
         return True
 
-    def _generate_topoSetDict(self):
+    def _generate_topoSetDict(self, bin_config=None):
         """
-        Generates system/topoSetDict to select inlet and outlet faces based on normals.
-        Assumes Z-axis alignment: Outlet (top) normal (0 0 1), Inlet (bottom) normal (0 0 -1).
+        Generates system/topoSetDict.
+        If bin_config is provided ({'num_bins': int, 'total_length': float}), it generates
+        bin-specific face sets.
         """
-        content = """/*--------------------------------*- C++ -*----------------------------------*\\
+        bin_actions = ""
+        if bin_config and bin_config.get("num_bins", 1) > 1:
+            num_bins = int(bin_config["num_bins"])
+            length = float(bin_config.get("insert_length_mm", 50.0))
+            # Convert to meters if needed? Usually snappyHexMesh works in scaled units if scaled.
+            # BUT the mesh is scaled to meters (x0.001) in simulation_runner logic before foam is run?
+            # Wait, simulation_runner scales the STL. `snappyHexMesh` uses the STL dimensions.
+            # So the mesh inside OpenFOAM is in Meters.
+            # `length` passed here is likely in mm (from params). We must scale it.
+            scale = 0.001
+
+            # Geometry is centered at Z=0.
+            # Range: [-L/2, L/2]
+            z_start = -(length * scale) / 2.0
+            bin_h = (length * scale) / num_bins
+
+            for i in range(num_bins):
+                z_min = z_start + i * bin_h
+                z_max = z_start + (i + 1) * bin_h
+
+                bin_actions += f"""
+    // Bin {i+1}
+    {{
+        name    bin_{i+1}_faces;
+        type    faceSet;
+        action  new;
+        source  boxToFace;
+        box     (-100 -100 {z_min:.5f}) (100 100 {z_max:.5f}); // Large box in X/Y
+    }}
+    {{
+        name    bin_{i+1}_faces;
+        type    faceSet;
+        action  subset;
+        source  faceToFace;
+        set     corkscrewFaces;
+    }}
+"""
+
+        content = f"""/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
 |  \\    /   O peration     | Version:  v2406                                 |
@@ -418,60 +457,63 @@ functions
 |    \\/     M anipulation  |                                                 |
 \\*---------------------------------------------------------------------------*/
 FoamFile
-{
+{{
     version     2.0;
     format      ascii;
     class       dictionary;
     object      topoSetDict;
-}
+}}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 actions
 (
     // 1. Select all faces in 'corkscrew' patch (if it exists) or all boundary faces
     // Since snappyHexMesh puts everything in 'corkscrew' (from STL name), start with that.
-    {
+    {{
         name    corkscrewFaces;
         type    faceSet;
         action  new;
         source  patchToFace;
         patch   corkscrew;
-    }
+    }}
 
     // 2. Select Inlet Faces (Bottom, Normal 0 0 -1)
-    {
+    {{
         name    inletFaces;
         type    faceSet;
         action  new;
         source  normalToFace;
         normal  (0 0 -1);
         cos     0.8; // Tolerance (allow some deviation)
-    }
+    }}
     // Intersect with corkscrew boundary faces
-    {
+    {{
         name    inletFaces;
         type    faceSet;
         action  subset;
         source  faceToFace;
         set     corkscrewFaces;
-    }
+    }}
 
     // 3. Select Outlet Faces (Top, Normal 0 0 1)
-    {
+    {{
         name    outletFaces;
         type    faceSet;
         action  new;
         source  normalToFace;
         normal  (0 0 1);
         cos     0.8;
-    }
-    {
+    }}
+    {{
         name    outletFaces;
         type    faceSet;
         action  subset;
         source  faceToFace;
         set     corkscrewFaces;
-    }
+    }}
+
+    // 4. Bin Split Actions
+    {bin_actions}
 );
 
 // ************************************************************************* //
@@ -479,11 +521,27 @@ actions
         with open(os.path.join(self.case_dir, "system", "topoSetDict"), 'w') as f:
             f.write(content)
 
-    def _generate_createPatchDict(self):
+    def _generate_createPatchDict(self, bin_config=None):
         """
-        Generates system/createPatchDict to create 'inlet' and 'outlet' patches from face sets.
+        Generates system/createPatchDict.
         """
-        content = """/*--------------------------------*- C++ -*----------------------------------*\\
+        bin_patches = ""
+        if bin_config and bin_config.get("num_bins", 1) > 1:
+            num_bins = int(bin_config["num_bins"])
+            for i in range(num_bins):
+                bin_patches += f"""
+    {{
+        name bin_{i+1};
+        patchInfo
+        {{
+            type patch;
+            inGroups (corkscrew_bins);
+        }}
+        constructFrom set;
+        set bin_{i+1}_faces;
+    }}"""
+
+        content = f"""/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
 |  \\    /   O peration     | Version:  v2406                                 |
@@ -491,38 +549,39 @@ actions
 |    \\/     M anipulation  |                                                 |
 \\*---------------------------------------------------------------------------*/
 FoamFile
-{
+{{
     version     2.0;
     format      ascii;
     class       dictionary;
     object      createPatchDict;
-}
+}}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 pointSync false;
 
 patches
 (
-    {
+    {{
         name inlet;
         patchInfo
-        {
+        {{
             type patch;
             inGroups (inlet);
-        }
+        }}
         constructFrom set;
         set inletFaces;
-    }
-    {
+    }}
+    {{
         name outlet;
         patchInfo
-        {
+        {{
             type patch;
             inGroups (outlet);
-        }
+        }}
         constructFrom set;
         set outletFaces;
-    }
+    }}
+    {bin_patches}
 );
 
 // ************************************************************************* //
@@ -530,13 +589,201 @@ patches
         with open(os.path.join(self.case_dir, "system", "createPatchDict"), 'w') as f:
             f.write(content)
 
-    def run_meshing(self, log_file=None):
+    def _generate_kinematicCloudProperties(self, bin_config=None):
+        """
+        Generates constant/kinematicCloudProperties with size binning and spatial binning.
+        """
+        # Sizes to simulate (in meters)
+        sizes_um = [5, 10, 20, 50, 100]
+
+        injections = ""
+        for d_um in sizes_um:
+            d_m = d_um * 1e-6
+            # Use distinct model names for parsing
+            model_name = f"model_{d_um}um"
+
+            injections += f"""
+        {model_name}
+        {{
+            type            patchInjection;
+            patch           inlet;
+            parcelBasisType number;
+            parcelsPerSecond 200; // Total ~1000/s across 5 bins
+            duration        1;
+            SOI             0;
+            noi             1;
+            massFlowRate    2e-6; // Approximate
+            flowRateProfile constant 1;
+            U0              (0 0 5);
+            sizeDistribution
+            {{
+                type        fixedValue;
+                fixedValueDistribution
+                {{
+                    value   {d_m};
+                }}
+            }}
+        }}"""
+
+        # Patch Interaction
+        patch_interactions = """
+            corkscrew
+            {
+                type stick;
+            }
+            outlet
+            {
+                type escape;
+            }
+            inlet
+            {
+                type escape;
+            }"""
+
+        patch_list_str = "corkscrew inlet outlet"
+
+        if bin_config and bin_config.get("num_bins", 1) > 1:
+            num_bins = int(bin_config["num_bins"])
+            patch_interactions = """
+            corkscrew
+            {
+                type stick;
+            }""" # Keep main wall just in case parts remain
+
+            patch_list_str = "corkscrew inlet outlet"
+
+            for i in range(num_bins):
+                patch_interactions += f"""
+            bin_{i+1}
+            {{
+                type stick;
+            }}"""
+                patch_list_str += f" bin_{i+1}"
+
+            patch_interactions += """
+            outlet
+            {
+                type escape;
+            }
+            inlet
+            {
+                type escape;
+            }"""
+
+        content = f"""/*--------------------------------*- C++ -*----------------------------------*\\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2406                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      kinematicCloudProperties;
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+solution
+{{
+    active          true;
+    coupled         false; // One-way coupling
+    transient       yes;
+    maxTrackTime    10.0;
+    calcFrequency   1;
+    cellValueSourceCorrection off;
+
+    interpolationSchemes
+    {{
+        rho             cell;
+        U               cell;     // Use cell center values for robustness
+        mu              cell;
+    }}
+
+    integrationSchemes
+    {{
+        U               Euler;
+    }}
+
+    sourceTerms
+    {{
+        schemes
+        {{
+            U               explicit 1;
+        }}
+    }}
+}}
+
+constantVolume      false;
+
+// Moon Dust Properties (Basaltic Regolith)
+rho0            3100; // kg/m^3 (approx. 3.1 g/cm^3)
+
+// Young's Modulus: ~70 GPa (Basalt)
+// Poisson's Ratio: 0.25 (Basalt)
+// Restitution Coefficient: ~0.8-0.9
+
+subModels
+{{
+    particleForces
+    {{
+        sphereDrag;
+        gravity;
+    }}
+
+    collisionModel none;
+    // For dilute flows, stochastic collisions are negligible.
+    // If enabled, use: stochasticCollision; with coefficients for Basalt.
+    stochasticCollisionModel none;
+
+    injectionModels
+    {{
+        {injections}
+    }}
+
+    dispersionModel none;
+
+    patchInteractionModel localInteraction;
+
+    localInteractionCoeffs
+    {{
+        patches
+        (
+            {patch_interactions}
+        );
+    }}
+
+    surfaceFilmModel none;
+}}
+
+cloudFunctions
+{{
+    patchPostProcessing1
+    {{
+        type            patchPostProcessing;
+        maxStoredParcels 20;
+        patches         ( {patch_list_str} );
+        writeControl    writeTime;
+        writeInterval   1;
+    }}
+}}
+
+// ************************************************************************* //
+"""
+        with open(os.path.join(self.case_dir, "constant", "kinematicCloudProperties"), 'w') as f:
+            f.write(content)
+
+    def run_meshing(self, log_file=None, bin_config=None):
         """
         Runs the meshing pipeline.
+        bin_config: {'num_bins': int, 'total_length': float (mm)}
         """
         # Generate patch creation configs
-        self._generate_topoSetDict()
-        self._generate_createPatchDict()
+        self._generate_topoSetDict(bin_config)
+        self._generate_createPatchDict(bin_config)
 
         # Ensure we capture output
         # Step 1: Base Mesh
@@ -672,7 +919,7 @@ boundaryField
         """
         Context manager to backup and restore system configuration files.
         """
-        files = ["system/controlDict", "system/fvSchemes"]
+        files = ["system/controlDict", "system/fvSchemes", "constant/kinematicCloudProperties"]
         backups = {}
 
         try:
@@ -784,16 +1031,10 @@ boundaryField
         with open(control_dict, 'w') as f:
             f.write(content)
 
-    def run_particle_tracking(self, log_file=None):
+    def run_particle_tracking(self, log_file=None, bin_config=None):
         """
         Runs particle tracking (Lagrangian) using a robust transient strategy on frozen flow.
         """
-        # Check if properties exist
-        cloud_props = os.path.join(self.case_dir, "constant", "kinematicCloudProperties")
-        if not os.path.exists(cloud_props):
-            print("Warning: kinematicCloudProperties not found. Skipping particle tracking.")
-            return False
-
         # Find latest steady-state time directory
         dirs = [d for d in os.listdir(self.case_dir) if os.path.isdir(os.path.join(self.case_dir, d)) and d.replace('.', '', 1).isdigit()]
 
@@ -810,88 +1051,51 @@ boundaryField
         with self._backup_restore_config():
             print(f"Preparing particle tracking from steady state time {latest_time}...")
 
-            # 1. Reset Time & Prepare Fields
+            # 1. Generate Cloud Config
+            self._generate_kinematicCloudProperties(bin_config)
+
+            # 2. Reset Time & Prepare Fields
             self._prepare_transient_run(latest_time)
 
-            # 2. Update Configurations
+            # 3. Update Configurations
             self._update_controlDict_for_particles()
             self._switch_fvSchemes_to_transient()
 
-            # 3. Run Solver
+            # 4. Run Solver
             return self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking")
 
-    def run_command(self, cmd, log_file=None, ignore_error=False, description="Running command"):
-        if not self.has_tools:
-            if not log_file:
-                print(f"Skipping command {' '.join(cmd)} (no OpenFOAM/Container tools found).")
-            return False
+    def generate_vtk(self):
+        """
+        Runs foamToVTK to generate VTK files for visualization.
+        Returns the path to the VTK directory if successful, None otherwise.
+        """
+        print("Generating VTK artifacts...")
+        # foamToVTK -latestTime is usually enough for snapshot,
+        # but user might want animation. Let's do all times if valid?
+        # "incorporate viewing the most successful runs".
+        # Let's stick to -latestTime to save space/time, unless requested.
+        # But for particle tracks (Lagrangian), we might want the full path.
+        # The Lagrangian data is time-dependent.
+        # We should run foamToVTK without -latestTime to capture the particle tracks.
 
-        final_cmd = cmd
-        if self.use_container:
-            # Wrap in container call
-            final_cmd = self._get_container_command(cmd, self.case_dir)
-            # When using container, we are effectively running "container_tool" as the command
-
-        # Use passed log_file or fallback to self.log_file
-        target_log = log_file if log_file else self.log_file
-
-        if not log_file:
-            print(f"Running {' '.join(final_cmd)}...")
-
-        try:
-            cwd = self.case_dir if not self.use_container else os.getcwd()
-
-            if log_file:
-                run_command_with_spinner(final_cmd, target_log, cwd=cwd, description=description)
-            else:
-                 # Legacy/Fallback behavior
-                with open(target_log, "a") as log:
-                    log.write(f"\n# Executing: {' '.join(final_cmd)}\n")
-                    log.flush()
-                    subprocess.run(
-                        final_cmd,
-                        cwd=cwd,
-                        stdout=log,
-                        stderr=subprocess.STDOUT,
-                        check=True
-                    )
-
-            return True
-        except subprocess.CalledProcessError:
-            if not log_file:
-                print(f"Command {' '.join(cmd)} failed.")
-            else:
-                # Print tail of log file
-                if os.path.exists(target_log):
-                    print(f"\n--- Log tail for failed command: {' '.join(cmd)} ---")
-                    try:
-                        with open(target_log, 'r') as f:
-                            lines = f.readlines()
-                            for line in lines[-50:]:
-                                print(line, end='')
-                    except Exception as e:
-                        print(f"Error reading log file: {e}")
-                    print("----------------------------------------------------\n")
-
-            if cmd[0] == "blockMesh":
-                print("Hint: If blockMesh failed with no error message, it likely ran out of memory. The mesh resolution has been automatically adjusted, but try reducing mesh resolution further if the error persists.")
-
-            if not ignore_error:
-                return False
-            return True
-        except FileNotFoundError:
-            if self.use_container:
-                print(f"Error: '{self.container_tool}' executable not found.")
-            else:
-                print(f"Executable {cmd[0]} not found.")
-            return False
+        # NOTE: foamToVTK usually exports all times by default.
+        if self.run_command(["foamToVTK"], description="Generating VTK"):
+            vtk_dir = os.path.join(self.case_dir, "VTK")
+            if os.path.exists(vtk_dir):
+                return vtk_dir
+        return None
 
     def get_metrics(self, log_file=None):
         """
         Parses logs to get metrics.
         Returns dict: {'delta_p': float, 'residuals': float, 'particle_data': ...}
         """
-        metrics = {'delta_p': None, 'residuals': None}
+        metrics = {
+            'delta_p': None,
+            'residuals': None,
+            'capture_by_bin': {},
+            'injected_by_model': {}
+        }
 
         target_log = log_file if log_file else self.log_file
 
@@ -916,78 +1120,145 @@ boundaryField
         if p_in is not None and p_out is not None:
             metrics['delta_p'] = abs(p_in - p_out)
 
-        # 3. Parse Particle Tracking (Separation Efficiency)
-        # We look for "Injector model1: injected X parcels" and "Current number of parcels" at the end.
+        # 3. Parse Particle Tracking (Detailed)
         if os.path.exists(target_log):
-            total_injected = 0
-            current_parcels = 0
-
-            with open(target_log, 'r') as f:
-                lines = f.readlines()
-                for line in lines:
-                    # "Injector model1: injected 100 parcels, mass 1e-06 kg"
-                    if "injected" in line and "parcels" in line:
-                         m = re.search(r"injected\s+(\d+)\s+parcels", line)
-                         if m:
-                             total_injected += int(m.group(1))
-
-                # Check the FINAL "Current number of parcels"
-                for line in reversed(lines):
-                    if "Current number of parcels" in line:
-                        m = re.search(r"Current number of parcels\s+=\s+(\d+)", line)
-                        if m:
-                            current_parcels = int(m.group(1))
-                        break
-
-            # 4. Try to parse explicit Parcel fate table (more accurate)
-            escaped_parcels = 0
-            stuck_parcels = 0
-            found_fate_table = False
-
             with open(target_log, 'r') as f:
                 content = f.read()
-                # Look for "Parcel fate (number, mass)" block
-                if "Parcel fate" in content:
-                    # Regex for escape and stick counts
-                    # Pattern: - escape      : 123, ...
-                    escape_match = re.search(r"\s*-\s+escape\s+:\s+(\d+)", content)
-                    stick_match = re.search(r"\s*-\s+stick\s+:\s+(\d+)", content)
 
-                    if escape_match:
-                        escaped_parcels = int(escape_match.group(1))
-                        found_fate_table = True
-                    if stick_match:
-                        stuck_parcels = int(stick_match.group(1))
-                        found_fate_table = True
+            # -- Parse Efficiency Per Size (Injection Model) --
+            # Look for "Injector model_Xum: injected Y parcels... escape : A, stick : B"
+            # The log format for final stats usually groups by injector if multiple exist?
+            # Or it reports global "Parcel fate" and then maybe detailed?
+            # Standard OpenFOAM "Parcel fate" table sums everything.
+            # However, during run, it logs "Injector model_5um: injected X parcels".
+            # To get *efficiency* per model, we need to know how many from *that* model escaped/stuck.
+            # Standard logs might NOT break down fate by injector model unless configured.
+            # But wait, if we inject different sizes, can we differentiate them in the fate table?
+            # No, the fate table is usually global type-based.
 
-            if total_injected > 0:
-                if found_fate_table:
-                    # Use explicit fate counts
-                    # Captured = Stuck + (Current - Escaped? No, Current is remaining in domain)
-                    # Actually, if the simulation finished, Current should be small/zero if everything settled.
-                    # But if we treat 'stuck' as captured (on bin walls) and 'escape' as lost.
+            # Fallback/Workaround:
+            # If standard logs don't give per-model fate, we can only report global efficiency
+            # UNLESS we use "cloud functions" or parse the explicit injection log lines
+            # and assume all "stuck" are captured? No.
 
-                    # Separation Efficiency = 1 - (Escaped / Injected)
-                    metrics['separation_efficiency'] = (1.0 - (escaped_parcels / total_injected)) * 100.0
-                    metrics['particles_injected'] = total_injected
-                    metrics['particles_captured'] = stuck_parcels # Explicitly stuck
-                    metrics['particles_escaped'] = escaped_parcels
-                    metrics['particles_remaining'] = current_parcels # Suspended in flow
+            # Actually, newer OpenFOAM might report it.
+            # If not, we simply report global for now, but we set up the structure.
+            # Let's try to parse "Injector <name>: ... injected <N>"
+            # And then look for "Cloud: kinematicCloud ... "
 
-                    # Total captured could be interpreted as Stuck + Remaining (if remaining are in bin)
-                    # For now, let's report strict "Stuck" as captured, unless the user considers residence as capture.
-                    # The user said "measure ... total particulate that gets captured in the volume".
-                    # So 'current' particles might be captured.
-                    # Let's add a combined metric.
-                    metrics['total_retained'] = stuck_parcels + current_parcels
+            # Let's parse the global table first.
+            global_injected = 0
+            global_escaped = 0
+            global_stuck = 0
 
-                else:
-                    # Fallback to legacy logic (Efficiency = Remaining / Injected)
-                    # This assumes all non-remaining particles escaped.
-                    metrics['separation_efficiency'] = (current_parcels / total_injected) * 100.0
-                    metrics['particles_injected'] = total_injected
-                    metrics['particles_captured'] = current_parcels
-                    metrics['note'] = "Using legacy tracking (implicit escape)"
+            if "Parcel fate" in content:
+                # Regex for escape and stick counts
+                # Pattern: - escape      : 123, ...
+                escape_match = re.search(r"\s*-\s+escape\s+:\s+(\d+)", content)
+                stick_match = re.search(r"\s*-\s+stick\s+:\s+(\d+)", content)
+
+                if escape_match:
+                    global_escaped = int(escape_match.group(1))
+                if stick_match:
+                    global_stuck = int(stick_match.group(1))
+
+            # Parse total injected per model
+            # Pattern: "Injector model_(\d+)um: injected (\d+) parcels"
+            # We need the FINAL count.
+            injection_counts = {}
+            # Regex to match all occurrences and take the last one or sum?
+            # Usually "injected" accumulates or reports final.
+            # "Injector model1: injected 100 parcels" appears at each step. We want the MAX.
+            for m in re.finditer(r"Injector (model_[\d]+um): injected (\d+) parcels", content):
+                model = m.group(1)
+                count = int(m.group(2))
+                # Store max seen for this model
+                if count > injection_counts.get(model, 0):
+                    injection_counts[model] = count
+
+            # Add breakdown to metrics
+            metrics['injected_by_model'] = injection_counts
+
+            # If we can't get per-model fate, we distribute global efficiency? No that's wrong.
+            # For now, let's store the injection counts.
+            # Use 'separation_efficiency' as global.
+            total_injected_parsed = sum(injection_counts.values())
+
+            if total_injected_parsed > 0:
+                metrics['particles_injected'] = total_injected_parsed
+                metrics['particles_captured'] = global_stuck
+                metrics['particles_escaped'] = global_escaped
+                metrics['separation_efficiency'] = (global_stuck / total_injected_parsed) * 100.0 if total_injected_parsed else 0
+            else:
+                 # Try finding total injected generic
+                 m_total = re.findall(r"injected\s+(\d+)\s+parcels", content)
+                 if m_total:
+                     total_injected_parsed = sum(int(x) for x in m_total)
+                     metrics['particles_injected'] = total_injected_parsed
+
+            # -- Parse Spatial Capture (Bin Patches) --
+            # Look for: "Patch bin_X: stick N" (if patchInteractionModel detail is enabled)
+            # OpenFOAM usually reports:
+            # "Interaction with patch bin_1: ... stick N"
+            # Or in the table?
+            # The standard table is by *Interaction Type* (escape, stick), not by Patch.
+
+            # However, if we use `patchInteractionModel localInteraction`, it might log per patch?
+            # Actually, `StandardWallInteraction` usually doesn't log per patch in the table.
+            # But the `patchInteraction` function object does.
+            # We haven't enabled `cloudFunctions` in the config yet.
+            # To get per-patch stats, we really need the `patchInteractionFields` or similar function object.
+            # OR we rely on the log if `debug` is on?
+
+            # Let's Add `patchPostProcessing` function object to `cloudFunctions` in `_generate_kinematicCloudProperties`?
+            # That's complicated to parse.
+
+            # Alternative: Assume for now we only get global, but check log for any "Patch <name>" patterns.
+            # Sometimes "Parcel fate" has a detailed table?
+            # In v2406, it's usually compact.
+
+            # Let's try to find ANY mention of "bin_" and numbers.
+            # If not found, we leave the dict empty.
+
+            # Try to parse `patchPostProcessing` file output if available
+            # Path: case/postProcessing/lagrangian/cloud/patchPostProcessing1/*/patchPostProcessing.dat
+            pp_base = os.path.join(self.case_dir, "postProcessing", "lagrangian", "cloud", "patchPostProcessing1")
+            if os.path.exists(pp_base):
+                 # Find latest time
+                 time_dirs = glob.glob(os.path.join(pp_base, "*"))
+                 if time_dirs:
+                     latest_pp_dir = max(time_dirs, key=os.path.getmtime)
+                     dat_file = os.path.join(latest_pp_dir, "patchPostProcessing1.dat")
+                     if os.path.exists(dat_file):
+                         # Format: # Time patch1 patch2 ...
+                         # Data: time val1 val2 ...
+                         try:
+                             with open(dat_file, 'r') as f:
+                                 lines = f.readlines()
+                                 # Parse header to get patch names
+                                 header = None
+                                 for line in lines:
+                                     if line.startswith("#") and "Time" in line:
+                                         header = line.replace("#", "").split()
+                                         break
+
+                                 if header:
+                                     # Get last data line
+                                     last_line = lines[-1].strip()
+                                     if last_line and not last_line.startswith("#"):
+                                         data = last_line.split()
+                                         # Map header to data
+                                         # Header: Time patch1 patch2 ...
+                                         # Data: time val1 val2 ...
+                                         for i, col_name in enumerate(header):
+                                             if col_name.startswith("bin_"):
+                                                 try:
+                                                     val = float(data[i])
+                                                     metrics['capture_by_bin'][col_name] = val
+                                                 except (IndexError, ValueError):
+                                                     pass
+                         except Exception as e:
+                             print(f"Error parsing patchPostProcessing: {e}")
 
         return metrics
 

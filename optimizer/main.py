@@ -181,7 +181,7 @@ def main():
 
         # Run Simulation via Runner
         # output_stl is strictly 'corkscrew_fluid.stl' for OpenFOAM compatibility
-        metrics, png_paths = run_simulation(
+        metrics, png_paths, vtk_zip_path = run_simulation(
             scad,
             foam,
             current_params,
@@ -231,7 +231,8 @@ def main():
             "parameters": current_params.copy(),
             "metrics": metrics,
             "images": png_paths,
-            "artifact_stl_path": unique_stl_path
+            "artifact_stl_path": unique_stl_path,
+            "artifact_vtk_path": vtk_zip_path
         }
         store.append_result(run_data)
 
