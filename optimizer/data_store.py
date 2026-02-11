@@ -90,8 +90,6 @@ class DataStore:
                 continue
 
             # This run is not in the top N, so we should delete its artifacts
-            # Check for 'output_stl' or derive filename if standard
-            # Check for 'images' list
 
             # 1. Delete Images
             images = run.get("images", [])
@@ -105,21 +103,26 @@ class DataStore:
                             print(f"Warning: Failed to delete {img_path}: {e}")
 
             # 2. Delete STLs
-            # STLs might not be explicitly listed in the run dict if they use a standard name.
-            # However, main.py passes 'output_stl' name.
-            # If main.py renames the STL to include ID/iteration, we need that path.
-            # Currently main.py overwrites 'corkscrew_fluid.stl' unless we change it.
-            # TODO: If we want to keep top 10 STLs, main.py MUST be saving unique STLs per run.
-            # If main.py is overwriting, then only the last one exists anyway.
-            # Assumption: main.py will be updated to save unique filenames for artifacts.
+            # Check for fluid_stl_path, solid_stl_path, and legacy artifact_stl_path
+            paths_to_delete = set()
 
-            stl_path = run.get("artifact_stl_path")
-            if stl_path and os.path.exists(stl_path):
-                try:
-                    os.remove(stl_path)
-                    deleted_count += 1
-                except OSError as e:
-                    print(f"Warning: Failed to delete {stl_path}: {e}")
+            if "fluid_stl_path" in run and run["fluid_stl_path"]:
+                paths_to_delete.add(run["fluid_stl_path"])
+
+            if "solid_stl_path" in run and run["solid_stl_path"]:
+                paths_to_delete.add(run["solid_stl_path"])
+
+            if "artifact_stl_path" in run and run["artifact_stl_path"]:
+                paths_to_delete.add(run["artifact_stl_path"])
+
+            for stl_path in paths_to_delete:
+                if stl_path and os.path.exists(stl_path):
+                    try:
+                        os.remove(stl_path)
+                        deleted_count += 1
+                        print(f"Deleted artifact: {stl_path}")
+                    except OSError as e:
+                        print(f"Warning: Failed to delete {stl_path}: {e}")
 
         if deleted_count > 0:
             print(f"Cleanup: Deleted {deleted_count} artifact files from non-top runs.")
