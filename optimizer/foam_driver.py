@@ -5,6 +5,7 @@ import glob
 import re
 import math
 import sys
+import contextlib
 import numpy as np
 from utils import run_command_with_spinner
 
@@ -666,12 +667,81 @@ boundaryField
         # 5. Create phi (Flux) if missing?
         # simpleFoam creates phi.
 
-    def _update_controlDict_for_particles(self, start_time_val):
+    @contextlib.contextmanager
+    def _backup_restore_config(self):
         """
-        Updates controlDict for particle tracking:
-        - startFrom latestTime (or specific time)
-        - endTime = start + duration
-        - deltaT = small
+        Context manager to backup and restore system configuration files.
+        """
+        files = ["system/controlDict", "system/fvSchemes"]
+        backups = {}
+
+        try:
+            # Backup
+            for f in files:
+                src = os.path.join(self.case_dir, f)
+                if os.path.exists(src):
+                    dst = src + ".bak"
+                    shutil.copy2(src, dst)
+                    backups[src] = dst
+            yield
+        finally:
+            # Restore
+            for src, dst in backups.items():
+                if os.path.exists(dst):
+                    shutil.move(dst, src)
+
+    def _switch_fvSchemes_to_transient(self):
+        """
+        Switches ddtSchemes to Euler for transient particle tracking.
+        """
+        fvSchemes = os.path.join(self.case_dir, "system", "fvSchemes")
+        if not os.path.exists(fvSchemes): return
+
+        with open(fvSchemes, 'r') as f:
+            content = f.read()
+
+        # Replace ddtSchemes
+        # ddtSchemes { default steadyState; } -> ddtSchemes { default Euler; }
+        pattern = re.compile(r"ddtSchemes\s*\{[^\}]*\}", re.DOTALL)
+        if pattern.search(content):
+            content = pattern.sub("ddtSchemes\n    {\n        default         Euler;\n    }", content)
+
+        with open(fvSchemes, 'w') as f:
+            f.write(content)
+
+    def _prepare_transient_run(self, source_time):
+        """
+        Resets the simulation to time 0, copies fields from source_time, and generates rho/mu.
+        """
+        zero_dir = os.path.join(self.case_dir, "0")
+        source_dir = os.path.join(self.case_dir, str(source_time))
+
+        # 1. Clean 0 directory (but keep mesh files if present, though usually they are in constant/polyMesh)
+        # We overwrite 0 with new fields.
+        if os.path.exists(zero_dir):
+            shutil.rmtree(zero_dir)
+        os.makedirs(zero_dir)
+
+        # 2. Copy fields
+        fields_to_copy = ["U", "p", "phi", "k", "epsilon", "omega", "nut"]
+        for field in fields_to_copy:
+            src = os.path.join(source_dir, field)
+            dst = os.path.join(zero_dir, field)
+            if os.path.exists(src):
+                shutil.copy2(src, dst)
+            elif field == "phi":
+                 print("Warning: 'phi' field missing in source time. Solver might fail.")
+
+        # 3. Generate rho and mu
+        self._generate_particle_tracking_fields("0")
+
+    def _update_controlDict_for_particles(self):
+        """
+        Updates controlDict for particle tracking (Reset Time Strategy):
+        - startFrom startTime
+        - startTime 0
+        - endTime 10.0
+        - deltaT 0.001
         """
         control_dict = os.path.join(self.case_dir, "system", "controlDict")
         if not os.path.exists(control_dict):
@@ -686,42 +756,29 @@ boundaryField
 
         # Update startFrom
         if "startFrom" in content:
-            content = re.sub(r"startFrom\s+.*?;", "startFrom latestTime;", content)
+            content = re.sub(r"startFrom\s+.*?;", "startFrom startTime;", content)
 
-        # Update startTime (optional, but good practice)
+        # Update startTime
         if "startTime" in content:
-            content = re.sub(r"startTime\s+.*?;", f"startTime {start_time_val};", content)
+            content = re.sub(r"startTime\s+.*?;", "startTime 0;", content)
 
-        # Update endTime
-        try:
-            current_t = float(start_time_val)
-        except ValueError:
-            current_t = 0.0
-
-        # Duration: 15 seconds (slightly > maxTrackTime 10s + duration 1s)
-        end_t = current_t + 15.0
-
+        # Update endTime (10s sufficient for particles to exit)
         if "stopAt" in content:
             content = re.sub(r"stopAt\s+.*?;", "stopAt endTime;", content)
 
         if "endTime" in content:
-            content = re.sub(r"endTime\s+.*?;", f"endTime {end_t};", content)
+            content = re.sub(r"endTime\s+.*?;", "endTime 10.0;", content)
 
-        # Update deltaT
-        # 0.1ms time step (reduced from 1ms to ensure particle Co < 1)
-        # 5 m/s * 0.0001s = 0.5mm (vs ~2mm cell size)
+        # Update deltaT (1ms)
         if "deltaT" in content:
-            content = re.sub(r"deltaT\s+.*?;", "deltaT 0.0001;", content)
+            content = re.sub(r"deltaT\s+.*?;", "deltaT 0.001;", content)
 
-        # Update writeInterval to avoid spamming disk with particle positions every step
-        # Write every 0.1s => 1000 steps
+        # Update writeInterval
         if "writeInterval" in content:
-            content = re.sub(r"writeInterval\s+.*?;", "writeInterval 1000;", content)
+            content = re.sub(r"writeInterval\s+.*?;", "writeInterval 100;", content) # Write every 0.1s
 
-        # Disable function objects (like pressure probes) during particle tracking
-        # as they might fail or slow down the transient tracking loop
+        # Disable function objects
         if "functions" in content:
-            # Simple hack: Rename the block so OpenFOAM ignores it
             content = content.replace("functions", "functions_disabled")
 
         with open(control_dict, 'w') as f:
@@ -729,8 +786,7 @@ boundaryField
 
     def run_particle_tracking(self, log_file=None):
         """
-        Runs particle tracking (Lagrangian).
-        Assuming we use icoUncoupledKinematicParcelFoam for one-way coupling test.
+        Runs particle tracking (Lagrangian) using a robust transient strategy on frozen flow.
         """
         # Check if properties exist
         cloud_props = os.path.join(self.case_dir, "constant", "kinematicCloudProperties")
@@ -738,31 +794,31 @@ boundaryField
             print("Warning: kinematicCloudProperties not found. Skipping particle tracking.")
             return False
 
-        # Find latest time directory
-        # List all items in case_dir, filter for numbers
+        # Find latest steady-state time directory
         dirs = [d for d in os.listdir(self.case_dir) if os.path.isdir(os.path.join(self.case_dir, d)) and d.replace('.', '', 1).isdigit()]
 
         if not dirs:
             print("Error: No time directories found for particle tracking.")
             return False
 
-        # Sort numerically
         try:
             latest_time = max(dirs, key=float)
         except ValueError:
-            latest_time = dirs[-1] # Fallback
+            latest_time = dirs[-1]
 
-        # Skip 0 if possible, unless it's the only one
-        if latest_time == "0" and len(dirs) > 1:
-            print("Warning: Only found time 0. Solver might have failed.")
+        # Use context manager to backup/restore configs
+        with self._backup_restore_config():
+            print(f"Preparing particle tracking from steady state time {latest_time}...")
 
-        # Generate fields
-        self._generate_particle_tracking_fields(latest_time)
+            # 1. Reset Time & Prepare Fields
+            self._prepare_transient_run(latest_time)
 
-        # Update controlDict to run from latestTime with small deltaT
-        self._update_controlDict_for_particles(latest_time)
+            # 2. Update Configurations
+            self._update_controlDict_for_particles()
+            self._switch_fvSchemes_to_transient()
 
-        return self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking")
+            # 3. Run Solver
+            return self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking")
 
     def run_command(self, cmd, log_file=None, ignore_error=False, description="Running command"):
         if not self.has_tools:

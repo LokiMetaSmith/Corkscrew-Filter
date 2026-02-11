@@ -19,10 +19,10 @@ solution
 {
     active          true;
     coupled         false; // One-way coupling
-    transient       no;
+    transient       yes;
     maxTrackTime    10.0;
     calcFrequency   1;
-    cellValueSourceCorrection on;
+    cellValueSourceCorrection off;
 
     interpolationSchemes
     {
@@ -76,6 +76,7 @@ subModels
             parcelBasisType number;
             parcelsPerSecond 1000;
             duration        1; // Inject for 1 second
+            SOI             0;
             noi             1;
             massFlowRate    1e-5;
             flowRateProfile constant 1;
