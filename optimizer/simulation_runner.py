@@ -123,8 +123,8 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                     ram_gb = get_container_memory_gb(foam_driver.container_tool)
                     print(f"Detected available memory: {ram_gb:.2f} GB")
 
-                    if ram_gb < 8.0 and foam_driver.container_tool == "podman":
-                        print("Tip: Your container memory is low (<8GB). You can increase it by running:")
+                    if ram_gb < 7.5 and foam_driver.container_tool == "podman":
+                        print(f"Tip: Your container memory is low ({ram_gb:.1f}GB < 8GB). You can increase it by running:")
                         print("     python optimizer/setup_machine.py --memory 8192")
 
                 except Exception as e:
