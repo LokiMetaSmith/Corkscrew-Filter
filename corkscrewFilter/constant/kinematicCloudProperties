@@ -19,7 +19,7 @@ solution
 {
     active          true;
     coupled         false; // One-way coupling
-    transient       yes;
+    transient       no;
     maxTrackTime    10.0;
     calcFrequency   1;
     cellValueSourceCorrection on;
