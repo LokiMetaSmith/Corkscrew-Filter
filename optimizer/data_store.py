@@ -102,8 +102,8 @@ class DataStore:
                         except OSError as e:
                             print(f"Warning: Failed to delete {img_path}: {e}")
 
-            # 2. Delete STLs
-            # Check for fluid_stl_path, solid_stl_path, and legacy artifact_stl_path
+            # 2. Delete Artifacts (STLs, VTK)
+            # Check for fluid_stl_path, solid_stl_path, artifact_vtk_path, and legacy artifact_stl_path
             paths_to_delete = set()
 
             if "fluid_stl_path" in run and run["fluid_stl_path"]:
@@ -115,14 +115,17 @@ class DataStore:
             if "artifact_stl_path" in run and run["artifact_stl_path"]:
                 paths_to_delete.add(run["artifact_stl_path"])
 
-            for stl_path in paths_to_delete:
-                if stl_path and os.path.exists(stl_path):
+            if "artifact_vtk_path" in run and run["artifact_vtk_path"]:
+                paths_to_delete.add(run["artifact_vtk_path"])
+
+            for path in paths_to_delete:
+                if path and os.path.exists(path):
                     try:
-                        os.remove(stl_path)
+                        os.remove(path)
                         deleted_count += 1
-                        print(f"Deleted artifact: {stl_path}")
+                        # print(f"Deleted artifact: {path}") # Reduce noise
                     except OSError as e:
-                        print(f"Warning: Failed to delete {stl_path}: {e}")
+                        print(f"Warning: Failed to delete {path}: {e}")
 
         if deleted_count > 0:
             print(f"Cleanup: Deleted {deleted_count} artifact files from non-top runs.")

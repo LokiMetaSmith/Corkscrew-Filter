@@ -27,11 +27,12 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         output_prefix (str): Prefix for output files (e.g. "exports/run_123"). If None, generates timestamped default.
 
     Returns:
-        tuple: (metrics, image_paths, solid_stl_path, fluid_stl_path)
+        tuple: (metrics, image_paths, solid_stl_path, fluid_stl_path, vtk_zip_path)
             metrics (dict): Simulation results (delta_p, residuals, etc).
             image_paths (list): List of paths to generated PNG visualizations.
             solid_stl_path (str): Path to the generated solid visualization STL.
             fluid_stl_path (str): Path to the archived fluid STL (negative volume).
+            vtk_zip_path (str): Path to the zipped VTK directory (or None).
     """
 
     # Setup Log Directory
@@ -48,7 +49,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
     is_valid, error_msg = validate_parameters(params)
     if not is_valid:
         print(f"Parameter Validation Failed: {error_msg}")
-        return {"error": "invalid_parameters", "details": error_msg}, [], None, None
+        return {"error": "invalid_parameters", "details": error_msg}, [], None, None, None
 
     # 1. Generate Geometry (Fluid Volume for CFD)
     stl_path = os.path.join(foam_driver.case_dir, "constant", "triSurface", output_stl_name)
@@ -69,7 +70,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
 
             if not success:
                 print(f"Geometry generation failed. Check {geom_log} for details.")
-                return {"error": "geometry_generation_failed"}, [], None, None
+                return {"error": "geometry_generation_failed"}, [], None, None, None
         else:
             print("[Reuse Mesh] Skipping geometry generation.")
     else:
@@ -82,7 +83,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         # Early check for environment
         if not foam_driver.has_tools:
             print("OpenFOAM tools not found. Skipping simulation.")
-            return {"error": "environment_missing_tools", "details": "Neither OpenFOAM nor Docker found"}, [], None, None
+            return {"error": "environment_missing_tools", "details": "Neither OpenFOAM nor Docker found"}, [], None, None, None
 
         if not reuse_mesh:
             bounds = scad_driver.get_bounds(stl_path)
@@ -218,12 +219,21 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
 
     # 3. Run Simulation
     metrics = {}
+    vtk_zip_path = None
+
     if not dry_run and not skip_cfd:
         foam_driver.prepare_case(keep_mesh=reuse_mesh)
 
+        # Prepare Bin Configuration for Meshing/Tracking
+        bin_config = {
+            "num_bins": int(params.get("num_bins", 1)),
+            "insert_length_mm": float(params.get("insert_length_mm", 50.0))
+        }
+
         if not reuse_mesh:
             with Timer("Meshing"):
-                success = foam_driver.run_meshing(log_file=mesh_log)
+                # Pass bin config to create bin patches
+                success = foam_driver.run_meshing(log_file=mesh_log, bin_config=bin_config)
         else:
             print("[Reuse Mesh] Skipping meshing pipeline.")
             success = True
@@ -233,11 +243,22 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                 success = foam_driver.run_solver(log_file=solver_log)
 
             if success:
-                # Attempt particle tracking (optional/experimental)
+                # Attempt particle tracking
                 with Timer("Particle Tracking"):
-                    foam_driver.run_particle_tracking(log_file=solver_log)
+                    # Pass bin config for injection/interaction setup
+                    foam_driver.run_particle_tracking(log_file=solver_log, bin_config=bin_config)
 
                 metrics = foam_driver.get_metrics(log_file=solver_log)
+
+                # Generate VTK
+                vtk_dir = foam_driver.generate_vtk()
+                if vtk_dir:
+                    timestamp = int(time.time())
+                    # Archive to exports/
+                    zip_name = os.path.join("exports", f"run_{timestamp}_vtk")
+                    print(f"Zipping VTK output to {zip_name}.zip...")
+                    shutil.make_archive(zip_name, 'zip', vtk_dir)
+                    vtk_zip_path = zip_name + ".zip"
             else:
                 print(f"Solver failed. Check {solver_log}")
                 metrics = {"error": "solver_failed"}
@@ -298,4 +319,4 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         png_paths = []
         fluid_stl_final_path = fluid_stl_dest # Pretend we copied it
 
-    return metrics, png_paths, solid_stl_path, fluid_stl_final_path
+    return metrics, png_paths, solid_stl_path, fluid_stl_final_path, vtk_zip_path
