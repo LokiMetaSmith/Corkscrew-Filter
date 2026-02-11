@@ -2,10 +2,11 @@ import os
 import time
 import math
 import numpy as np
+import shutil
 from utils import Timer, get_container_memory_gb
 from parameter_validator import validate_parameters
 
-def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False, skip_cfd=False, iteration=0, reuse_mesh=False):
+def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False, skip_cfd=False, iteration=0, reuse_mesh=False, output_prefix=None):
     """
     Executes the full simulation pipeline:
     1. Generate Fluid Geometry (STL)
@@ -23,11 +24,14 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         skip_cfd (bool): If True, generates geometry but skips CFD simulation.
         iteration (int): The current iteration number (used for logging).
         reuse_mesh (bool): If True, skips geometry generation and meshing, using existing mesh.
+        output_prefix (str): Prefix for output files (e.g. "exports/run_123"). If None, generates timestamped default.
 
     Returns:
-        tuple: (metrics, image_paths)
+        tuple: (metrics, image_paths, solid_stl_path, fluid_stl_path)
             metrics (dict): Simulation results (delta_p, residuals, etc).
             image_paths (list): List of paths to generated PNG visualizations.
+            solid_stl_path (str): Path to the generated solid visualization STL.
+            fluid_stl_path (str): Path to the archived fluid STL (negative volume).
     """
 
     # Setup Log Directory
@@ -44,7 +48,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
     is_valid, error_msg = validate_parameters(params)
     if not is_valid:
         print(f"Parameter Validation Failed: {error_msg}")
-        return {"error": "invalid_parameters", "details": error_msg}, []
+        return {"error": "invalid_parameters", "details": error_msg}, [], None, None
 
     # 1. Generate Geometry (Fluid Volume for CFD)
     stl_path = os.path.join(foam_driver.case_dir, "constant", "triSurface", output_stl_name)
@@ -65,7 +69,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
 
             if not success:
                 print(f"Geometry generation failed. Check {geom_log} for details.")
-                return {"error": "geometry_generation_failed"}, []
+                return {"error": "geometry_generation_failed"}, [], None, None
         else:
             print("[Reuse Mesh] Skipping geometry generation.")
     else:
@@ -78,7 +82,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         # Early check for environment
         if not foam_driver.has_tools:
             print("OpenFOAM tools not found. Skipping simulation.")
-            return {"error": "environment_missing_tools", "details": "Neither OpenFOAM nor Docker found"}, []
+            return {"error": "environment_missing_tools", "details": "Neither OpenFOAM nor Docker found"}, [], None, None
 
         if not reuse_mesh:
             bounds = scad_driver.get_bounds(stl_path)
@@ -252,20 +256,22 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
             "residuals": 1e-5
         }
 
-    # 4. Generate Visualization (Solid Model for LLM/Human Review)
+    # 4. Generate Visualization (Solid Model for LLM/Human Review) and Archive Fluid STL
     png_paths = []
-    # Create an exports directory relative to current working directory
-    # We use a timestamp or iteration-based name?
-    # For a worker, we might not know the "iteration number" easily if we just process a job ID.
-    # Let's use a temp folder or the job ID if passed?
-    # For now, let's just use "exports/latest" or similar, but the caller might want to move it.
-    # Actually, main.py uses "iteration_{i}_solid".
-    # Let's make the output base a parameter or derive it.
 
-    # We'll default to a timestamped folder in exports/ to avoid overwrites
-    timestamp = int(time.time())
-    vis_base = os.path.join("exports", f"run_{timestamp}_solid")
-    os.makedirs("exports", exist_ok=True)
+    # Determine output paths
+    if output_prefix:
+        vis_base = f"{output_prefix}_solid"
+        fluid_stl_dest = f"{output_prefix}_fluid.stl"
+    else:
+        timestamp = int(time.time())
+        vis_base = os.path.join("exports", f"run_{timestamp}_solid")
+        fluid_stl_dest = os.path.join("exports", f"run_{timestamp}_fluid.stl")
+
+    os.makedirs(os.path.dirname(vis_base), exist_ok=True)
+
+    solid_stl_path = f"{vis_base}.stl"
+    fluid_stl_final_path = None
 
     if not dry_run:
         # Use lower resolution for vis to speed up
@@ -275,10 +281,21 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         with Timer("Visualization"):
             png_paths = scad_driver.generate_visualization(vis_params, vis_base, log_file=vis_log)
 
+        # Copy Fluid STL to output location
+        if os.path.exists(stl_path):
+            try:
+                shutil.copy(stl_path, fluid_stl_dest)
+                fluid_stl_final_path = fluid_stl_dest
+                print(f"Archived fluid STL to {fluid_stl_dest}")
+            except Exception as e:
+                print(f"Warning: Failed to copy fluid STL: {e}")
+        else:
+            print(f"Warning: Fluid STL not found at {stl_path}, cannot archive.")
+
     else:
         print(f"[Dry Run] Generated Visualization at {vis_base}.png")
         # Create dummy path for dry run consistency
-        # png_paths = [f"{vis_base}_view{v}.png" for v in range(3)]
         png_paths = []
+        fluid_stl_final_path = fluid_stl_dest # Pretend we copied it
 
-    return metrics, png_paths
+    return metrics, png_paths, solid_stl_path, fluid_stl_final_path

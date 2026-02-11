@@ -41,6 +41,7 @@ def main():
     parser.add_argument("--cpus", type=int, default=1, help="Number of CPUs to use for parallel execution (default: 1)")
     parser.add_argument("--no-llm", action="store_true", help="Explicitly disable LLM and use random/fallback strategy (also suppresses prompts in startup script)")
     parser.add_argument("--batch-size", type=int, default=5, help="Number of parameter sets to generate per LLM call")
+    parser.add_argument("--no-cleanup", action="store_true", help="Disable cleanup of artifacts (STLs, images) for non-top runs")
     args = parser.parse_args()
 
     # Parse iterations argument
@@ -73,6 +74,8 @@ def main():
     # Create artifacts directory
     artifacts_dir = "artifacts"
     os.makedirs(artifacts_dir, exist_ok=True)
+    # Ensure exports directory exists
+    os.makedirs("exports", exist_ok=True)
 
     # Get git commit
     try:
@@ -179,9 +182,16 @@ def main():
         print(f"Testing parameters: {current_params}")
         visited_params.add(param_hash)
 
+        # Generate Run ID and Output Prefix
+        # Use timestamp to ensure uniqueness
+        run_timestamp = time.time()
+        run_id_hash = hashlib.md5(f"{i}_{run_timestamp}".encode()).hexdigest()
+        run_id_short = run_id_hash[:8]
+        output_prefix = os.path.join("exports", f"run_{run_id_short}")
+
         # Run Simulation via Runner
         # output_stl is strictly 'corkscrew_fluid.stl' for OpenFOAM compatibility
-        metrics, png_paths = run_simulation(
+        metrics, png_paths, solid_stl_path, fluid_stl_path = run_simulation(
             scad,
             foam,
             current_params,
@@ -189,7 +199,8 @@ def main():
             dry_run=args.dry_run,
             skip_cfd=args.skip_cfd,
             iteration=i,
-            reuse_mesh=args.reuse_mesh
+            reuse_mesh=args.reuse_mesh,
+            output_prefix=output_prefix
         )
 
         print(f"Result metrics: {metrics}")
@@ -207,31 +218,20 @@ def main():
             elif metrics["error"] == "geometry_generation_failed":
                 print("Geometry generation failed.")
 
-        # Handle Artifact Archiving (STL)
-        unique_stl_path = None
-        source_stl = os.path.join(args.case_dir, "constant", "triSurface", args.output_stl)
-        if os.path.exists(source_stl):
-            run_id_short = hashlib.md5(f"{i}_{time.time()}".encode()).hexdigest()[:8]
-            unique_name = f"corkscrew_{run_id_short}.stl"
-            unique_stl_path = os.path.join(artifacts_dir, unique_name)
-            try:
-                shutil.copy(source_stl, unique_stl_path)
-            except Exception as e:
-                print(f"Warning: Failed to archive STL: {e}")
-                unique_stl_path = None
-
         # Save Results
         run_data = {
-            "id": hashlib.md5(f"{i}_{time.time()}".encode()).hexdigest(), # Unique ID
+            "id": run_id_hash, # Unique ID
             "status": "completed",
             "git_commit": git_commit,
             "agent_id": "optimizer-script",
             "iteration": i,
-            "timestamp": time.time(),
+            "timestamp": run_timestamp,
             "parameters": current_params.copy(),
             "metrics": metrics,
             "images": png_paths,
-            "artifact_stl_path": unique_stl_path
+            "solid_stl_path": solid_stl_path,
+            "fluid_stl_path": fluid_stl_path,
+            "artifact_stl_path": fluid_stl_path # Backward compatibility / Alias
         }
         store.append_result(run_data)
 
@@ -241,8 +241,11 @@ def main():
 
         # Cleanup Artifacts (Keep Top 10)
         # We do this every run to save space
-        top_runs = store.get_top_runs(10)
-        store.clean_artifacts(top_runs)
+        if not args.no_cleanup:
+            top_runs = store.get_top_runs(10)
+            store.clean_artifacts(top_runs)
+        else:
+            print("Cleanup disabled (--no-cleanup). Keeping all artifacts.")
 
         i += 1
 
