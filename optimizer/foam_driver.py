@@ -669,7 +669,7 @@ boundaryField
     def _update_controlDict_for_particles(self, start_time_val):
         """
         Updates controlDict for particle tracking:
-        - startFrom latestTime (or specific time)
+        - startFrom startTime (we reset time to 0 usually)
         - endTime = start + duration
         - deltaT = small
         """
@@ -684,11 +684,11 @@ boundaryField
         if "application" in content:
             content = re.sub(r"application\s+.*?;", "application icoUncoupledKinematicParcelFoam;", content)
 
-        # Update startFrom
+        # Update startFrom - FORCE startTime mode to ensure injection happens at t=0
         if "startFrom" in content:
-            content = re.sub(r"startFrom\s+.*?;", "startFrom latestTime;", content)
+            content = re.sub(r"startFrom\s+.*?;", "startFrom startTime;", content)
 
-        # Update startTime (optional, but good practice)
+        # Update startTime
         if "startTime" in content:
             content = re.sub(r"startTime\s+.*?;", f"startTime {start_time_val};", content)
 
@@ -756,11 +756,25 @@ boundaryField
         if latest_time == "0" and len(dirs) > 1:
             print("Warning: Only found time 0. Solver might have failed.")
 
-        # Generate fields
-        self._generate_particle_tracking_fields(latest_time)
+        # Copy converged fields (U, p, phi) to 0 directory to reset time for tracking
+        # This ensures patchInjection (SOI=0) works correctly on the steady field.
+        zero_dir = os.path.join(self.case_dir, "0")
+        latest_dir = os.path.join(self.case_dir, str(latest_time))
 
-        # Update controlDict to run from latestTime with small deltaT
-        self._update_controlDict_for_particles(latest_time)
+        print(f"Initializing particle tracking: Copying fields from {latest_time} to 0...")
+        for field in ["U", "p", "phi"]:
+            src = os.path.join(latest_dir, field)
+            dst = os.path.join(zero_dir, field)
+            if os.path.exists(src):
+                shutil.copy2(src, dst)
+            elif field == "phi":
+                 print(f"Warning: Field 'phi' not found in {latest_time}. Particle tracking might fail if required.")
+
+        # Generate rho and mu in 0 directory
+        self._generate_particle_tracking_fields("0")
+
+        # Update controlDict to run from 0
+        self._update_controlDict_for_particles("0")
 
         return self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking")
 
