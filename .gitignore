@@ -24,3 +24,13 @@ corkscrewFilter/[1-9]*
 corkscrewFilter/[0.1-0.9]*
 # Ignore Mintty terminal screenshots
 mintty*.png
+
+# Ignore VTK visualization files
+corkscrewFilter/VTK/
+
+# Ignore generated system dictionaries
+corkscrewFilter/system/createPatchDict
+corkscrewFilter/system/topoSetDict
+
+# Ignore generated particle tracking configuration
+corkscrewFilter/constant/kinematicCloudProperties
