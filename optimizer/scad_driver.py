@@ -80,6 +80,10 @@ class ScadDriver:
                  # Disable visibility cut for CFD volume to save processing time
                  run_params["CUT_FOR_VISIBILITY"] = "false"
 
+             # Disable visual tube generation to prevent coincident faces on fluid boundary
+             if "SHOW_TUBE" not in run_params:
+                 run_params["SHOW_TUBE"] = "false"
+
         # Limit resolution to prevent OOM/Timeouts if not specified
         if "high_res_fn" not in run_params:
              run_params["high_res_fn"] = 100
