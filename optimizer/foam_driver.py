@@ -671,7 +671,7 @@ patches
             parcelsPerSecond 200; // Total ~1000/s across 5 bins
             duration        1;
             SOI             0;
-            noi             1;
+            nParticle       1;
             massFlowRate    2e-6; // Approximate
             flowRateProfile constant 1;
             U0              (0 0 5);
