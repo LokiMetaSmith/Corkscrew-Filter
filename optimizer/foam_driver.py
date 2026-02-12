@@ -20,7 +20,31 @@ class FoamDriver:
         self.use_container = False
         self.container_engine = container_engine
         self.num_processors = num_processors
+
+        # Attempt to recover from previous crashes (if any)
+        self._recover_from_crash()
+
         self._check_execution_environment()
+
+    def _recover_from_crash(self):
+        """
+        Checks for .bak files indicating a previous crash and restores them.
+        """
+        files = ["system/controlDict", "system/fvSchemes", "constant/kinematicCloudProperties"]
+        restored = []
+        for f in files:
+            src = os.path.join(self.case_dir, f)
+            bak = src + ".bak"
+            if os.path.exists(bak):
+                try:
+                    shutil.copy2(bak, src)
+                    os.remove(bak)
+                    restored.append(f)
+                except Exception as e:
+                    print(f"Warning: Failed to recover {f} from backup: {e}")
+
+        if restored:
+            print(f"Recovered from previous crash. Restored: {', '.join(restored)}")
 
     def _is_tool_usable(self, tool):
         """
@@ -865,7 +889,7 @@ cloudFunctions
         else:
             return self.run_command(["simpleFoam"], log_file=log_file, description="Solving CFD")
 
-    def _create_constant_field(self, time_dir, field_name, value, dimensions, class_type="volScalarField"):
+    def _create_constant_field(self, time_dir, field_name, value, dimensions, class_type="volScalarField", boundary_type="fixedValue"):
         """
         Creates a uniform field file in the specified time directory.
         Used to create 'rho' and 'mu' for particle tracking.
@@ -895,7 +919,7 @@ boundaryField
 {{
     ".*"
     {{
-        type            calculated;
+        type            {boundary_type};
         value           uniform {value};
     }}
 }}
@@ -909,9 +933,10 @@ boundaryField
         with open(file_path, 'w') as f:
             f.write(header)
 
-    def _generate_particle_tracking_fields(self, time_dir):
+    def _generate_particle_tracking_fields(self, time_dir, fallback_dirs=None):
         """
         Generates missing fields (rho, mu) required for kinematicCloud.
+        Optionally generates them in fallback_dirs (list of time dirs) as well.
         """
         # 1. Get properties from transportProperties if available, else defaults
         rho_val = 1.2
@@ -936,19 +961,18 @@ boundaryField
 
         mu_val = rho_val * nu_val
 
-        print(f"Generating particle tracking fields at time {time_dir}: rho={rho_val}, mu={mu_val:.3e}")
+        target_dirs = [str(time_dir)]
+        if fallback_dirs:
+            target_dirs.extend([str(d) for d in fallback_dirs])
 
-        # 2. Create rho (Density) [1 -3 0 0 0 0 0]
-        self._create_constant_field(time_dir, "rho", rho_val, "[1 -3 0 0 0 0 0]")
+        print(f"Generating particle tracking fields (rho={rho_val}, mu={mu_val:.3e}) in: {', '.join(target_dirs)}")
 
-        # 3. Create mu (Dynamic Viscosity) [1 -1 -1 0 0 0 0]
-        self._create_constant_field(time_dir, "mu", mu_val, "[1 -1 -1 0 0 0 0]")
+        for t_dir in target_dirs:
+            # 2. Create rho (Density) [1 -3 0 0 0 0 0]
+            self._create_constant_field(t_dir, "rho", rho_val, "[1 -3 0 0 0 0 0]", boundary_type="fixedValue")
 
-        # 4. Create U (Velocity) if missing (unlikely, but ensures existence)
-        # Actually U should be there from the solver.
-
-        # 5. Create phi (Flux) if missing?
-        # simpleFoam creates phi.
+            # 3. Create mu (Dynamic Viscosity) [1 -1 -1 0 0 0 0]
+            self._create_constant_field(t_dir, "mu", mu_val, "[1 -1 -1 0 0 0 0]", boundary_type="fixedValue")
 
     @contextlib.contextmanager
     def _backup_restore_config(self):
@@ -964,14 +988,24 @@ boundaryField
                 src = os.path.join(self.case_dir, f)
                 if os.path.exists(src):
                     dst = src + ".bak"
-                    shutil.copy2(src, dst)
-                    backups[src] = dst
+                    try:
+                        shutil.copy2(src, dst)
+                        backups[src] = dst
+                    except Exception as e:
+                        print(f"Warning: Failed to backup {f}: {e}")
             yield
         finally:
             # Restore
             for src, dst in backups.items():
                 if os.path.exists(dst):
-                    shutil.move(dst, src)
+                    try:
+                        # Use copy + remove to better handle Windows file locking
+                        if os.path.exists(src):
+                            os.remove(src) # Try to remove original first
+                        shutil.copy2(dst, src)
+                        os.remove(dst)
+                    except Exception as e:
+                         print(f"Error restoring {src}: {e}. You may need to manually recover from {dst}.")
 
     def _switch_fvSchemes_to_transient(self):
         """
@@ -1015,8 +1049,8 @@ boundaryField
             elif field == "phi":
                  print("Warning: 'phi' field missing in source time. Solver might fail.")
 
-        # 3. Generate rho and mu
-        self._generate_particle_tracking_fields("0")
+        # 3. Generate rho and mu (in both 0 and source_time for robustness)
+        self._generate_particle_tracking_fields("0", fallback_dirs=[source_time])
 
     def _update_controlDict_for_particles(self):
         """
@@ -1061,8 +1095,10 @@ boundaryField
             content = re.sub(r"writeInterval\s+.*?;", "writeInterval 100;", content) # Write every 0.1s
 
         # Disable function objects
-        if "functions" in content:
-            content = content.replace("functions", "functions_disabled")
+        # Robustly replace only if it looks like a block, and not already disabled
+        if "functions" in content and "functions_disabled" not in content:
+             # Look for "functions" at start of line or after newline
+             content = re.sub(r"(^|\n)functions(\s*\{)", r"\1functions_disabled\2", content)
 
         with open(control_dict, 'w') as f:
             f.write(content)
@@ -1089,6 +1125,12 @@ boundaryField
 
             # 1. Generate Cloud Config
             self._generate_kinematicCloudProperties(bin_config)
+
+            # Debug: print generated cloud config
+            c_path = os.path.join(self.case_dir, "constant", "kinematicCloudProperties")
+            if os.path.exists(c_path):
+                 with open(c_path, 'r') as f:
+                     print(f"--- Generated kinematicCloudProperties ---\n{f.read()}\n----------------------------------------")
 
             # 2. Reset Time & Prepare Fields
             self._prepare_transient_run(latest_time)
