@@ -140,6 +140,42 @@ class FoamDriver:
 
         return container_cmd
 
+    def run_command(self, cmd, log_file=None, description="Processing", ignore_error=False):
+        """
+        Executes a command, optionally wrapping it in a container.
+        """
+        if self.use_container:
+            # When using container, we need to adjust the command
+            # The _get_container_command method expects the cmd list and cwd
+            # We use self.case_dir as the cwd for the command inside the container
+            full_cmd = self._get_container_command(cmd, self.case_dir)
+            cwd = None  # Run container tool from wherever, it handles mounting
+        else:
+            full_cmd = cmd
+            cwd = self.case_dir
+
+        target_log = log_file if log_file else self.log_file
+
+        try:
+            run_command_with_spinner(
+                full_cmd,
+                target_log,
+                cwd=cwd,
+                description=description
+            )
+            return True
+
+        except subprocess.CalledProcessError as e:
+            if not ignore_error:
+                print(f"\nError executing {' '.join(cmd)}: {e}")
+                return False
+            return False
+        except Exception as e:
+            if not ignore_error:
+                print(f"\nUnexpected error executing {' '.join(cmd)}: {e}")
+                return False
+            return False
+
     def prepare_case(self, keep_mesh=False):
         """
         Prepares the case directory.
