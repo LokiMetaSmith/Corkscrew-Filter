@@ -50,6 +50,10 @@ constantVolume      false;
 // Moon Dust Properties (Basaltic Regolith)
 rho0            3100; // kg/m^3 (approx. 3.1 g/cm^3)
 
+// Young's Modulus: ~70 GPa (Basalt)
+// Poisson's Ratio: 0.25 (Basalt)
+// Restitution Coefficient: ~0.8-0.9
+
 subModels
 {
     particleForces
