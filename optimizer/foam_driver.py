@@ -255,6 +255,10 @@ class FoamDriver:
                 shutil.rmtree(zero)
             shutil.copytree(zero_orig, zero)
 
+        # Setup Physics (Turbulence)
+        self._generate_turbulenceProperties()
+        self._generate_omega_field() # Required for kOmegaSST
+
         # Add function objects to controlDict if not present
         self._inject_function_objects()
 
@@ -414,15 +418,34 @@ functions
         with open(bm_path, 'w') as f:
             f.write(content)
 
-    def update_snappyHexMesh_location(self, bounds, custom_location=None):
+    def update_snappyHexMesh_location(self, bounds, custom_location=None, helix_path_radius_mm=None):
         """
         Updates locationInMesh in system/snappyHexMeshDict to be inside the fluid domain.
         If custom_location is provided (tuple/list of x,y,z), it uses that.
-        Otherwise, assumes fluid is an annulus/void inside a tube.
+        Otherwise, if helix_path_radius_mm is provided, uses analytic center of channel.
+        Otherwise, falls back to heuristic based on bounds.
         """
         if custom_location:
             location = f"({custom_location[0]:.3f} {custom_location[1]:.3f} {custom_location[2]:.3f})"
+        elif helix_path_radius_mm is not None:
+            # Analytic fallback: Use helix path radius (scaled to m)
+            # The helix center at Z=0 is at (R, 0, 0) relative to axis?
+            # Actually helix path is helical. At Z=0 (if it starts there), angle might be 0.
+            # Assuming helix starts at angle 0, X=R.
+            try:
+                r_m = float(helix_path_radius_mm) * 0.001
+                # Use a slightly offset point to be safe inside the channel, but R should be center.
+                # Just use R.
+                location = f"({r_m:.4f} 0 0)"
+                print(f"Using analytic locationInMesh: {location}")
+            except (ValueError, TypeError):
+                # Fallback to bounds if conversion fails
+                location = None
         else:
+            location = None
+
+        if location is None:
+            # Legacy fallback
             if bounds is None or bounds[0] is None:
                 return
 
@@ -436,8 +459,8 @@ functions
             x_target = max_pt[0] * 0.8
 
             # Ensure it's not too small (e.g. if bounds are tiny)
-            if x_target < 2.0:
-                x_target = 5.0
+            if x_target < 0.002: # 2mm
+                 x_target = 0.005 # 5mm
 
             location = f"({x_target:.3f} 0 0)"
 
@@ -454,6 +477,101 @@ functions
             content = pattern.sub(f"locationInMesh {location};", content)
 
         with open(shm_path, 'w') as f:
+            f.write(content)
+
+    def _generate_turbulenceProperties(self):
+        """
+        Generates constant/turbulenceProperties with kOmegaSST model.
+        """
+        content = """/*--------------------------------*- C++ -*----------------------------------*\\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2406                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      turbulenceProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+simulationType  RAS;
+
+RAS
+{
+    model           kOmegaSST;
+
+    turbulence      on;
+
+    printCoeffs     on;
+}
+
+// ************************************************************************* //
+"""
+        with open(os.path.join(self.case_dir, "constant", "turbulenceProperties"), 'w') as f:
+            f.write(content)
+
+    def _generate_omega_field(self):
+        """
+        Generates 0/omega field required for kOmegaSST.
+        """
+        # Omega ~ Epsilon / (k * Cmu) ~ 14.8 / (0.09375 * 0.09) ~ 1750?
+        # Standard wall function setup.
+        content = """/*--------------------------------*- C++ -*----------------------------------*\\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2406                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      omega;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 0 -1 0 0 0 0];
+
+internalField   uniform 150;
+
+boundaryField
+{
+    inlet
+    {
+        type            turbulentMixingLengthFrequencyInlet;
+        mixingLength    0.007;
+        value           uniform 150;
+    }
+
+    outlet
+    {
+        type            zeroGradient;
+    }
+
+    walls
+    {
+        type            omegaWallFunction;
+        value           uniform 150;
+    }
+
+    corkscrew
+    {
+        type            omegaWallFunction;
+        value           uniform 150;
+    }
+}
+
+// ************************************************************************* //
+"""
+        with open(os.path.join(self.case_dir, "0", "omega"), 'w') as f:
             f.write(content)
 
     def _check_boundary_patches(self):
@@ -694,7 +812,7 @@ patches
             type            patchInjection;
             patch           inlet;
             parcelBasisType number;
-            parcelsPerSecond 200; // Total ~1000/s across 5 bins
+            parcelsPerSecond 5000; // Total ~25000/s across 5 bins
             duration        1;
             SOI             0;
             nParticle       1;
@@ -862,11 +980,34 @@ cloudFunctions
         with open(os.path.join(self.case_dir, "constant", "kinematicCloudProperties"), 'w') as f:
             f.write(content)
 
+    def _scale_stl(self, stl_name="corkscrew_fluid.stl", scale_factor=0.001):
+        """
+        Scales the STL file in constant/triSurface using surfaceMeshConvert.
+        """
+        stl_path = os.path.join("constant", "triSurface", stl_name)
+        # We overwrite the file or use a temp? surfaceMeshConvert input output.
+        # We will overwrite.
+
+        # Note: surfaceMeshConvert is an OpenFOAM tool.
+        # Command: surfaceMeshConvert constant/triSurface/foo.stl constant/triSurface/foo.stl -scale 0.001
+
+        # However, inside container, paths are relative to run dir.
+        # If we use run_command, it handles container mounting.
+        # Arguments to surfaceMeshConvert are file paths.
+
+        cmd = ["surfaceMeshConvert", stl_path, stl_path, "-scale", str(scale_factor)]
+        return self.run_command(cmd, description="Scaling STL (mm -> m)")
+
     def run_meshing(self, log_file=None, bin_config=None):
         """
         Runs the meshing pipeline.
         bin_config: {'num_bins': int, 'total_length': float (mm)}
         """
+        # Step 0: Scale STL (Fix for "Scale of the Giants")
+        if not self._scale_stl():
+             print("Error: Failed to scale STL.")
+             return False
+
         # Generate patch creation configs
         self._generate_topoSetDict(bin_config)
         self._generate_createPatchDict(bin_config)

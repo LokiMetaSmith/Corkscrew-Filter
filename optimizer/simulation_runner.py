@@ -59,14 +59,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         if not reuse_mesh:
             with Timer("Geometry Generation"):
                 success = scad_driver.generate_stl(params, stl_path, log_file=geom_log)
-
-                # Scale STL to meters immediately after generation
-                if success:
-                    SCALE_FACTOR = 0.001
-                    print(f"Scaling mesh by factor {SCALE_FACTOR} (mm -> m)...")
-                    if not scad_driver.scale_mesh(stl_path, SCALE_FACTOR):
-                        print("Failed to scale mesh. Aborting.")
-                        success = False
+                # Note: STL is generated in mm. Scaling to meters is now handled by FoamDriver using surfaceMeshConvert.
 
             if not success:
                 print(f"Geometry generation failed. Check {geom_log} for details.")
@@ -86,12 +79,16 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
             return {"error": "environment_missing_tools", "details": "Neither OpenFOAM nor Docker found"}, [], None, None, None
 
         if not reuse_mesh:
+            # STL is in mm. We must scale bounds to meters for OpenFOAM config.
             bounds = scad_driver.get_bounds(stl_path)
             if bounds[0] is None:
                 print("Failed to get bounds. Using default.")
             else:
                 SCALE_FACTOR = 0.001 # mm to meters
                 REFINEMENT_LEVEL = 1 # Match level set in snappyHexMeshDict
+
+                # Scale bounds to meters
+                bounds_arr = [np.array(b) * SCALE_FACTOR for b in bounds]
 
                 # Calculate dynamic target cell size based on smallest feature
                 target_cell_size = 1.5 * SCALE_FACTOR # Default scaled
@@ -114,7 +111,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                 # Estimate cell count to prevent OOM
                 BLOCK_MARGIN = np.array([1.2, 1.2, 0.95])
                 # Ensure bounds are numpy arrays for subtraction
-                bounds_arr = [np.array(b) for b in bounds]
+                # bounds_arr is already scaled to meters
                 size = bounds_arr[1] - bounds_arr[0]
 
                 block_size = size * BLOCK_MARGIN
@@ -166,14 +163,16 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                     target_cell_size = new_size
 
                 print(f"Updating blockMesh with target_cell_size={target_cell_size:.3f}m")
-                foam_driver.update_blockMesh(bounds, margin=BLOCK_MARGIN, target_cell_size=target_cell_size)
+                # Pass scaled bounds to foam_driver
+                foam_driver.update_blockMesh(bounds_arr, margin=BLOCK_MARGIN, target_cell_size=target_cell_size)
 
                 # 1. Try to find an internal point using robust ray tracing (trimesh)
-                # The bounds and mesh are already scaled to meters, so this returns meters.
+                # STL is in mm, so ray tracing returns mm. We must scale to meters.
                 custom_location = scad_driver.get_internal_point(stl_path)
 
                 if custom_location:
-                    print(f"Using ray-traced internal point: {custom_location}")
+                    custom_location = [c * SCALE_FACTOR for c in custom_location]
+                    print(f"Using ray-traced internal point (scaled): {custom_location}")
                 else:
                     print("Warning: Could not find internal point using ray tracing. Attempting fallback calculation.")
 
@@ -209,7 +208,9 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                             print(f"Warning: Failed to calculate custom location: {e}")
 
                 # Update location (if custom_location is None, foam_driver defaults to bounds-based legacy logic)
-                foam_driver.update_snappyHexMesh_location(bounds, custom_location=custom_location)
+                # Pass helix_path_radius_mm for foam_driver's robust fallback
+                helix_path_radius_mm = params.get("helix_path_radius_mm")
+                foam_driver.update_snappyHexMesh_location(bounds_arr, custom_location=custom_location, helix_path_radius_mm=helix_path_radius_mm)
         else:
             print("[Reuse Mesh] Skipping BlockMesh update.")
     elif skip_cfd:
