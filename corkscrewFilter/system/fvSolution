@@ -19,10 +19,10 @@ solvers
 {
     p
     {
-        solver          GAMG;
+        solver          PCG;
+        preconditioner  DIC;
         tolerance       1e-6;
-        relTol          0.1;
-        smoother        GaussSeidel;
+        relTol          0.01;
     }
 
     "(U|k|epsilon|omega)"
