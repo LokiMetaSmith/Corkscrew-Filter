@@ -234,7 +234,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         if not reuse_mesh:
             with Timer("Meshing"):
                 # Pass bin config to create bin patches
-                success = foam_driver.run_meshing(log_file=mesh_log, bin_config=bin_config)
+                success = foam_driver.run_meshing(log_file=mesh_log, bin_config=bin_config, stl_filename=output_stl_name)
         else:
             print("[Reuse Mesh] Skipping meshing pipeline.")
             success = True

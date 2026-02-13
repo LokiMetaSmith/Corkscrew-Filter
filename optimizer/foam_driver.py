@@ -980,32 +980,29 @@ cloudFunctions
         with open(os.path.join(self.case_dir, "constant", "kinematicCloudProperties"), 'w') as f:
             f.write(content)
 
-    def _scale_stl(self, stl_name="corkscrew_fluid.stl", scale_factor=0.001):
+    def scale_mesh(self, stl_filename="corkscrew_fluid.stl", scale_factor=0.001):
         """
-        Scales the STL file in constant/triSurface using surfaceMeshConvert.
+        Scales the STL mesh using surfaceMeshConvert.
+        Crucially converts Windows paths to Linux paths for the container.
         """
-        stl_path = os.path.join("constant", "triSurface", stl_name)
-        # We overwrite the file or use a temp? surfaceMeshConvert input output.
-        # We will overwrite.
+        # Construct the relative path
+        # FORCE forward slashes for Linux container compatibility
+        stl_rel_path = f"constant/triSurface/{stl_filename}"
 
-        # Note: surfaceMeshConvert is an OpenFOAM tool.
-        # Command: surfaceMeshConvert constant/triSurface/foo.stl constant/triSurface/foo.stl -scale 0.001
+        # Command: surfaceMeshConvert input output -scale factor
+        cmd = ["surfaceMeshConvert", stl_rel_path, stl_rel_path, "-scale", str(scale_factor)]
 
-        # However, inside container, paths are relative to run dir.
-        # If we use run_command, it handles container mounting.
-        # Arguments to surfaceMeshConvert are file paths.
+        return self.run_command(cmd, description="Scaling Mesh (mm -> m)")
 
-        cmd = ["surfaceMeshConvert", stl_path, stl_path, "-scale", str(scale_factor)]
-        return self.run_command(cmd, description="Scaling STL (mm -> m)")
-
-    def run_meshing(self, log_file=None, bin_config=None):
+    def run_meshing(self, log_file=None, bin_config=None, stl_filename="corkscrew_fluid.stl"):
         """
         Runs the meshing pipeline.
         bin_config: {'num_bins': int, 'total_length': float (mm)}
         """
         # Step 0: Scale STL (Fix for "Scale of the Giants")
-        if not self._scale_stl():
-             print("Error: Failed to scale STL.")
+        # We assume the STL is already in constant/triSurface/
+        if not self.scale_mesh(stl_filename, scale_factor=0.001):
+             print("Error: Failed to scale mesh.")
              return False
 
         # Generate patch creation configs
