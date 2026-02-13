@@ -6,7 +6,7 @@ import shutil
 from utils import Timer, get_container_memory_gb
 from parameter_validator import validate_parameters
 
-def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False, skip_cfd=False, iteration=0, reuse_mesh=False, output_prefix=None):
+def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False, skip_cfd=False, iteration=0, reuse_mesh=False, output_prefix=None, verbose=False):
     """
     Executes the full simulation pipeline:
     1. Generate Fluid Geometry (STL)
@@ -157,8 +157,8 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                     min_required_cells = block_volume / (min_res_cell_size ** 3)
 
                     if min_required_cells > MAX_CELLS:
-                        print(f"Warning: Minimum resolution requires ~{min_required_cells:.0f} cells, which exceeds memory limit {MAX_CELLS}. Ignoring memory limit to preserve geometry.")
-                        MAX_CELLS = int(min_required_cells)
+                        print(f"WARNING: Geometry requires ~{min_required_cells:.0f} cells for accuracy, but memory limit is {MAX_CELLS}. Resolution will be reduced to fit available RAM. Results may be inaccurate.")
+                        # Do not override MAX_CELLS. Let the subsequent logic resize the mesh.
 
                 if estimated_cells > MAX_CELLS:
                     new_size = (block_volume / MAX_CELLS) ** (1/3)
