@@ -42,6 +42,7 @@ def main():
     parser.add_argument("--no-llm", action="store_true", help="Explicitly disable LLM and use random/fallback strategy (also suppresses prompts in startup script)")
     parser.add_argument("--batch-size", type=int, default=5, help="Number of parameter sets to generate per LLM call")
     parser.add_argument("--no-cleanup", action="store_true", help="Disable cleanup of artifacts (STLs, images) for non-top runs")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output (e.g. error logs)")
     args = parser.parse_args()
 
     # Parse iterations argument
@@ -61,7 +62,7 @@ def main():
 
     # Initialize components
     scad = ScadDriver(args.scad_file)
-    foam = FoamDriver(args.case_dir, container_engine=args.container_engine, num_processors=args.cpus)
+    foam = FoamDriver(args.case_dir, container_engine=args.container_engine, num_processors=args.cpus, verbose=args.verbose)
 
     # Handle --no-llm logic: explicitly disable by unsetting env var
     if args.no_llm and "GEMINI_API_KEY" in os.environ:
@@ -200,7 +201,8 @@ def main():
             skip_cfd=args.skip_cfd,
             iteration=i,
             reuse_mesh=args.reuse_mesh,
-            output_prefix=output_prefix
+            output_prefix=output_prefix,
+            verbose=args.verbose
         )
 
         print(f"Result metrics: {metrics}")

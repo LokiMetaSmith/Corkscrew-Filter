@@ -10,7 +10,7 @@ import numpy as np
 from utils import run_command_with_spinner
 
 class FoamDriver:
-    def __init__(self, case_dir, template_dir=None, container_engine="auto", num_processors=1):
+    def __init__(self, case_dir, template_dir=None, container_engine="auto", num_processors=1, verbose=False):
         self.case_dir = os.path.abspath(case_dir)
         self.template_dir = os.path.abspath(template_dir) if template_dir else self.case_dir
         self.log_file = os.path.join(self.case_dir, "run_foam.log")
@@ -20,6 +20,7 @@ class FoamDriver:
         self.use_container = False
         self.container_engine = container_engine
         self.num_processors = num_processors
+        self.verbose = verbose
 
         # Attempt to recover from previous crashes (if any)
         self._recover_from_crash()
@@ -192,13 +193,38 @@ class FoamDriver:
         except subprocess.CalledProcessError as e:
             if not ignore_error:
                 print(f"\nError executing {' '.join(cmd)}: {e}")
+                if self.verbose:
+                    self._print_log_tail(target_log)
                 return False
             return False
         except Exception as e:
             if not ignore_error:
                 print(f"\nUnexpected error executing {' '.join(cmd)}: {e}")
+                if self.verbose:
+                    self._print_log_tail(target_log)
                 return False
             return False
+
+    def _print_log_tail(self, log_file, lines=30):
+        """Prints the last N lines of the log file to stdout."""
+        if not log_file or not os.path.exists(log_file):
+            print(f"(Log file {log_file} not found)")
+            return
+
+        print(f"\n--- Error Log Tail ({os.path.basename(log_file)}) ---")
+        try:
+            with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
+                # Efficiently read last N lines?
+                # For small logs, reading all lines is fine.
+                # If logs are huge, we might want to seek.
+                # Assuming reasonable log size for this project.
+                all_lines = f.readlines()
+                tail = all_lines[-lines:] if len(all_lines) > lines else all_lines
+                for line in tail:
+                    print(line.rstrip())
+        except Exception as e:
+            print(f"Error reading log: {e}")
+        print("--------------------------------------------------\n")
 
     def prepare_case(self, keep_mesh=False):
         """
