@@ -1020,11 +1020,7 @@ cloudFunctions
         Runs the meshing pipeline.
         bin_config: {'num_bins': int, 'total_length': float (mm)}
         """
-        # Step 0: Scale STL (Fix for "Scale of the Giants")
-        # We assume the STL is already in constant/triSurface/
-        if not self.scale_mesh(stl_filename, scale_factor=0.001, log_file=log_file):
-             print("Error: Failed to scale mesh.")
-             return False
+        # STL is assumed to be already scaled to meters by simulation_runner.
 
         # Generate patch creation configs
         self._generate_topoSetDict(bin_config)
