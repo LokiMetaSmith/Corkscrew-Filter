@@ -55,13 +55,20 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
     stl_path = os.path.join(foam_driver.case_dir, "constant", "triSurface", output_stl_name)
     os.makedirs(os.path.dirname(stl_path), exist_ok=True)
 
+    SCALE_FACTOR = 0.001 # mm to meters
+
     if not dry_run:
         if not reuse_mesh:
             with Timer("Geometry Generation"):
                 success = scad_driver.generate_stl(params, stl_path, log_file=geom_log)
-                # Note: STL is generated in mm. Scaling to meters is now handled by FoamDriver using surfaceMeshConvert.
 
-            if not success:
+            if success:
+                # Scale STL to meters immediately to avoid container issues
+                print(f"Scaling STL to meters...")
+                if not scad_driver.scale_mesh(stl_path, SCALE_FACTOR):
+                    print("Failed to scale mesh.")
+                    return {"error": "mesh_scaling_failed"}, [], None, None, None
+            else:
                 print(f"Geometry generation failed. Check {geom_log} for details.")
                 return {"error": "geometry_generation_failed"}, [], None, None, None
         else:
@@ -79,16 +86,15 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
             return {"error": "environment_missing_tools", "details": "Neither OpenFOAM nor Docker found"}, [], None, None, None
 
         if not reuse_mesh:
-            # STL is in mm. We must scale bounds to meters for OpenFOAM config.
+            # STL is now in METERS (scaled above or from previous run).
             bounds = scad_driver.get_bounds(stl_path)
             if bounds[0] is None:
                 print("Failed to get bounds. Using default.")
             else:
-                SCALE_FACTOR = 0.001 # mm to meters
                 REFINEMENT_LEVEL = 1 # Match level set in snappyHexMeshDict
 
-                # Scale bounds to meters
-                bounds_arr = [np.array(b) * SCALE_FACTOR for b in bounds]
+                # Bounds are already in meters
+                bounds_arr = bounds
 
                 # Calculate dynamic target cell size based on smallest feature
                 target_cell_size = 1.5 * SCALE_FACTOR # Default scaled
@@ -167,12 +173,11 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                 foam_driver.update_blockMesh(bounds_arr, margin=BLOCK_MARGIN, target_cell_size=target_cell_size)
 
                 # 1. Try to find an internal point using robust ray tracing (trimesh)
-                # STL is in mm, so ray tracing returns mm. We must scale to meters.
+                # STL is in meters, so ray tracing returns meters.
                 custom_location = scad_driver.get_internal_point(stl_path)
 
                 if custom_location:
-                    custom_location = [c * SCALE_FACTOR for c in custom_location]
-                    print(f"Using ray-traced internal point (scaled): {custom_location}")
+                    print(f"Using ray-traced internal point: {custom_location}")
                 else:
                     print("Warning: Could not find internal point using ray tracing. Attempting fallback calculation.")
 
