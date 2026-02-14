@@ -980,7 +980,7 @@ cloudFunctions
         with open(os.path.join(self.case_dir, "constant", "kinematicCloudProperties"), 'w') as f:
             f.write(content)
 
-    def scale_mesh(self, stl_filename="corkscrew_fluid.stl", scale_factor=0.001):
+    def scale_mesh(self, stl_filename="corkscrew_fluid.stl", scale_factor=0.001, log_file=None):
         """
         Scales the STL mesh using surfaceMeshConvert.
         Crucially converts Windows paths to Linux paths for the container.
@@ -989,10 +989,31 @@ cloudFunctions
         # FORCE forward slashes for Linux container compatibility
         stl_rel_path = f"constant/triSurface/{stl_filename}"
 
-        # Command: surfaceMeshConvert input output -scale factor
-        cmd = ["surfaceMeshConvert", stl_rel_path, stl_rel_path, "-scale", str(scale_factor)]
+        # Use a temporary output file to avoid in-place overwrite issues on mounted volumes
+        temp_filename = f"temp_{stl_filename}"
+        temp_rel_path = f"constant/triSurface/{temp_filename}"
 
-        return self.run_command(cmd, description="Scaling Mesh (mm -> m)")
+        # Command: surfaceMeshConvert input output -scale factor
+        cmd = ["surfaceMeshConvert", stl_rel_path, temp_rel_path, "-scale", str(scale_factor)]
+
+        if not self.run_command(cmd, log_file=log_file, description="Scaling Mesh (mm -> m)"):
+            return False
+
+        # Rename temp file to original (overwrite) on host
+        src = os.path.join(self.case_dir, "constant", "triSurface", temp_filename)
+        dst = os.path.join(self.case_dir, "constant", "triSurface", stl_filename)
+
+        try:
+            if os.path.exists(dst):
+                os.remove(dst)
+            shutil.move(src, dst)
+            return True
+        except Exception as e:
+            print(f"Error renaming scaled mesh: {e}")
+            if log_file:
+                with open(log_file, 'a') as f:
+                    f.write(f"\nError renaming scaled mesh: {e}\n")
+            return False
 
     def run_meshing(self, log_file=None, bin_config=None, stl_filename="corkscrew_fluid.stl"):
         """
@@ -1001,7 +1022,7 @@ cloudFunctions
         """
         # Step 0: Scale STL (Fix for "Scale of the Giants")
         # We assume the STL is already in constant/triSurface/
-        if not self.scale_mesh(stl_filename, scale_factor=0.001):
+        if not self.scale_mesh(stl_filename, scale_factor=0.001, log_file=log_file):
              print("Error: Failed to scale mesh.")
              return False
 
