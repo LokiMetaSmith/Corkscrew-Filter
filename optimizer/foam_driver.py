@@ -256,7 +256,6 @@ class FoamDriver:
             shutil.copytree(zero_orig, zero)
 
         # Setup Physics (Turbulence)
-        self._generate_turbulenceProperties()
         self._generate_omega_field() # Required for kOmegaSST
 
         # Add function objects to controlDict if not present
@@ -400,8 +399,18 @@ functions
         ]
 
         bm_path = os.path.join(self.case_dir, "system", "blockMeshDict")
-        with open(bm_path, 'r') as f:
-            content = f.read()
+        template_path = os.path.join(self.case_dir, "system", "blockMeshDict.template")
+
+        # Use template if available, else use existing blockMeshDict
+        if os.path.exists(template_path):
+            with open(template_path, 'r') as f:
+                content = f.read()
+        elif os.path.exists(bm_path):
+            with open(bm_path, 'r') as f:
+                content = f.read()
+        else:
+            print("Error: blockMeshDict template not found.")
+            return
 
         new_vertices_str = "\n    ".join(vertices)
         pattern = re.compile(r"vertices\s*\((.*?)\);", re.DOTALL)
@@ -477,43 +486,6 @@ functions
             content = pattern.sub(f"locationInMesh {location};", content)
 
         with open(shm_path, 'w') as f:
-            f.write(content)
-
-    def _generate_turbulenceProperties(self):
-        """
-        Generates constant/turbulenceProperties with kOmegaSST model.
-        """
-        content = """/*--------------------------------*- C++ -*----------------------------------*\\
-| =========                 |                                                 |
-| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   O peration     | Version:  v2406                                 |
-|   \\  /    A nd           | Website:  www.openfoam.com                      |
-|    \\/     M anipulation  |                                                 |
-\\*---------------------------------------------------------------------------*/
-FoamFile
-{
-    version     2.0;
-    format      ascii;
-    class       dictionary;
-    location    "constant";
-    object      turbulenceProperties;
-}
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-simulationType  RAS;
-
-RAS
-{
-    model           kOmegaSST;
-
-    turbulence      on;
-
-    printCoeffs     on;
-}
-
-// ************************************************************************* //
-"""
-        with open(os.path.join(self.case_dir, "constant", "turbulenceProperties"), 'w') as f:
             f.write(content)
 
     def _generate_omega_field(self):

@@ -11,7 +11,7 @@ This directory contains the necessary files to run a basic CFD simulation of the
 
 ## Step 2: Configure the Mesh
 
-1.  **Edit `system/blockMeshDict`**: Open this file and adjust the `vertices` to define a bounding box that is slightly larger than your `corkscrew_fluid.stl` model. You can find the dimensions of your STL by opening it in ParaView or another STL viewer.
+1.  **Edit `system/blockMeshDict.template`**: This file is a template for the mesh generation. Open it and adjust the `vertices` to define a bounding box that is slightly larger than your `corkscrew_fluid.stl` model. The `FoamDriver` script (or your manual process) will use this template to generate the final `system/blockMeshDict`.
 2.  **Edit `system/snappyHexMeshDict`**: For advanced users. The default settings provide a basic mesh, but you can edit this file to change mesh refinement levels, boundary layers, and quality controls.
 
 ## Step 3: Run the Simulation
