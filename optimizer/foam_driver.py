@@ -894,14 +894,7 @@ subModels
 
 cloudFunctions
 {{
-    patchPostProcessing1
-    {{
-        type            patchPostProcessing;
-        maxStoredParcels 20;
-        patches         ( {patch_list_str} );
-        writeControl    writeTime;
-        writeInterval   1;
-    }}
+    // patchPostProcessing removed due to incompatibility with OpenFOAM v2406
 }}
 
 // ************************************************************************* //
