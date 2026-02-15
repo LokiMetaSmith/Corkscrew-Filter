@@ -109,15 +109,15 @@ def main():
 
         # 5. Run Simulation
         params = target_job["parameters"]
-        output_stl = f"job_{job_id}.stl" # Use unique STL name to avoid collisions if sharing folder?
-        # Actually foam_driver.case_dir is local, so collision only matters if running parallel on same machine.
-        # But for cleanliness let's use standard name.
+        output_prefix = os.path.join("exports", f"job_{job_id}")
 
         try:
-            metrics, png_paths = run_simulation(
+            # Unpack all 5 return values
+            metrics, png_paths, solid_stl, fluid_stl, vtk_zip = run_simulation(
                 scad, foam, params,
                 output_stl_name="corkscrew_fluid.stl", # Standard name for Foam
-                dry_run=args.dry_run
+                dry_run=args.dry_run,
+                output_prefix=output_prefix
             )
 
             # Check for critical failures in metrics
