@@ -5,17 +5,74 @@ from job_manager import JobManager
 from llm_agent import LLMAgent
 from constraints import CONSTRAINTS
 
+def parse_param_args(param_args):
+    """
+    Parses a list of parameter strings like "key=min:max" or "key=val1,val2" or "key=val".
+    Returns a dictionary suitable for JobManager.generate_jobs_from_region.
+    """
+    regions = {}
+    if not param_args:
+        return regions
+
+    for p in param_args:
+        if "=" not in p:
+            print(f"Warning: Invalid parameter format '{p}'. Expected key=value.")
+            continue
+
+        key, val_str = p.split("=", 1)
+        key = key.strip()
+        val_str = val_str.strip()
+
+        # Try to determine type (float or int)
+        def parse_val(v):
+            try:
+                if "." in v:
+                    return float(v)
+                return int(v)
+            except ValueError:
+                return v
+
+        if ":" in val_str:
+            # Range: min:max
+            min_s, max_s = val_str.split(":", 1)
+            regions[key] = (parse_val(min_s), parse_val(max_s))
+        elif "," in val_str:
+            # Choice: val1,val2,val3
+            choices = [parse_val(x.strip()) for x in val_str.split(",")]
+            regions[key] = choices
+        else:
+            # Fixed value
+            regions[key] = parse_val(val_str)
+
+    return regions
+
 def main():
     parser = argparse.ArgumentParser(description="Generate a campaign of optimization jobs")
     parser.add_argument("--count", type=int, default=5, help="Number of jobs to generate")
+    parser.add_argument("--param", action="append", help="Parameter constraint: 'name=min:max' (range), 'name=val1,val2' (choice), or 'name=val' (fixed). Can be used multiple times.")
     args = parser.parse_args()
 
     store = DataStore()
     manager = JobManager(store)
     agent = LLMAgent()
 
-    print(f"Loading history and generating {args.count} jobs...")
+    print(f"Loading history...")
     history = store.load_history()
+
+    parameter_sets = []
+
+    # Check for explicit parameter regions
+    regions = parse_param_args(args.param)
+
+    if regions:
+        print(f"Generating {args.count} jobs from defined regions: {regions}")
+        # Use JobManager to generate jobs directly
+        job_ids = manager.generate_jobs_from_region(regions, num_samples=args.count)
+        print(f"Created {len(job_ids)} jobs from regions: {job_ids}")
+        return
+
+    # Fallback to LLM Agent if no regions specified
+    print(f"No regions specified. querying LLM Agent for {args.count} suggestions...")
 
     # Check if agent has model
     if not agent.client:
