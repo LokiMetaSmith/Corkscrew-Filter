@@ -32,6 +32,9 @@ corkscrewFilter/VTK/
 corkscrewFilter/system/createPatchDict
 corkscrewFilter/system/topoSetDict
 corkscrewFilter/system/blockMeshDict
+corkscrewFilter/system/snappyHexMeshDict
+corkscrewFilter/system/controlDict
+corkscrewFilter/system/decomposeParDict
 
 # Ignore generated particle tracking configuration
 corkscrewFilter/constant/kinematicCloudProperties

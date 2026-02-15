@@ -256,7 +256,7 @@ class FoamDriver:
             shutil.copytree(zero_orig, zero)
 
         # Setup Physics (Turbulence)
-        self._generate_omega_field() # Required for kOmegaSST
+        # kOmegaSST fields (omega, k, nut, epsilon) are in 0.orig
 
         # Add function objects to controlDict if not present
         self._inject_function_objects()
@@ -296,16 +296,23 @@ method          scotch;
         Assumes 'inlet' and 'outlet' patches exist.
         """
         control_dict = os.path.join(self.case_dir, "system", "controlDict")
-        if not os.path.exists(control_dict):
+        template_dict = os.path.join(self.case_dir, "system", "controlDict.template")
+
+        # Read from template if available (source of truth)
+        if os.path.exists(template_dict):
+            with open(template_dict, 'r') as f:
+                content = f.read()
+        elif os.path.exists(control_dict):
+            with open(control_dict, 'r') as f:
+                content = f.read()
+        else:
             return
 
-        with open(control_dict, 'r') as f:
-            content = f.read()
+        need_write = not os.path.exists(control_dict)
 
-        if "inletPressure" in content:
-            return
-
-        func_obj = """
+        if "inletPressure" not in content:
+            need_write = True
+            func_obj = """
 functions
 {
     inletPressure
@@ -336,16 +343,17 @@ functions
     }
 }
 """
-        # Insert before the last closing brace or append
-        # Naive append might fail if file structure is strict, but usually works if inside main dict.
-        # Better: replace "// *****************" with func_obj + end marker
-        if "// *" in content:
-            content = content.replace("// *********", func_obj + "\n// *********", 1)
-        else:
-            content += func_obj
+            # Insert before the last closing brace or append
+            # Naive append might fail if file structure is strict, but usually works if inside main dict.
+            # Better: replace "// *****************" with func_obj + end marker
+            if "// *" in content:
+                content = content.replace("// *********", func_obj + "\n// *********", 1)
+            else:
+                content += func_obj
 
-        with open(control_dict, 'w') as f:
-            f.write(content)
+        if need_write:
+            with open(control_dict, 'w') as f:
+                f.write(content)
 
     def update_blockMesh(self, bounds, margin=(1.2, 1.2, 0.9), target_cell_size=1.5):
         """
@@ -474,11 +482,18 @@ functions
             location = f"({x_target:.3f} 0 0)"
 
         shm_path = os.path.join(self.case_dir, "system", "snappyHexMeshDict")
-        if not os.path.exists(shm_path):
-            return
+        template_path = os.path.join(self.case_dir, "system", "snappyHexMeshDict.template")
 
-        with open(shm_path, 'r') as f:
-            content = f.read()
+        # Use template if available, else fallback
+        if os.path.exists(template_path):
+            with open(template_path, 'r') as f:
+                content = f.read()
+        elif os.path.exists(shm_path):
+            with open(shm_path, 'r') as f:
+                content = f.read()
+        else:
+            print("Error: snappyHexMeshDict template not found.")
+            return
 
         # Regex to find locationInMesh (x y z);
         pattern = re.compile(r"locationInMesh\s+\(.*\);")
@@ -486,64 +501,6 @@ functions
             content = pattern.sub(f"locationInMesh {location};", content)
 
         with open(shm_path, 'w') as f:
-            f.write(content)
-
-    def _generate_omega_field(self):
-        """
-        Generates 0/omega field required for kOmegaSST.
-        """
-        # Omega ~ Epsilon / (k * Cmu) ~ 14.8 / (0.09375 * 0.09) ~ 1750?
-        # Standard wall function setup.
-        content = """/*--------------------------------*- C++ -*----------------------------------*\\
-| =========                 |                                                 |
-| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   O peration     | Version:  v2406                                 |
-|   \\  /    A nd           | Website:  www.openfoam.com                      |
-|    \\/     M anipulation  |                                                 |
-\\*---------------------------------------------------------------------------*/
-FoamFile
-{
-    version     2.0;
-    format      ascii;
-    class       volScalarField;
-    object      omega;
-}
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-dimensions      [0 0 -1 0 0 0 0];
-
-internalField   uniform 150;
-
-boundaryField
-{
-    inlet
-    {
-        type            turbulentMixingLengthFrequencyInlet;
-        mixingLength    0.007;
-        value           uniform 150;
-    }
-
-    outlet
-    {
-        type            zeroGradient;
-    }
-
-    walls
-    {
-        type            omegaWallFunction;
-        value           uniform 150;
-    }
-
-    corkscrew
-    {
-        type            omegaWallFunction;
-        value           uniform 150;
-    }
-}
-
-// ************************************************************************* //
-"""
-        with open(os.path.join(self.case_dir, "0", "omega"), 'w') as f:
             f.write(content)
 
     def _check_boundary_patches(self):
