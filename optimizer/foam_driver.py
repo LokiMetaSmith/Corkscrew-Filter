@@ -257,7 +257,7 @@ class FoamDriver:
 
         # Setup Physics (Turbulence)
         self._generate_turbulenceProperties()
-        # self._generate_omega_field() # Required for kOmegaSST (Disabled: Using kEpsilon)
+        self._generate_omega_field() # Required for kOmegaSST
 
         # Add function objects to controlDict if not present
         self._inject_function_objects()
@@ -481,7 +481,7 @@ functions
 
     def _generate_turbulenceProperties(self):
         """
-        Generates constant/turbulenceProperties with kEpsilon model.
+        Generates constant/turbulenceProperties with kOmegaSST model.
         """
         content = """/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
@@ -504,7 +504,7 @@ simulationType  RAS;
 
 RAS
 {
-    model           kEpsilon;
+    model           kOmegaSST;
 
     turbulence      on;
 
