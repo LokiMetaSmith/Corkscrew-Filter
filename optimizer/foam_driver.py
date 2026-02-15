@@ -1082,7 +1082,7 @@ boundaryField
         """
         Context manager to backup and restore system configuration files.
         """
-        files = ["system/controlDict", "system/fvSchemes", "constant/kinematicCloudProperties"]
+        files = ["system/controlDict", "system/fvSchemes", "constant/kinematicCloudProperties", "constant/turbulenceProperties"]
         backups = {}
 
         try:
@@ -1109,6 +1109,27 @@ boundaryField
                         os.remove(dst)
                     except Exception as e:
                          print(f"Error restoring {src}: {e}. You may need to manually recover from {dst}.")
+
+    def _disable_turbulence(self):
+        """
+        Sets 'turbulence off' in constant/turbulenceProperties to prevent
+        icoUncoupledKinematicParcelFoam from loading turbulence models (which may cause errors
+        like missing wallDist or fields).
+        """
+        tp_path = os.path.join(self.case_dir, "constant", "turbulenceProperties")
+        if not os.path.exists(tp_path):
+            return
+
+        with open(tp_path, 'r') as f:
+            content = f.read()
+
+        # turbulence on; -> turbulence off;
+        pattern = re.compile(r"turbulence\s+on;", re.DOTALL)
+        if pattern.search(content):
+            content = pattern.sub("turbulence      off;", content)
+
+        with open(tp_path, 'w') as f:
+            f.write(content)
 
     def _switch_fvSchemes_to_transient(self):
         """
@@ -1241,6 +1262,7 @@ boundaryField
             # 3. Update Configurations
             self._update_controlDict_for_particles()
             self._switch_fvSchemes_to_transient()
+            self._disable_turbulence()
 
             # 4. Run Solver
             return self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking")
