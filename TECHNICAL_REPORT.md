@@ -194,7 +194,36 @@ The outgoing air created a tight rotational vortex which kept the particles from
 **Conclusion:**
 The pressure differential and accompanying speed definitely changed the ratio of captured material in the pre-filter vs the post-filter. We can conclude that the filter itself fundamentally works, but given the vastly different performance from the much larger vacuum filter, more work needs to be done to combine existing fluid flow theory with our parameterized 3D model.
 
-### 7.5. Supplementary Materials
+### 7.5. Theoretical Interpretation of Experimental Results
+
+To understand the "thinking" behind the separation efficiency of these helical systems, it is necessary to look at the dimensionless numbers that dictate particle behavior (defined in Appendix A.2). In a 3/4" helical channel, the transition from a 60 psi "blast" to a 7.5 psi steady flow fundamentally changes the fluid regime and the forces acting on the particles.
+
+#### 1. Reynolds Number ($Re$): The Flow Regime
+*   **At 60 psi:** With estimated velocities exceeding 40 m/s, the $Re$ is likely **>50,000**, placing the flow in a fully turbulent regime. Turbulence can be a "double-edged sword"; it keeps particles from settling but also creates "re-entrainment" where particles are kicked back out of traps.
+*   **At 5–10 psi:** Velocities drop significantly (to 5–10 m/s), resulting in a $Re$ between **6,000 and 13,000**. While still turbulent, the lower kinetic energy reduces the impact of secondary mixing.
+
+#### 2. Dean Number ($De$): The "Engine" of Separation
+For a 3/4" tube ($D \approx 19$ mm) with a tight helical radius ($R_c \approx 25$ mm), the Dean number is approximately **32,000** at 60 psi.
+*   **High Pressure:** $De \approx 32,000$. The vortices are extremely aggressive, sweeping the entire cross-section and slamming particles into the walls.
+*   **Low Pressure:** $De \approx 4,000 - 8,000$. The vortices are present but far less energetic. This is why the separation ratio dropped from 18:1 to 9:1 in the steady-state tests—the "sweeping" action was simply too weak to overcome the air's viscosity.
+
+#### 3. Stokes Number ($Stk$): Particle Tracking
+*   **$Stk > 1$:** The particle has high inertia and will fly straight into a trap when the air turns.
+*   **$Stk \ll 1$:** The particle follows the air perfectly and will bypass the traps.
+
+At 60 psi, even fine 10-micron particles have enough momentum to reach a $Stk \approx 1.0$ threshold. At lower pressures ($Stk \approx 0.1 - 0.2$), they begin to behave like "gas," following the streamlines and escaping.
+
+#### The Strategy: Multiple Corkscrews
+
+The logic for using multiple corkscrews at lower pressure is to leverage **Cumulative Probability**. If a single stage at 10 psi has a 50% capture efficiency, adding stages works exponentially:
+
+*   **1 Stage:** 50% captured
+*   **2 Stages:** 75% captured
+*   **3 Stages:** 87.5% captured
+
+By using three chambers in series, the system can achieve the same "clean" output as a 60 psi blast but at a much lower, more manageable pressure that doesn't stress the 3D-printed seams or cause "puffing" of material into the environment.
+
+### 7.6. Supplementary Materials
 
 *   **Experimental Run 10/30/2025 Photo Album:** [https://photos.app.goo.gl/baQobViRN2EK12yL6](https://photos.app.goo.gl/baQobViRN2EK12yL6)
 *   **Experimental Run 11/22/2025 Photo Album:** [https://photos.app.goo.gl/WuuFNhYvLVV2sVhG9](https://photos.app.goo.gl/WuuFNhYvLVV2sVhG9)
@@ -263,11 +292,16 @@ To understand the operational mechanics of the corkscrew filter—and to interpr
 **A.2.1 The Dean Mechanism and Secondary Flows**
 
 When a fluid flows through a curved channel, the interplay between centrifugal forces and pressure gradients creates a distinct secondary flow pattern. Fluid elements near the center of the channel, possessing higher velocity, experience a larger centrifugal force ($F_c \propto U^2/R$) than the slower-moving fluid near the channel walls. This force differential drives the core fluid outward toward the concave (outer) wall of the bend. To satisfy the conservation of mass (continuity), the fluid near the top and bottom walls must recirculate inward toward the convex (inner) wall to replace the displaced fluid.
+
+**Reynolds Number ($Re$)**
+The flow regime is fundamentally governed by the Reynolds number, which determines whether the flow is laminar or turbulent:
+$$ Re = \frac{\rho U D_h}{\mu} $$
+Where $\rho$ is density, $U$ is velocity, $D_h$ is the hydraulic diameter, and $\mu$ is dynamic viscosity.
+
 This recirculation results in a pair of counter-rotating vortices known as Dean vortices.9 These vortices are superimposed on the primary axial flow, creating a double-helical streamline pattern for the fluid itself. The fluid spirals as it moves downstream, effectively sweeping the cross-section of the channel. The strength and stability of these vortices are characterized by the dimensionless Dean number ($De$):
 
 $$De = Re \sqrt{\frac{D_h}{2R_c}}$$
 Where:
-$Re$ is the Reynolds number ($Re = \frac{\rho U D_h}{\mu}$), representing the ratio of inertial forces to viscous forces.
 $D_h$ is the hydraulic diameter of the channel.
 $R_c$ is the radius of curvature of the helix.
 The separation efficiency of a corkscrew filter is critically dependent on $De$. The magnitude of the secondary flow velocity scales with the Dean number (approximately $U_{Dean} \sim De^2$).10 Below a critical Dean number, the secondary flows are too weak to transport particles effectively across the primary streamlines against the forces of Brownian motion and diffusion. This theoretical threshold explains the experimental divergence: at 60 psi, the velocity $U$ is high, yielding a high $Re$ and consequently a high $De$, which drives robust separation. At 1–10 psi, the $De$ likely falls below the threshold required to initiate stable inertial migration, resulting in poor or negligible separation.11
@@ -275,6 +309,13 @@ The separation efficiency of a corkscrew filter is critically dependent on $De$.
 **A.2.2 Particle Migration Forces in Helical Geometries**
 
 In a helical filter, a solid particle is subject to a complex balance of forces that dictates its trajectory. The "clog-free" nature of the device depends on these forces effectively dominating the particle's motion, ensuring it is directed toward the trapping zones rather than remaining entrained in the clean gas stream.
+
+**Stokes Number ($Stk$)**
+The ability of a particle to follow fluid streamlines is dimensionless characterized by the Stokes number:
+$$ Stk = \frac{\tau_p U}{D_h} = \frac{\rho_p d_p^2 U}{18 \mu D_h} $$
+Where $\tau_p$ is the particle relaxation time, $d_p$ is particle diameter, and $\rho_p$ is particle density.
+*   $Stk \ll 1$: Particles follow streamlines (no separation).
+*   $Stk > 1$: Particles detach due to inertia (separation).
 
 *   **Centrifugal Force (Primary Separation Force):** The dominant force driving separation in macro-scale helical filters is the centrifugal force generated by the primary flow curvature. This force acts radially outward, pushing denser particles toward the outer wall of the channel. The magnitude of this force is given by:
 
