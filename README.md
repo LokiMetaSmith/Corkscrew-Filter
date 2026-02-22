@@ -1,58 +1,72 @@
-# Thirsty Corkscrew
+# Keystone Polyphony: A Mind Bridge
 
-A 3D-printable inertial filter for separating particles from a fluid stream, based on Dr. John Graf's "Thirsty Corkscrew" design. This project includes the OpenSCAD models for generating the filter and instructions for running a CFD simulation to analyze its performance.
+> "In a concert, polyphony is the simultaneous combination of distinct, independent melodies. In architecture, the keystone is the central piece that allows a bridge to bear weight. Here, we are building both."
 
-## Theory of Operation
+Keystone Polyphony is an open-ended, collaborative ecosystem for human creators and autonomous agents. The project explores how many distinct minds can coordinate, create, and build together without collapsing into a single monolithic voice.
 
-This project combines advanced fluid dynamics principles with modern AI-driven engineering to optimize the design of inertial filters.
+This repository is the foundation for that work: part software platform, part research space, and part community experiment.
 
-### Physics of Inertial Separation
+## Why This Exists
 
-The core mechanism of the Thirsty Corkscrew is **inertial separation**. As fluid traverses the helical channel, it is subjected to rapid changes in direction. This induces specific forces that separate particles based on mass and density:
+Highly technical ideas like RTOS coordination, multi-agent swarms, and shared liminal context can be difficult to approach. Keystone Polyphony abstracts those ideas into a practical philosophy of collaboration:
 
-1.  **Centrifugal Force ($$F_c = m \frac{v^2}{r}$$)**: The helical geometry acts as a continuous centrifuge. The curvature forces the fluid to accelerate radially. Heavier particles (like dust or water droplets) possess greater inertia and are flung toward the outer wall of the channel with a force proportional to the square of the velocity ($$v^2$$) and inversely proportional to the radius ($$r$$).
-2.  **Dean Vortices**: In curved pipes, the velocity differential between the inner and outer walls creates secondary flows known as Dean Vortices. These counter-rotating vortices spiral down the channel, effectively sweeping the cross-section and transporting particles toward the trapping zones.
-3.  **"Clog-Free" Trapping**: Unlike barrier filters (e.g., HEPA) that trap particles *in* the flow path (leading to pressure buildup), this design uses "stepped traps" or slits. Particles are ejected *out* of the main flow stream into a quiescent collection bin. Because the storage volume is decoupled from the flow path, the filter can accumulate significant amounts of debris without increasing the pressure drop, maintaining constant system performance until the bin is physically full.
+- A bridge needs structure.
+- A choir needs many voices.
+- A shared space needs clear signals.
 
-### AI-Powered Design Optimization
+The result should be welcoming to developers, artists, strategists, testers, and curious contributors of all kinds.
 
-The design of such a filter involves a complex trade-off between **separation efficiency** (maximizing particle capture) and **energy efficiency** (minimizing pressure drop). To solve this non-linear problem, we employ an autonomous **AI Agent**.
+## Core Concepts
 
-*   **Virtual Engineer**: The AI (Google Gemini) does not merely guess parameters. It acts as an engineer, analyzing the results of previous CFD simulations. It uses **Chain-of-Thought** reasoning to hypothesize why a design performed poorly (e.g., "The pressure drop is too high, likely due to the twist rate being too aggressive") and proposes logical adjustments.
-*   **Physics-Informed**: The AI is explicitly prompted with the governing physics equations. It understands that increasing the helix radius will lower the centrifugal force, or that tightening the pitch will increase capture efficiency at the cost of higher backpressure.
-*   **Multimodal Feedback**: The agent is not limited to numbers. It analyzes **3D renderings** of the generated geometry to detect visual defects—such as disconnected helical segments or unprintable wall thicknesses—that might not be immediately obvious from numerical simulation data alone.
+- `Keystone`: The structural center. Shared protocols, context, and norms that keep independent work coherent.
+- `Polyphony`: The many voices. Specialized agents and humans working in parallel, each with distinct perspective and strengths.
+- `Mind Bridge`: The connective tissue. The environment where ideas move between people and systems with minimal loss of meaning.
 
-## Getting Started: Generating the 3D Models
+## Collaboration Model (RTOS-Inspired)
 
-The 3D models for the filter are generated using OpenSCAD.
+One of our primary technical experiments is applying real-time operating system principles to multi-agent collaboration at scale.
 
-1.  **Install OpenSCAD**: If you don't have it already, download and install OpenSCAD from [openscad.org](https://openscad.org/).
-2.  **Open the Main File**: Open the `ThirstyCorkscrew.scad` file in OpenSCAD.
-3.  **Configure Parameters**: Adjust the parameters in the file to customize the filter to your needs. The most important parameters are located at the top of the file.
-4.  **Render and Export**: Render the model (F6) and export it as an STL file for 3D printing.
+These primitives are both technical and social:
 
-### Key Parameters (`ThirstyCorkscrew.scad`)
+- `Liminal Space (Shared Context)`: Contributors observe a common stream of project state instead of relying only on direct handoffs.
+- `Baton (Mutex)`: Ownership of sensitive resources is explicit. One contributor changes critical state at a time.
+- `Signals (Flags/Event Groups)`: Milestones are broadcast so dependent work can start at the right moment.
+- `Queue (Task Delegation)`: Work is discoverable and pull-based; contributors self-select tasks that match their strengths.
 
-*   `filter_height_mm`: The height of the filter.
-*   `number_of_complete_revolutions`: The number of turns in the corkscrew channels.
-*   `screw_OD_mm`, `screw_ID_mm`: The outer and inner diameters of the corkscrew channels.
-*   `num_screws`: The number of parallel corkscrew channels.
-*   `num_bins`: The number of collection bins.
+This model reduces collisions, duplicated effort, and "talking past each other" across both humans and AI systems.
 
-## Assembly
+## Who Should Join
 
-For a complete list of materials required and assembly instructions, please see the [Bill of Materials (BOM.md)](./BOM.md).
+You do not need to be a programmer to contribute.
 
-## CFD Simulation (Advanced)
+- `Architects (Developers/Engineers)`: Build orchestration, state systems, infrastructure, and integrations.
+- `Conductors (Organizers/Strategists)`: Shape flow, define priorities, and coordinate dependencies.
+- `Storytellers (Writers/Artists/Designers)`: Craft identity, narrative, UX, and communication patterns.
+- `Observers (Testers/Thinkers/Dreamers)`: Probe assumptions, test systems, and propose novel directions.
 
-This project includes a case setup for running a CFD simulation using OpenFOAM to analyze the filter's performance. For detailed instructions on how to set up and run the simulation, please see the [README.md in the `corkscrewFilter` directory](./corkscrewFilter/README.md).
+## How To Contribute
 
-## Automated Optimization & Parameters
+1. Introduce yourself in the project communication channel and share your interests and skills.
+2. Run `./scripts/install-hooks.sh` once per clone to install local commit hooks.
+3. Review open issues, discussions, and current priorities.
+4. Claim a task ("pick up the baton") before starting implementation.
+5. Ship your contribution through a pull request, design note, or discussion thread.
+6. If you run autonomous agents from a fork, complete token setup in [`CONTRIBUTING.md`](CONTRIBUTING.md) before launching workflows.
 
-For those looking to optimize the filter design programmatically, the `optimizer/` directory contains tools to automate the design-simulation-analysis loop using Generative AI.
-*   See [optimizer/README.md](./optimizer/README.md) for details on the AI-driven optimization workflow.
-*   See [parameters/README.md](./parameters/README.md) for information on parameter configuration files.
+## Current Focus
 
-## Future Work
+- Multi-agent orchestration patterns for complex projects.
+- Shared context and state synchronization.
+- Practical tooling for collaborative, decentralized workflows.
 
-For a list of planned enhancements and future work, please see the [TODO list (TODO.md)](./TODO.md).
+## Project Links (To Be Filled)
+
+- Communication: `[Discord/Matrix/Signal link here]`
+- Contribution guide: [`CONTRIBUTING.md`](CONTRIBUTING.md)
+- Code of conduct: `[CODE_OF_CONDUCT.md link here]`
+
+## License
+
+This project is open source. Add the selected license in `LICENSE` and keep this section aligned with that choice.
+
+"Come build the bridge with us."

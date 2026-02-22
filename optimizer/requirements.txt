@@ -1,9 +1,0 @@
-google-genai
-numpy
-trimesh
-pandas
-scipy
-Pillow
-Rtree
-psutil
-openai
