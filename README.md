@@ -6,6 +6,8 @@ A 3D-printable inertial filter for separating particles from a fluid stream, bas
 
 This project combines advanced fluid dynamics principles with modern AI-driven engineering to optimize the design of inertial filters.
 
+See the [TECHNICAL_REPORT.md](https://github.com/LokiMetaSmith/Corkscrew-Filter/blob/main/TECHNICAL_REPORT.md) for a detalied explination. 
+
 ### Physics of Inertial Separation
 
 The core mechanism of the Thirsty Corkscrew is **inertial separation**. As fluid traverses the helical channel, it is subjected to rapid changes in direction. This induces specific forces that separate particles based on mass and density:

@@ -698,7 +698,7 @@ patches
         patchInfo
         {{
             type patch;
-            inGroups (inlet);
+            inGroups (inletGroup);
         }}
         constructFrom set;
         set inletFaces;
@@ -708,7 +708,7 @@ patches
         patchInfo
         {{
             type patch;
-            inGroups (outlet);
+            inGroups (outletGroup);
         }}
         constructFrom set;
         set outletFaces;
@@ -1279,6 +1279,10 @@ boundaryField
             self._update_controlDict_for_particles()
             self._switch_fvSchemes_to_transient()
             self._disable_turbulence()
+
+            # Verify carrier field (U) - helps debug SIGFPE if U is zero/NaN
+            print("Verifying carrier field (U) before particle tracking...")
+            self.run_command(["postProcess", "-func", "minMax(U)"], log_file=log_file, description="Verifying Field U")
 
             # 4. Run Solver
             return self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking")
