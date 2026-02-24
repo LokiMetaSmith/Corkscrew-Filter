@@ -1,0 +1,17 @@
+Rendering corkscrew.scad -> images/temp_helical.stl...
+  Params: -D ADD_HELICAL_SUPPORT=false -D high_res_fn=30
+SCAD stderr: ECHO: "WARNING: high_res_fn capped at 60 for performance stability in WASM environment."
+SCAD stderr: Geometries in cache: 47
+SCAD stderr: Geometry cache size in bytes: 9549400
+SCAD stderr: CGAL Polyhedrons in cache: 8
+SCAD stderr: CGAL cache size in bytes: 104636872
+SCAD stderr: Total rendering time: 0:04:29.605
+SCAD stderr: Top level object is a 3D object (Nef polyhedron):
+SCAD stderr:    Simple:     yes
+SCAD stderr:    Vertices:    23120
+SCAD stderr:    Halfedges:  114216
+SCAD stderr:    Edges:       57108
+SCAD stderr:    Halffacets:  68038
+SCAD stderr:    Facets:      34019
+SCAD stderr:    Volumes:        11
+  Success: images/temp_helical.stl

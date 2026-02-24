@@ -1,0 +1,4 @@
+Rendering corkscrew.scad -> images/temp_helical.stl...
+  Params: -D high_res_fn=10
+SCAD stderr: ECHO: "WARNING: high_res_fn capped at 60 for performance stability in WASM environment."
+SCAD stderr: ERROR: The given mesh is not closed! Unable to convert to CGALNefGeometry.
