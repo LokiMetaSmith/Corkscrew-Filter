@@ -306,14 +306,14 @@ Furthermore, this report critically evaluates the physicochemical properties of 
 **A.1.1 The Failure Modes of Traditional Filtration in Space**
 
 Human spaceflight has historically relied on High-Efficiency Particulate Air (HEPA) filters and barrier media to maintain cabin air quality. While these systems have proven effective in the controlled environments of the Space Shuttle and the International Space Station (ISS), they face catastrophic limitations in long-duration exploration missions, particularly those targeting the lunar surface. The fundamental operational premise of barrier filtration—trapping particles within a fibrous matrix—creates a finite lifespan defined by saturation. Once the matrix is loaded, the pressure drop across the filter rises exponentially, necessitating replacement. In a mission scenario such as a Mars transit or a lunar outpost, the logistics of resupplying disposable filter cartridges are prohibitive, consuming valuable launch mass and volume.
-The primary failure mode in lunar environments is particulate loading. On the Moon, the environment is dominated by lunar regolith—a jagged, electrostatically charged dust that pervades all mechanical seals and habitable volumes. Unlike terrestrial dust, which is often rounded by weathering, lunar dust retains sharp, abrasive edges due to its formation via micrometeoroid bombardment.1 This ubiquitous, clinging dust caused a plethora of problems during the Apollo missions, compromising seals, abrading spacesuit fabrics, and posing significant health risks including "lunar dust hay fever." Standard HEPA filters, while capable of capturing these particles, would become clogged rapidly given the high concentration of dust anticipated in airlocks and suit preparation areas.2 The operational data from Apollo suggests that the dust's unique properties allow it to bypass standard mitigation techniques, necessitating a filtration approach that does not rely on a consumable media matrix.
-The second critical failure mode is gravity dependence. Many terrestrial inertial separators, such as standard industrial cyclones, rely partially on gravity to settle the separated "dust cake" into a hopper. In microgravity (0g) or reduced gravity (1/6g on the Moon), these gravitational forces are effectively absent.3 A standard cyclone operating in microgravity faces the risk of re-entraining separated particles into the vortex finder if the centrifugal forces are not sufficient to substitute for gravitational settling. The distinct lack of a "down" vector means that separated particles do not naturally fall into a collection bin; they must be actively driven there by fluid forces. Consequently, any filtration system designed for the Moon must be "orientation agnostic," capable of functioning regardless of the spacecraft's attitude or the local gravity vector.4
+The primary failure mode in lunar environments is particulate loading. On the Moon, the environment is dominated by lunar regolith—a jagged, electrostatically charged dust that pervades all mechanical seals and habitable volumes. Unlike terrestrial dust, which is often rounded by weathering, lunar dust retains sharp, abrasive edges due to its formation via micrometeoroid bombardment.<sup>[1](#ref-1)</sup> This ubiquitous, clinging dust caused a plethora of problems during the Apollo missions, compromising seals, abrading spacesuit fabrics, and posing significant health risks including "lunar dust hay fever." Standard HEPA filters, while capable of capturing these particles, would become clogged rapidly given the high concentration of dust anticipated in airlocks and suit preparation areas.<sup>[2](#ref-2)</sup> The operational data from Apollo suggests that the dust's unique properties allow it to bypass standard mitigation techniques, necessitating a filtration approach that does not rely on a consumable media matrix.
+The second critical failure mode is gravity dependence. Many terrestrial inertial separators, such as standard industrial cyclones, rely partially on gravity to settle the separated "dust cake" into a hopper. In microgravity (0g) or reduced gravity (1/6g on the Moon), these gravitational forces are effectively absent.<sup>[3](#ref-3)</sup> A standard cyclone operating in microgravity faces the risk of re-entraining separated particles into the vortex finder if the centrifugal forces are not sufficient to substitute for gravitational settling. The distinct lack of a "down" vector means that separated particles do not naturally fall into a collection bin; they must be actively driven there by fluid forces. Consequently, any filtration system designed for the Moon must be "orientation agnostic," capable of functioning regardless of the spacecraft's attitude or the local gravity vector.<sup>[4](#ref-4)</sup>
 
 **A.1.2 The "Corkscrew" Solution: Helical Inertial Filtration**
 
-The "corkscrew filter," a technology notably advanced by NASA Johnson Space Center and IRPI, LLC, addresses these limitations through a multi-phase flow separation method.5 This technology represents a paradigm shift from barrier filtration to inertial separation. Unlike a barrier filter, which physically obstructs the flow to trap particles, a corkscrew filter structures the flow itself to fling particles into specific trapping zones. The design utilizes a helical flow path to generate continuous centrifugal force. This force acts as an "artificial gravity," driving denser phases (liquids or solids) toward the channel walls regardless of the spacecraft's orientation.6
-The key innovation in these designs distinguishes them from simple coiled tubes. The "corkscrew" architecture often incorporates stepped contours or wicking walls that capture the separated material.5 As the aerosol traverses the helical path, the centrifugal force pushes the denser particles into these recessed traps. Once a particle enters the trap, it is shielded from the high-velocity main flow, preventing re-entrainment. This mechanism allows the filter to operate continuously without a rise in pressure drop, as the primary flow channel remains unobstructed even as the traps fill. This "clog-free" characteristic is paramount for life support systems that must operate for months or years without maintenance.7
-The application of this technology extends beyond simple dust removal. The initial development of the corkscrew filter was driven by the need to separate liquid water from the cabin atmosphere following a fire event and the discharge of a water-based fire extinguisher.6 In such a scenario, the filter must handle a multi-phase mixture of gas, liquid water, and smoke particulates. The helical geometry proved capable of separating these phases by leveraging their density differences, sequestering the liquid into wicking materials while allowing the gas to pass through. This capability to handle "wet" filtration makes the corkscrew filter uniquely suited for the complex, unpredictable environment of a spacecraft emergency.
+The "corkscrew filter," a technology notably advanced by NASA Johnson Space Center and IRPI, LLC, addresses these limitations through a multi-phase flow separation method.<sup>[5](#ref-5)</sup> This technology represents a paradigm shift from barrier filtration to inertial separation. Unlike a barrier filter, which physically obstructs the flow to trap particles, a corkscrew filter structures the flow itself to fling particles into specific trapping zones. The design utilizes a helical flow path to generate continuous centrifugal force. This force acts as an "artificial gravity," driving denser phases (liquids or solids) toward the channel walls regardless of the spacecraft's orientation.<sup>[6](#ref-6)</sup>
+The key innovation in these designs distinguishes them from simple coiled tubes. The "corkscrew" architecture often incorporates stepped contours or wicking walls that capture the separated material.<sup>[5](#ref-5)</sup> As the aerosol traverses the helical path, the centrifugal force pushes the denser particles into these recessed traps. Once a particle enters the trap, it is shielded from the high-velocity main flow, preventing re-entrainment. This mechanism allows the filter to operate continuously without a rise in pressure drop, as the primary flow channel remains unobstructed even as the traps fill. This "clog-free" characteristic is paramount for life support systems that must operate for months or years without maintenance.<sup>[7](#ref-7)</sup>
+The application of this technology extends beyond simple dust removal. The initial development of the corkscrew filter was driven by the need to separate liquid water from the cabin atmosphere following a fire event and the discharge of a water-based fire extinguisher.<sup>[6](#ref-6)</sup> In such a scenario, the filter must handle a multi-phase mixture of gas, liquid water, and smoke particulates. The helical geometry proved capable of separating these phases by leveraging their density differences, sequestering the liquid into wicking materials while allowing the gas to pass through. This capability to handle "wet" filtration makes the corkscrew filter uniquely suited for the complex, unpredictable environment of a spacecraft emergency.
 
 **A.1.3 Report Objectives**
 
@@ -325,7 +325,7 @@ Design for the Moon: To propose optimized design parameters for a lunar-dust-rat
 
 ### A.2. Fluid Dynamics of Helical Channels: The Physics of Separation
 
-To understand the operational mechanics of the corkscrew filter—and to interpret the stark difference in experimental results between 60 psi and 1–10 psi—one must delve into the fluid dynamics of curved pipes. The flow regime in a helical channel is fundamentally distinct from the Poiseuille flow observed in straight pipes due to the emergence of curvature-induced secondary flows. These secondary flows are not merely parasitic disturbances; they are the primary mechanism driving separation efficiency in helical inertial microfluidics.8
+To understand the operational mechanics of the corkscrew filter—and to interpret the stark difference in experimental results between 60 psi and 1–10 psi—one must delve into the fluid dynamics of curved pipes. The flow regime in a helical channel is fundamentally distinct from the Poiseuille flow observed in straight pipes due to the emergence of curvature-induced secondary flows. These secondary flows are not merely parasitic disturbances; they are the primary mechanism driving separation efficiency in helical inertial microfluidics.<sup>[8](#ref-8)</sup>
 
 **A.2.1 The Dean Mechanism and Secondary Flows**
 
@@ -336,13 +336,13 @@ The flow regime is fundamentally governed by the Reynolds number, which determin
 $$ Re = \frac{\rho U D_h}{\mu} $$
 Where $\rho$ is density, $U$ is velocity, $D_h$ is the hydraulic diameter, and $\mu$ is dynamic viscosity.
 
-This recirculation results in a pair of counter-rotating vortices known as Dean vortices.9 These vortices are superimposed on the primary axial flow, creating a double-helical streamline pattern for the fluid itself. The fluid spirals as it moves downstream, effectively sweeping the cross-section of the channel. The strength and stability of these vortices are characterized by the dimensionless Dean number ($De$):
+This recirculation results in a pair of counter-rotating vortices known as Dean vortices.<sup>[9](#ref-9)</sup> These vortices are superimposed on the primary axial flow, creating a double-helical streamline pattern for the fluid itself. The fluid spirals as it moves downstream, effectively sweeping the cross-section of the channel. The strength and stability of these vortices are characterized by the dimensionless Dean number ($De$):
 
 $$De = Re \sqrt{\frac{D_h}{2R_c}}$$
 Where:
 $D_h$ is the hydraulic diameter of the channel.
 $R_c$ is the radius of curvature of the helix.
-The separation efficiency of a corkscrew filter is critically dependent on $De$. The magnitude of the secondary flow velocity scales with the Dean number (approximately $U_{Dean} \sim De^2$).10 Below a critical Dean number, the secondary flows are too weak to transport particles effectively across the primary streamlines against the forces of Brownian motion and diffusion. This theoretical threshold explains the experimental divergence: at 60 psi, the velocity $U$ is high, yielding a high $Re$ and consequently a high $De$, which drives robust separation. At 1–10 psi, the $De$ likely falls below the threshold required to initiate stable inertial migration, resulting in poor or negligible separation.11
+The separation efficiency of a corkscrew filter is critically dependent on $De$. The magnitude of the secondary flow velocity scales with the Dean number (approximately $U_{Dean} \sim De^2$).<sup>[10](#ref-10)</sup> Below a critical Dean number, the secondary flows are too weak to transport particles effectively across the primary streamlines against the forces of Brownian motion and diffusion. This theoretical threshold explains the experimental divergence: at 60 psi, the velocity $U$ is high, yielding a high $Re$ and consequently a high $De$, which drives robust separation. At 1–10 psi, the $De$ likely falls below the threshold required to initiate stable inertial migration, resulting in poor or negligible separation.<sup>[11](#ref-11)</sup>
 
 **A.2.2 Particle Migration Forces in Helical Geometries**
 
@@ -359,21 +359,21 @@ Where $\tau_p$ is the particle relaxation time, $d_p$ is particle diameter, and 
 
     $$F_{centrifugal} = (\rho_p - \rho_f) V_p \frac{U_\theta^2}{R}$$
     Where $\rho_p$ and $\rho_f$ are the densities of the particle and the fluid, respectively, $V_p$ is the particle volume, and $U_\theta$ is the tangential velocity of the fluid.
-    **Implication for Operation:** Heavier particles (like powdered sugar or lunar regolith) are flung toward the outer wall. Crucially, this force is proportional to the square of the velocity ($U^2$). A reduction in pressure from 60 psi to 10 psi results in a significant decrease in flow velocity, which in turn causes a quadratic drop in the separation force. This physics confirms why the high-pressure run is essential for successful filtration; the low-pressure run simply does not generate sufficient g-forces to separate the solid phase from the gas phase.12
+    **Implication for Operation:** Heavier particles (like powdered sugar or lunar regolith) are flung toward the outer wall. Crucially, this force is proportional to the square of the velocity ($U^2$). A reduction in pressure from 60 psi to 10 psi results in a significant decrease in flow velocity, which in turn causes a quadratic drop in the separation force. This physics confirms why the high-pressure run is essential for successful filtration; the low-pressure run simply does not generate sufficient g-forces to separate the solid phase from the gas phase.<sup>[12](#ref-12)</sup>
 
 *   **Dean Drag Force:** The secondary Dean vortices exert a viscous drag force on the particles, pulling them laterally across the channel cross-section. This force is described by Stokes' drag law tailored for the transverse velocity field:
 
     $$F_{Dean} = 3 \pi \mu d_p U_{Dean}$$
-    Where $U_{Dean}$ is the transverse velocity of the Dean vortices.10
-    **Implication for Fine Particles:** For very small particles (typically <10 µm), the Dean drag force can rival or even exceed the centrifugal force. Dean vortices can entrain these fine particles and circulate them within the vortices, potentially trapping them in the vortex cores or remixing them if the filter geometry isn't tuned. However, in optimized designs, Dean vortices effectively "sweep" particles toward specific equilibrium positions. In microfluidic applications, this effect is used to focus particles into tight bands, allowing them to be "skimmed" off into separate outlets.8
+    Where $U_{Dean}$ is the transverse velocity of the Dean vortices.<sup>[10](#ref-10)</sup>
+    **Implication for Fine Particles:** For very small particles (typically <10 µm), the Dean drag force can rival or even exceed the centrifugal force. Dean vortices can entrain these fine particles and circulate them within the vortices, potentially trapping them in the vortex cores or remixing them if the filter geometry isn't tuned. However, in optimized designs, Dean vortices effectively "sweep" particles toward specific equilibrium positions. In microfluidic applications, this effect is used to focus particles into tight bands, allowing them to be "skimmed" off into separate outlets.<sup>[8](#ref-8)</sup>
 
 *   **Inertial Lift Forces:** Close to the channel walls, particles experience inertial lift forces arising from the shear gradient of the fluid flow. The shear-gradient lift force pushes particles toward the channel walls, where the shear rate is highest. Conversely, the wall-induced lift force repels particles away from the wall due to the pressure buildup between the particle and the boundary.
-    **Net Effect:** In helical channels, the interplay of Dean drag and inertial lift forces creates stable equilibrium positions. At high Reynolds numbers (Re > 50), these forces act to focus particles into distinct streamlines. This phenomenon is exploited in "inertial microfluidics" to separate particles based on size, as the equilibrium position is size-dependent.11 For the corkscrew filter, these lift forces help keep larger particles moving along the wall (where the traps are located) while preventing them from becoming re-entrained in the center of the channel.
+    **Net Effect:** In helical channels, the interplay of Dean drag and inertial lift forces creates stable equilibrium positions. At high Reynolds numbers (Re > 50), these forces act to focus particles into distinct streamlines. This phenomenon is exploited in "inertial microfluidics" to separate particles based on size, as the equilibrium position is size-dependent.<sup>[11](#ref-11)</sup> For the corkscrew filter, these lift forces help keep larger particles moving along the wall (where the traps are located) while preventing them from becoming re-entrained in the center of the channel.
 
 **A.2.3 The "Clog-Free" Dynamic**
 
 The design requirement for a filter that "cannot be clogged" implies a system where particles are continuously removed or stored in a "dead zone" that does not impede the primary flow path. In barrier filters, the particles become the obstruction. In the corkscrew filter, the particles are moved out of the flow.
-In the NASA/IRPI Corkscrew Filter, this is achieved via stepped contours or helical baffles.5
+In the NASA/IRPI Corkscrew Filter, this is achieved via stepped contours or helical baffles.<sup>[5](#ref-5)</sup>
 *   **Separation Mechanism:** The centrifugal force drives particles to the outer wall.
 *   **Trapping Mechanism:** The outer wall is not a smooth arc; it contains a recessed step, a gutter, or a wicking (porous) layer. Once a particle crosses the streamline into this recessed zone, it enters a region of low velocity. The step shields the particle from the high-shear main flow, preventing re-entrainment.
 *   **Prevention of Clogging:** Because the particles are sequestered in a recess (or "trap") while the main gas flow continues down the center of the channel, the pressure drop remains constant until the trap is physically 100% full. Unlike a HEPA filter, which begins to choke flow as soon as surface coverage begins, the corkscrew filter maintains 100% flow conductance even as it loads. The capacity of the filter is defined by the volume of these gutters, not by the surface area of a media. This geometric decoupling of "flow path" and "storage volume" is the essence of its clog-free performance.
@@ -390,11 +390,11 @@ To validate the experimental results, we must rigorously compare the physical pr
 
 | Property | Powdered Sugar (Confectioners) | Lunar Regolith (Simulant JSC-1A / Highland) | Implication for Filtration |
 | :--- | :--- | :--- | :--- |
-| **Particle Size (D50)** | ~10–15 µm [14] | 40–130 µm (bulk), <20 µm dust fraction is critical [15] | Sugar is an excellent size proxy for the hazardous "respirable" fraction of lunar dust. |
-| **Particle Size (D90)** | ~40–50 µm [14] | ~500 µm (coarse fraction included) [17] | Sugar lacks the coarse grit of raw regolith, meaning it tests the hardest filtration case (fines). |
-| **Bulk Density (Loose)** | ~0.56 g/cm³ [18] | ~1.50 g/cm³ [19] | **Critical Divergence.** Regolith is ~3x denser. Centrifugal separation will be easier with regolith than sugar for the same size. |
-| **Particle Shape** | Crystalline, semi-regular | Angular, jagged, agglutinates (glassy) [19] | Regolith is more abrasive and prone to mechanical interlocking (clogging). |
-| **Cohesion** | High (hygroscopic clumping) | High (electrostatic + vacuum adhesion) [3] | Both are cohesive, but mechanisms differ. Sugar clumps due to moisture; regolith due to electrostatics. |
+| **Particle Size (D50)** | ~10–15 µm <sup>[14](#ref-14)</sup> | 40–130 µm (bulk), <20 µm dust fraction is critical <sup>[15](#ref-15)</sup> | Sugar is an excellent size proxy for the hazardous "respirable" fraction of lunar dust. |
+| **Particle Size (D90)** | ~40–50 µm <sup>[14](#ref-14)</sup> | ~500 µm (coarse fraction included) <sup>[17](#ref-17)</sup> | Sugar lacks the coarse grit of raw regolith, meaning it tests the hardest filtration case (fines). |
+| **Bulk Density (Loose)** | ~0.56 g/cm³ <sup>[18](#ref-18)</sup> | ~1.50 g/cm³ <sup>[19](#ref-19)</sup> | **Critical Divergence.** Regolith is ~3x denser. Centrifugal separation will be easier with regolith than sugar for the same size. |
+| **Particle Shape** | Crystalline, semi-regular | Angular, jagged, agglutinates (glassy) <sup>[19](#ref-19)</sup> | Regolith is more abrasive and prone to mechanical interlocking (clogging). |
+| **Cohesion** | High (hygroscopic clumping) | High (electrostatic + vacuum adhesion) <sup>[3](#ref-3)</sup> | Both are cohesive, but mechanisms differ. Sugar clumps due to moisture; regolith due to electrostatics. |
 
 **Insight:** The use of powdered sugar represents a conservative test for centrifugal separation efficiency. Centrifugal force is directly proportional to the density difference between the particle and the fluid ($F \propto \rho_p - \rho_f$). Since sugar (approx. 1.6 g/cm³ particle density, 0.56 g/cm³ bulk density) is significantly less dense than lunar regolith (approx. 2.9 g/cm³ particle density, 1.5 g/cm³ bulk density), the forces acting on a sugar particle will be weaker than those on a regolith particle of the same size. Therefore, a filter geometry that successfully separates powdered sugar will almost certainly separate lunar dust even more effectively. However, the hygroscopic nature of sugar may lead to "caking" in the traps that mimics the cohesive behavior of lunar dust, albeit through a moisture-driven mechanism rather than the electrostatic mechanism prevalent on the Moon.
 
@@ -411,23 +411,23 @@ Experimental runs were conducted at two distinct pressure regimes: 60 psi and 1�
 *   **Low Pressure (1-10 psi) - The Diffusive/Laminar Regime**
     *   At 1–10 psi, the flow velocity is drastically reduced, likely by an order of magnitude or more compared to the 60 psi case.
     *   **Reynolds Number:** The Reynolds number drops significantly, potentially into the laminar or transitional regime.
-    *   **Separation Physics:** Below a critical Re, inertial migration forces become negligible compared to viscous drag. The particles tend to follow the fluid streamlines (Stokes regime) rather than crossing them to reach the walls.21 The Dean vortices, if present, are weak and unable to transport particles effectively against diffusion.
+    *   **Separation Physics:** Below a critical Re, inertial migration forces become negligible compared to viscous drag. The particles tend to follow the fluid streamlines (Stokes regime) rather than crossing them to reach the walls.<sup>[21](#ref-21)</sup> The Dean vortices, if present, are weak and unable to transport particles effectively against diffusion.
     *   **Result:** The sugar likely remained entrained in the airflow, behaving as a tracer rather than a separated phase. This confirms that corkscrew filters are velocity-dependent devices. They require a minimum flow rate (critical velocity) to "switch on" the separation physics.
 
 *   **The "Hose" Factor**
     *   The experiment involved "filling a hose" with sugar. In a flexible hose, the radius of curvature ($R_c$) is variable and potentially large.
     *   **Torsion and Helicity:** If the hose was coiled, it acted as a helical channel. However, if the coiling radius was too large (large $R_c$), the centrifugal force ($U^2/R_c$) would diminish.
-    *   **Roughness and Trapping:** Standard hoses are smooth-walled. The NASA corkscrew filter relies on stepped contours.5 In a smooth hose, sugar might be flung to the wall by centrifugal force but then simply slide along the wall and re-entrain at the outlet due to shear flow. Without a physical trap (wicking material or a step), separation in a smooth hose is temporary and unstable.
+    *   **Roughness and Trapping:** Standard hoses are smooth-walled. The NASA corkscrew filter relies on stepped contours.<sup>[5](#ref-5)</sup> In a smooth hose, sugar might be flung to the wall by centrifugal force but then simply slide along the wall and re-entrain at the outlet due to shear flow. Without a physical trap (wicking material or a step), separation in a smooth hose is temporary and unstable.
 
 ### A.4. The Design of the "Corkscrew" Filter: Anatomy of a Clog-Free System
 
-The "corkscrew filter" is not merely a coiled tube; it is a precision-engineered multiphase separator designed to handle complex mixtures of gas, liquid, and solids. Based on the NASA/IRPI patents and technical descriptions [5], the design consists of three critical subsystems that work in concert to achieve high efficiency and clog resistance.
+The "corkscrew filter" is not merely a coiled tube; it is a precision-engineered multiphase separator designed to handle complex mixtures of gas, liquid, and solids. Based on the NASA/IRPI patents and technical descriptions <sup>[5](#ref-5)</sup>, the design consists of three critical subsystems that work in concert to achieve high efficiency and clog resistance.
 
 **A.4.1 The Helical Flow Path (The Accelerator)**
 
 The core of the filter is a multi-channel helix. Unlike a single spiral tube, these filters often employ multiple parallel helical channels (a "multi-start" helix) to maximize the surface area available for separation and increase throughput while maintaining a small hydraulic diameter ($D_h$).
 *   **Function:** The primary function of the helix is to accelerate the aerosol and generate sustained g-forces.
-*   **Design Constraint:** The pitch and radius of the helix must be constant to maintain stable Dean vortices. Variable curvature can lead to vortex breakdown and remixing of the separated phases.11 The curvature induces the secondary flows that sweep the channel cross-section, moving particles towards the trapping zones.
+*   **Design Constraint:** The pitch and radius of the helix must be constant to maintain stable Dean vortices. Variable curvature can lead to vortex breakdown and remixing of the separated phases.<sup>[11](#ref-11)</sup> The curvature induces the secondary flows that sweep the channel cross-section, moving particles towards the trapping zones.
 
 **A.4.2 The Stepped Contour (The Trap)**
 
@@ -438,15 +438,15 @@ This is the defining feature that allows for "clog-free" operation and distingui
 
 **A.4.3 The Wicking/Porous Wall (Phase Separation)**
 
-In the original NASA application for separating liquid water (from fire extinguishers), the trap walls were lined with a hydrophilic wicking material.7
+In the original NASA application for separating liquid water (from fire extinguishers), the trap walls were lined with a hydrophilic wicking material.<sup>[7](#ref-7)</sup>
 *   **Mechanism:** Liquid droplets impinging on the wall wet the surface and are wicked away by capillary action into a storage reservoir. This effectively separates the liquid phase from the gas phase.
-*   **Solid Application:** For solid particulates like lunar dust, the wicking material might be replaced by a porous metal sinter or a magnetic trap (leveraging the iron content of regolith). A porous wall allows a small amount of gas to bleed off through the trap, creating a net flow vector into the trap that helps retain the solids.12 This "bleed flow" effectively concentrates the dust cake against the wall.
+*   **Solid Application:** For solid particulates like lunar dust, the wicking material might be replaced by a porous metal sinter or a magnetic trap (leveraging the iron content of regolith). A porous wall allows a small amount of gas to bleed off through the trap, creating a net flow vector into the trap that helps retain the solids.<sup>[12](#ref-12)</sup> This "bleed flow" effectively concentrates the dust cake against the wall.
 
 **A.4.4 Comparison to Cyclones**
 
 While sharing the fundamental principle of centrifugal separation, the corkscrew filter offers distinct advantages over standard cyclone separators for space applications:
-*   **Residence Time:** The helical path is significantly longer than the body of a standard cyclone, providing a longer residence time for separation forces to act on the particles.22 This allows for the separation of finer particles than a cyclone of comparable diameter.
-*   **Orientation Agnostic:** Cyclones typically rely on gravity to pull the separated "dust cone" down into the hopper. In microgravity, the dust can hover in the separation zone and be re-entrained. The corkscrew filter uses the flow's own momentum and the stepped trap geometry to sequester particles, making it fully functional in zero gravity.23
+*   **Residence Time:** The helical path is significantly longer than the body of a standard cyclone, providing a longer residence time for separation forces to act on the particles.<sup>[22](#ref-22)</sup> This allows for the separation of finer particles than a cyclone of comparable diameter.
+*   **Orientation Agnostic:** Cyclones typically rely on gravity to pull the separated "dust cone" down into the hopper. In microgravity, the dust can hover in the separation zone and be re-entrained. The corkscrew filter uses the flow's own momentum and the stepped trap geometry to sequester particles, making it fully functional in zero gravity.<sup>[23](#ref-23)</sup>
 
 ### A.5. Application: Lunar Regolith and Space Exploration
 
@@ -455,21 +455,21 @@ The ultimate goal is to apply this filtration technology to the challenge of moo
 **A.5.1 The Lunar Dust Threat**
 
 Lunar dust is widely recognized as one of the primary hazards to lunar exploration. Its properties are uniquely challenging:
-*   **Abrasive:** Formed by continuous micrometeoroid bombardment, lunar dust particles are jagged shards of glass and agglutinates. They act like microscopic knives, shredding soft materials such as seals and fabrics.1
-*   **Electrostatic:** The lunar surface is exposed to the solar wind and UV radiation, which charge the dust particles. This "triboelectric charging" causes the dust to cling tenaciously to surfaces, making it difficult to remove mechanically.24
+*   **Abrasive:** Formed by continuous micrometeoroid bombardment, lunar dust particles are jagged shards of glass and agglutinates. They act like microscopic knives, shredding soft materials such as seals and fabrics.<sup>[1](#ref-1)</sup>
+*   **Electrostatic:** The lunar surface is exposed to the solar wind and UV radiation, which charge the dust particles. This "triboelectric charging" causes the dust to cling tenaciously to surfaces, making it difficult to remove mechanically.<sup>[24](#ref-24)</sup>
 *   **Respiring Hazard:** The fine fraction (<20 µm) is particularly dangerous as it can settle deep in the lungs, posing long-term health risks to astronauts.
 
 **A.5.2 Electrostatic Challenges in Inertial Filtration**
 
 In a helical filter, triboelectric charging can be a significant complicating factor.
 *   **The Problem:** The high-velocity transport of dielectric dust (regolith) through dielectric channels (plastic or polymer 3D prints) generates massive static charges due to contact electrification. The dust may adhere to the channel walls before reaching the trap, or clump together in unpredictable ways. This adhesion can alter the effective geometry of the channel, potentially leading to clogging or flow disruption.
-*   **The Solution:** The filter walls must be made of conductive materials and grounded to dissipate charge. Alternatively, electrostatic precipitation principles can be integrated into the design. By applying a voltage to the helical walls, the separation efficiency for the finest particles (which are the hardest to separate inertially) can be boosted.26 The helical channel can act as a long electrostatic precipitator, attracting charged dust particles to the walls.
+*   **The Solution:** The filter walls must be made of conductive materials and grounded to dissipate charge. Alternatively, electrostatic precipitation principles can be integrated into the design. By applying a voltage to the helical walls, the separation efficiency for the finest particles (which are the hardest to separate inertially) can be boosted.<sup>[26](#ref-26)</sup> The helical channel can act as a long electrostatic precipitator, attracting charged dust particles to the walls.
 
 **A.5.3 Simulant Fidelity: JSC-1A vs. Sugar**
 
 While sugar was employed for initial testing, future validation must transition to high-fidelity lunar simulants.
-*   **JSC-1A:** This is a standard mare simulant with a basaltic composition that replicates the density, chemical composition, and abrasiveness of Moon dust.19
-*   **Density Factor:** As noted in 27, simulants like OB-1A and JSC-1A have particle densities of ~2.9 g/cm³ and bulk densities of ~1.5–1.7 g/cm³. This density difference is critical for inertial separation calculations.
+*   **JSC-1A:** This is a standard mare simulant with a basaltic composition that replicates the density, chemical composition, and abrasiveness of Moon dust.<sup>[19](#ref-19)</sup>
+*   **Density Factor:** As noted in [27](#ref-27), simulants like OB-1A and JSC-1A have particle densities of ~2.9 g/cm³ and bulk densities of ~1.5–1.7 g/cm³. This density difference is critical for inertial separation calculations.
 *   **Calculation:** The centrifugal force on a regolith particle ($F_{regolith}$) compared to a sugar particle ($F_{sugar}$) of the same size is approximately:
     $$ \frac{F_{regolith}}{F_{sugar}} = \frac{\rho_{regolith} - \rho_{air}}{\rho_{sugar} - \rho_{air}} \approx \frac{2.9}{0.56} \approx 5.1 $$
 *   **Conclusion:** A corkscrew filter that is optimized for sugar will be 5 times more effective (in terms of force magnitude) when separating lunar regolith. The successful separation of sugar at 60 psi is therefore a very positive indicator for the system's potential performance with lunar dust.
@@ -477,8 +477,8 @@ While sugar was employed for initial testing, future validation must transition 
 **A.5.4 "Filtration That Cannot Be Clogged"**
 
 For a permanent lunar outpost, "cannot be clogged" implies a system that is regenerative. A trap that fills up is eventually a clog.
-*   **The Scroll Filter Concept:** NASA Glenn has developed systems where the "trap" media is a scroll that can be advanced to a clean section automatically.28
-*   **The Corkscrew Adaptation:** The helical traps could be designed with a "bleed" flow or an active purge. A small fraction of the air (5–10%) could continuously flush the trapped dust into a high-density storage bag or a vacuum port. This "active purge" would render the filter truly non-clogging, as the traps would never reach capacity.29
+*   **The Scroll Filter Concept:** NASA Glenn has developed systems where the "trap" media is a scroll that can be advanced to a clean section automatically.<sup>[28](#ref-28)</sup>
+*   **The Corkscrew Adaptation:** The helical traps could be designed with a "bleed" flow or an active purge. A small fraction of the air (5–10%) could continuously flush the trapped dust into a high-density storage bag or a vacuum port. This "active purge" would render the filter truly non-clogging, as the traps would never reach capacity.<sup>[29](#ref-29)</sup>
 
 ### A.6. Comparative Performance Analysis
 
@@ -487,14 +487,14 @@ For a permanent lunar outpost, "cannot be clogged" implies a system that is rege
 | Feature | Corkscrew Filter (Helical) | Conventional Cyclone | HEPA / Barrier Filter | Electrostatic Precipitator |
 | :--- | :--- | :--- | :--- | :--- |
 | **Separation Principle** | Centrifugal + Dean Vortices | Centrifugal + Gravity | Physical Interception | Electrostatic Attraction |
-| **Pressure Drop** | Low, Constant [30] | Moderate to High | Increases w/ Loading | Low |
+| **Pressure Drop** | Low, Constant <sup>[30](#ref-30)</sup> | Moderate to High | Increases w/ Loading | Low |
 | **Clog Resistance** | High (Open Channel) | Moderate (Outlet clogging) | Low (Pore blocking) | High (Plate cleaning needed) |
 | **Gravity Dependence** | None (Orientation Agnostic) | High (typ. uses gravity) | None | None |
-| **Cut-Point (Efficiency)** | High for >2 µm [31] | High for >5–10 µm [32] | High for >0.3 µm | High for <1 µm |
+| **Cut-Point (Efficiency)** | High for >2 µm <sup>[31](#ref-31)</sup> | High for >5–10 µm <sup>[32](#ref-32)</sup> | High for >0.3 µm | High for <1 µm |
 | **Lunar Dust Suitability** | Excellent (Pre-filter) | Good (Pre-filter) | Poor (Primary) / Good (Final) | Excellent (Fine fraction) |
 | **Maintenance** | Passive / Regenerative | Passive / Hopper Emptying | Consumable Replacement | Plate Cleaning |
 
-**Key Insight:** The corkscrew filter sits in the "sweet spot" as a pre-filter. It protects the HEPA filter. A standalone HEPA filter on the Moon would clog in hours due to the high dust load. A corkscrew filter upstream removes 90–95% of the mass (the coarse and medium dust), allowing the HEPA to function for months or years handling only the sub-micron fines.28
+**Key Insight:** The corkscrew filter sits in the "sweet spot" as a pre-filter. It protects the HEPA filter. A standalone HEPA filter on the Moon would clog in hours due to the high dust load. A corkscrew filter upstream removes 90–95% of the mass (the coarse and medium dust), allowing the HEPA to function for months or years handling only the sub-micron fines.<sup>[28](#ref-28)</sup>
 
 ### A.7. Second and Third-Order Insights
 
@@ -503,11 +503,11 @@ For a permanent lunar outpost, "cannot be clogged" implies a system that is rege
 The 60 psi experiment introduces a thermodynamic variable that may have influenced the results. Compressing air to 60 psi heats it. Expanding it through a nozzle or filter cools it rapidly.
 *   **Moisture Risk:** If the compressed air used in the experiment contained humidity (typical of Earth air), the rapid expansion in the filter could condense water vapor. Powdered sugar is highly hygroscopic.
 *   **Risk:** The "clogging" or "caking" observed in low-pressure runs (or potentially in high-pressure runs if not careful) might not be purely mechanical, but chemical—the formation of sugar syrup or cement in the channels due to moisture.
-*   **Space Context:** Lunar air is dry, but cabin air has humidity. The "wicking" walls of the NASA design are specifically intended to handle this condensation/liquid phase.5 This feature turns a potential failure mode (condensation) into a functional capability (humidity control), allowing the filter to manage both dust and excess moisture.
+*   **Space Context:** Lunar air is dry, but cabin air has humidity. The "wicking" walls of the NASA design are specifically intended to handle this condensation/liquid phase.<sup>[5](#ref-5)</sup> This feature turns a potential failure mode (condensation) into a functional capability (humidity control), allowing the filter to manage both dust and excess moisture.
 
 **A.7.2 Acoustophoretic Hybridization**
 
-The literature suggests that helical channels are often combined with acoustophoretic separation (sound waves) in microfluidic applications.11
+The literature suggests that helical channels are often combined with acoustophoretic separation (sound waves) in microfluidic applications.<sup>[11](#ref-11)</sup>
 *   **Future Insight:** For a lunar base, combining a corkscrew filter with ultrasonic transducers could create a "solid-state" filter with no moving parts that separates particles based on compressibility as well as density. This hybrid approach could help separate biological contaminants (skin flakes) from regolith, which is useful for recycling resources and characterizing the cabin environment.
 
 **A.7.3 The "Dean Drag" Limit**
@@ -531,39 +531,39 @@ For lunar applications, the corkscrew filter offers a critical advantage: the ab
 
 ### A.10. Works Cited
 
-1.  dust mitigation: lunar air filtration with a permanent-magnet system (laf-pms), accessed November 23, 2025, https://www.lpi.usra.edu/meetings/lpsc2007/pdf/1654.pdf
-2.  HEPA Filter Testing for Life Support Systems on Artemis Lunar Missions, accessed November 23, 2025, https://ttu-ir.tdl.org/bitstreams/01236268-2dc8-46ab-a3fe-6d9d5cbd9797/download
-3.  Effects of gravity on cohesive behavior of fine powders: Implications for processing Lunar regolith - ResearchGate, accessed November 23, 2025, https://www.researchgate.net/publication/225955959_Effects_of_gravity_on_cohesive_behavior_of_fine_powders_Implications_for_processing_Lunar_regolith
-4.  How do you properly orient your filters? Explore our Filters Guide - Idex-hs.com, accessed November 23, 2025, https://www.idex-hs.com/news-events/stories-and-features/detail/orientation-of-filters
-5.  Corkscrew Filter Extracts Liquid From Air Charge - NASA Technology Transfer Program, accessed November 23, 2025, https://technology.nasa.gov/patent/MSC-TOPS-118
-6.  Corkscrew Filter Extracts Liquid from Air Charge - Tech Briefs, accessed November 23, 2025, https://www.techbriefs.com/component/content/article/49236-msc-tops-118
-7.  filtration - NASA Technology Transfer Program, accessed November 23, 2025, https://technology.nasa.gov/tags/filtration
-8.  The Physics and Manipulation of Dean Vortices in Single- and Two-Phase Flow in Curved Microchannels: A Review - PMC, accessed November 23, 2025, https://pmc.ncbi.nlm.nih.gov/articles/PMC10745399/
-9.  Numerical investigation of Dean vortex evolution in turbulent flow through 90° pipe bends, accessed November 23, 2025, https://www.frontiersin.org/journals/mechanical-engineering/articles/10.3389/fmech.2025.1405148/full
-10. Enhancing particle focusing: a comparative experimental study of modified square wave and square wave microchannels in lift and Dean vortex regimes - PubMed Central, accessed November 23, 2025, https://pmc.ncbi.nlm.nih.gov/articles/PMC10834497/
-11. Lab on a rod: Size-based particle separation and sorting in a helical channel - PMC, accessed November 23, 2025, https://pmc.ncbi.nlm.nih.gov/articles/PMC7661098/
-12. A Novel Centrifugal Filtration Device - MDPI, accessed November 23, 2025, https://www.mdpi.com/2297-8739/9/5/129
-13. In a curved channel two counter rotating Dean vortices (secondary flow)... - ResearchGate, accessed November 23, 2025, https://www.researchgate.net/figure/n-a-curved-channel-two-counter-rotating-Dean-vortices-secondary-flow-develop_fig1_233951453
-14. Size Matters: Crystal Size Analysis for the Louisiana Sugar Industry - LSU AgCenter, accessed November 23, 2025, https://www.lsuagcenter.com/profiles/lbenedict/articles/page1491324916020
-15. An Engineering Guide to Lunar Geotechnical Properties - NASA Technical Reports Server, accessed November 23, 2025, https://ntrs.nasa.gov/api/citations/20220014634/downloads/Final%20IEEE%20paper%20formatted%20footnote%20added.pdf
-16. Characterizing Detailed Grain Shape and Size Distribution Properties of Lunar Regolith, accessed November 23, 2025, https://ntrs.nasa.gov/citations/20210026714
-17. Particle Size Distribution of Lunar Soil - ResearchGate, accessed November 23, 2025, https://www.researchgate.net/publication/271358087_Particle_Size_Distribution_of_Lunar_Soil
-18. Bulk Density Guide – Understanding Material Weight & Flow, accessed November 23, 2025, https://www.bpsvibes.com/bulk-density-guide
-19. Exploration Science Projects | Lunar Regolith Simulants | JSC-1/1A - NASA • ARES, accessed November 23, 2025, https://ares.jsc.nasa.gov/projects/simulants/jsc-1-1a.html
-20. 2021 Lunar Simulant Assessment, accessed November 23, 2025, https://lsic.jhuapl.edu/Our-Work/Working-Groups/files/Lunar-Simulants/2021%20Lunar%20Simulant%20Assessment_final.pdf
-21. Continuous inertial focusing, ordering, and separation of particles in microchannels - PNAS, accessed November 23, 2025, https://www.pnas.org/doi/10.1073/pnas.0704958104
-22. Computational and Experimental Analysis of Axial Flow Cyclone Used for Intake Air Filtration in Internal Combustion Engines - MDPI, accessed November 23, 2025, https://www.mdpi.com/1996-1073/14/8/2285
-23. Simulation of Helical-Baffle Inlet Structure Cyclone Separator - MDPI, accessed November 23, 2025, https://www.mdpi.com/2297-8739/12/6/166
-24. Lunar Dust Mitigation: A Guide and Reference - NASA Technical Reports Server, accessed November 23, 2025, https://ntrs.nasa.gov/api/citations/20220018746/downloads/TP-20220018746.pdf
-25. Modeling of electrostatic and contact interaction between low-velocity lunar dust and spacecraft | EurekAlert!, accessed November 23, 2025, https://www.eurekalert.org/news-releases/1106261
-26. Forced Triboelectrification of Fine Powders in Particle Wall Collisions - Publikationsserver der TU Clausthal, accessed November 23, 2025, https://dokumente.ub.tu-clausthal.de/servlets/MCRFileNodeServlet/clausthal_derivate_00001854/minerals-12-00132.pdf
-27. 2022 Lunar Simulant Assessment, accessed November 23, 2025, https://lsic.jhuapl.edu/Our-Work/Working-Groups/files/Lunar-Simulants/2022%20Lunar%20Simulants%20Assessment%20Final.pdf
-28. Multi-Stage Filtration System | T2 Portal - NASA Technology Transfer Program, accessed November 23, 2025, https://technology.nasa.gov/patent/lew-tops-93
-29. Fine particle removal from gas stream using a helical-duct dust concentrator: Numerical study | Request PDF - ResearchGate, accessed November 23, 2025, https://www.researchgate.net/publication/333605900_Fine_particle_removal_from_gas_stream_using_a_helical-duct_dust_concentrator_Numerical_study
-30. Additively manufactured multiplexed inertial coalescence filters (Journal Article) | OSTI.GOV, accessed November 23, 2025, https://www.osti.gov/pages/biblio/1981758
-31. Effect of Inlet Air Volumetric Flow Rate on the Performance of a Two-Stage Cyclone Separator - PubMed Central, accessed November 23, 2025, https://pmc.ncbi.nlm.nih.gov/articles/PMC6644756/
-32. Understanding Industrial Cyclone Separators: Engineered for Efficient Particle Removal, accessed November 23, 2025, https://www.cecoenviro.com/understanding-industrial-cyclone-separators-engineered-for-efficient-particle-removal/
-33. Hydrodynamic mechanisms of cell and particle trapping in microfluidics - PubMed Central, accessed November 23, 2025, https://pmc.ncbi.nlm.nih.gov/articles/PMC3631262/
+1. <a id="ref-1"></a> dust mitigation: lunar air filtration with a permanent-magnet system (laf-pms), accessed November 23, 2025, https://www.lpi.usra.edu/meetings/lpsc2007/pdf/1654.pdf
+2. <a id="ref-2"></a> HEPA Filter Testing for Life Support Systems on Artemis Lunar Missions, accessed November 23, 2025, https://ttu-ir.tdl.org/bitstreams/01236268-2dc8-46ab-a3fe-6d9d5cbd9797/download
+3. <a id="ref-3"></a> Effects of gravity on cohesive behavior of fine powders: Implications for processing Lunar regolith - ResearchGate, accessed November 23, 2025, https://www.researchgate.net/publication/225955959_Effects_of_gravity_on_cohesive_behavior_of_fine_powders_Implications_for_processing_Lunar_regolith
+4. <a id="ref-4"></a> How do you properly orient your filters? Explore our Filters Guide - Idex-hs.com, accessed November 23, 2025, https://www.idex-hs.com/news-events/stories-and-features/detail/orientation-of-filters
+5. <a id="ref-5"></a> Corkscrew Filter Extracts Liquid From Air Charge - NASA Technology Transfer Program, accessed November 23, 2025, https://technology.nasa.gov/patent/MSC-TOPS-118
+6. <a id="ref-6"></a> Corkscrew Filter Extracts Liquid from Air Charge - Tech Briefs, accessed November 23, 2025, https://www.techbriefs.com/component/content/article/49236-msc-tops-118
+7. <a id="ref-7"></a> filtration - NASA Technology Transfer Program, accessed November 23, 2025, https://technology.nasa.gov/tags/filtration
+8. <a id="ref-8"></a> The Physics and Manipulation of Dean Vortices in Single- and Two-Phase Flow in Curved Microchannels: A Review - PMC, accessed November 23, 2025, https://pmc.ncbi.nlm.nih.gov/articles/PMC10745399/
+9. <a id="ref-9"></a> Numerical investigation of Dean vortex evolution in turbulent flow through 90° pipe bends, accessed November 23, 2025, https://www.frontiersin.org/journals/mechanical-engineering/articles/10.3389/fmech.2025.1405148/full
+10. <a id="ref-10"></a> Enhancing particle focusing: a comparative experimental study of modified square wave and square wave microchannels in lift and Dean vortex regimes - PubMed Central, accessed November 23, 2025, https://pmc.ncbi.nlm.nih.gov/articles/PMC10834497/
+11. <a id="ref-11"></a> Lab on a rod: Size-based particle separation and sorting in a helical channel - PMC, accessed November 23, 2025, https://pmc.ncbi.nlm.nih.gov/articles/PMC7661098/
+12. <a id="ref-12"></a> A Novel Centrifugal Filtration Device - MDPI, accessed November 23, 2025, https://www.mdpi.com/2297-8739/9/5/129
+13. <a id="ref-13"></a> In a curved channel two counter rotating Dean vortices (secondary flow)... - ResearchGate, accessed November 23, 2025, https://www.researchgate.net/figure/n-a-curved-channel-two-counter-rotating-Dean-vortices-secondary-flow-develop_fig1_233951453
+14. <a id="ref-14"></a> Size Matters: Crystal Size Analysis for the Louisiana Sugar Industry - LSU AgCenter, accessed November 23, 2025, https://www.lsuagcenter.com/profiles/lbenedict/articles/page1491324916020
+15. <a id="ref-15"></a> An Engineering Guide to Lunar Geotechnical Properties - NASA Technical Reports Server, accessed November 23, 2025, https://ntrs.nasa.gov/api/citations/20220014634/downloads/Final%20IEEE%20paper%20formatted%20footnote%20added.pdf
+16. <a id="ref-16"></a> Characterizing Detailed Grain Shape and Size Distribution Properties of Lunar Regolith, accessed November 23, 2025, https://ntrs.nasa.gov/citations/20210026714
+17. <a id="ref-17"></a> Particle Size Distribution of Lunar Soil - ResearchGate, accessed November 23, 2025, https://www.researchgate.net/publication/271358087_Particle_Size_Distribution_of_Lunar_Soil
+18. <a id="ref-18"></a> Bulk Density Guide – Understanding Material Weight & Flow, accessed November 23, 2025, https://www.bpsvibes.com/bulk-density-guide
+19. <a id="ref-19"></a> Exploration Science Projects | Lunar Regolith Simulants | JSC-1/1A - NASA • ARES, accessed November 23, 2025, https://ares.jsc.nasa.gov/projects/simulants/jsc-1-1a.html
+20. <a id="ref-20"></a> 2021 Lunar Simulant Assessment, accessed November 23, 2025, https://lsic.jhuapl.edu/Our-Work/Working-Groups/files/Lunar-Simulants/2021%20Lunar%20Simulant%20Assessment_final.pdf
+21. <a id="ref-21"></a> Continuous inertial focusing, ordering, and separation of particles in microchannels - PNAS, accessed November 23, 2025, https://www.pnas.org/doi/10.1073/pnas.0704958104
+22. <a id="ref-22"></a> Computational and Experimental Analysis of Axial Flow Cyclone Used for Intake Air Filtration in Internal Combustion Engines - MDPI, accessed November 23, 2025, https://www.mdpi.com/1996-1073/14/8/2285
+23. <a id="ref-23"></a> Simulation of Helical-Baffle Inlet Structure Cyclone Separator - MDPI, accessed November 23, 2025, https://www.mdpi.com/2297-8739/12/6/166
+24. <a id="ref-24"></a> Lunar Dust Mitigation: A Guide and Reference - NASA Technical Reports Server, accessed November 23, 2025, https://ntrs.nasa.gov/api/citations/20220018746/downloads/TP-20220018746.pdf
+25. <a id="ref-25"></a> Modeling of electrostatic and contact interaction between low-velocity lunar dust and spacecraft | EurekAlert!, accessed November 23, 2025, https://www.eurekalert.org/news-releases/1106261
+26. <a id="ref-26"></a> Forced Triboelectrification of Fine Powders in Particle Wall Collisions - Publikationsserver der TU Clausthal, accessed November 23, 2025, https://dokumente.ub.tu-clausthal.de/servlets/MCRFileNodeServlet/clausthal_derivate_00001854/minerals-12-00132.pdf
+27. <a id="ref-27"></a> 2022 Lunar Simulant Assessment, accessed November 23, 2025, https://lsic.jhuapl.edu/Our-Work/Working-Groups/files/Lunar-Simulants/2022%20Lunar%20Simulants%20Assessment%20Final.pdf
+28. <a id="ref-28"></a> Multi-Stage Filtration System | T2 Portal - NASA Technology Transfer Program, accessed November 23, 2025, https://technology.nasa.gov/patent/lew-tops-93
+29. <a id="ref-29"></a> Fine particle removal from gas stream using a helical-duct dust concentrator: Numerical study | Request PDF - ResearchGate, accessed November 23, 2025, https://www.researchgate.net/publication/333605900_Fine_particle_removal_from_gas_stream_using_a_helical-duct_dust_concentrator_Numerical_study
+30. <a id="ref-30"></a> Additively manufactured multiplexed inertial coalescence filters (Journal Article) | OSTI.GOV, accessed November 23, 2025, https://www.osti.gov/pages/biblio/1981758
+31. <a id="ref-31"></a> Effect of Inlet Air Volumetric Flow Rate on the Performance of a Two-Stage Cyclone Separator - PubMed Central, accessed November 23, 2025, https://pmc.ncbi.nlm.nih.gov/articles/PMC6644756/
+32. <a id="ref-32"></a> Understanding Industrial Cyclone Separators: Engineered for Efficient Particle Removal, accessed November 23, 2025, https://www.cecoenviro.com/understanding-industrial-cyclone-separators-engineered-for-efficient-particle-removal/
+33. <a id="ref-33"></a> Hydrodynamic mechanisms of cell and particle trapping in microfluidics - PubMed Central, accessed November 23, 2025, https://pmc.ncbi.nlm.nih.gov/articles/PMC3631262/
 
 ---
 *End of Document*
