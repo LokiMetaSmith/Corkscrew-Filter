@@ -94,9 +94,10 @@ class TestFoamDriverCloud(unittest.TestCase):
             self.assertNotIn("sourceTerms", content)
 
             # Verify Robust Patch Interactions
-            self.assertIn("defaultFaces", content)
             self.assertIn('"(.*)"', content)
             self.assertIn("type rebound;", content)
+            self.assertIn("e    0.97;", content)
+            self.assertIn("mu   0.09;", content)
 
     @patch('optimizer.foam_driver.run_command_with_spinner')
     @patch('optimizer.foam_driver.FoamDriver._print_log_tail')
