@@ -6,6 +6,8 @@ A 3D-printable inertial filter for separating particles from a fluid stream, bas
 
 This project combines advanced fluid dynamics principles with modern AI-driven engineering to optimize the design of inertial filters.
 
+See the [TECHNICAL_REPORT.md](https://github.com/LokiMetaSmith/Corkscrew-Filter/blob/main/TECHNICAL_REPORT.md) for a detalied explination. 
+
 ### Physics of Inertial Separation
 
 The core mechanism of the Thirsty Corkscrew is **inertial separation**. As fluid traverses the helical channel, it is subjected to rapid changes in direction. This induces specific forces that separate particles based on mass and density:
@@ -21,8 +23,6 @@ The design of such a filter involves a complex trade-off between **separation ef
 *   **Virtual Engineer**: The AI (Google Gemini) does not merely guess parameters. It acts as an engineer, analyzing the results of previous CFD simulations. It uses **Chain-of-Thought** reasoning to hypothesize why a design performed poorly (e.g., "The pressure drop is too high, likely due to the twist rate being too aggressive") and proposes logical adjustments.
 *   **Physics-Informed**: The AI is explicitly prompted with the governing physics equations. It understands that increasing the helix radius will lower the centrifugal force, or that tightening the pitch will increase capture efficiency at the cost of higher backpressure.
 *   **Multimodal Feedback**: The agent is not limited to numbers. It analyzes **3D renderings** of the generated geometry to detect visual defects—such as disconnected helical segments or unprintable wall thicknesses—that might not be immediately obvious from numerical simulation data alone.
-
-See the [TECHNICAL_REPORT.md](https://github.com/LokiMetaSmith/Corkscrew-Filter/blob/main/TECHNICAL_REPORT.md) for a detalied explination. 
 
 ## Getting Started: Generating the 3D Models
 
