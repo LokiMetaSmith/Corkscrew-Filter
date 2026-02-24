@@ -93,8 +93,9 @@ class TestFoamDriverCloud(unittest.TestCase):
             # Verify SIGFPE Fix: Ensure sourceTerms is removed
             self.assertNotIn("sourceTerms", content)
 
-            # Verify Walls Patch is added
-            self.assertIn("walls", content)
+            # Verify Robust Patch Interactions
+            self.assertIn("defaultFaces", content)
+            self.assertIn('"(.*)"', content)
             self.assertIn("type rebound;", content)
 
     @patch('optimizer.foam_driver.run_command_with_spinner')

@@ -768,7 +768,7 @@ patches
             {
                 type stick;
             }
-            walls
+            defaultFaces
             {
                 type rebound;
             }
@@ -779,6 +779,10 @@ patches
             inlet
             {
                 type escape;
+            }
+            "(.*)"
+            {
+                type rebound;
             }"""
 
         patch_list_str = "corkscrew inlet outlet"
@@ -809,6 +813,14 @@ patches
             inlet
             {
                 type escape;
+            }
+            defaultFaces
+            {
+                type rebound;
+            }
+            "(.*)"
+            {
+                type rebound;
             }"""
 
         content = f"""/*--------------------------------*- C++ -*----------------------------------*\\
