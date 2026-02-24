@@ -22,6 +22,8 @@ The design of such a filter involves a complex trade-off between **separation ef
 *   **Physics-Informed**: The AI is explicitly prompted with the governing physics equations. It understands that increasing the helix radius will lower the centrifugal force, or that tightening the pitch will increase capture efficiency at the cost of higher backpressure.
 *   **Multimodal Feedback**: The agent is not limited to numbers. It analyzes **3D renderings** of the generated geometry to detect visual defects—such as disconnected helical segments or unprintable wall thicknesses—that might not be immediately obvious from numerical simulation data alone.
 
+See the [TECHNICAL_REPORT.md](https://github.com/LokiMetaSmith/Corkscrew-Filter/blob/main/TECHNICAL_REPORT.md) for a detalied explination. 
+
 ## Getting Started: Generating the 3D Models
 
 The 3D models for the filter are generated using OpenSCAD.
