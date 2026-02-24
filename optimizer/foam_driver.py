@@ -746,10 +746,10 @@ patches
             type            patchInjection;
             patch           inlet;
             parcelBasisType mass;
-            massFlowRate    {mass_flow_rate:.6e};
+            massTotal       {mass_flow_rate:.6e};
             duration        1;
             SOI             0;
-            // parcelsPerSecond and nParticle removed for mass basis robustness
+            parcelsPerSecond 5000;
             flowRateProfile constant 1;
             U0              (0 0 5);
             sizeDistribution
