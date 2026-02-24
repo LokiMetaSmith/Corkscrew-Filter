@@ -727,6 +727,7 @@ patches
         """
         # Sizes to simulate (in meters)
         sizes_um = [5, 10, 20, 50, 100]
+        rho0_val = 3100  # Moon Dust density
 
         injections = ""
         for d_um in sizes_um:
@@ -734,17 +735,21 @@ patches
             # Use distinct model names for parsing
             model_name = f"model_{d_um}um"
 
+            # Calculate mass flow rate for 5000 particles/s
+            # Mass per particle = rho * Volume = rho * (4/3 * pi * (r)^3)
+            volume = (4.0/3.0) * math.pi * ((d_m / 2.0)**3)
+            mass_flow_rate = rho0_val * volume * 5000
+
             injections += f"""
         {model_name}
         {{
             type            patchInjection;
             patch           inlet;
-            parcelBasisType number;
-            parcelsPerSecond 5000; // Total ~25000/s across 5 bins
+            parcelBasisType mass;
+            massFlowRate    {mass_flow_rate:.6e};
             duration        1;
             SOI             0;
-            nParticle       1;
-            // massFlowRate removed for number basis to prevent OpenFOAM v2406 validation errors
+            // parcelsPerSecond and nParticle removed for mass basis robustness
             flowRateProfile constant 1;
             U0              (0 0 5);
             sizeDistribution
@@ -852,7 +857,7 @@ solution
 constantVolume      false;
 
 // Moon Dust Properties (Basaltic Regolith)
-rho0            3100; // kg/m^3 (approx. 3.1 g/cm^3)
+rho0            {rho0_val}; // kg/m^3 (approx. 3.1 g/cm^3)
 
 // Young's Modulus: ~70 GPa (Basalt)
 // Poisson's Ratio: 0.25 (Basalt)

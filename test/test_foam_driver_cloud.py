@@ -25,7 +25,7 @@ class TestFoamDriverCloud(unittest.TestCase):
         self.patcher1.stop()
         self.patcher2.stop()
 
-    def test_generate_kinematicCloudProperties_no_massFlowRate(self):
+    def test_generate_kinematicCloudProperties_mass_basis(self):
         # Mock file writing
         # We need to mock 'builtins.open' but only for the specific file?
         # Or globally for this test.
@@ -34,6 +34,9 @@ class TestFoamDriverCloud(unittest.TestCase):
 
         # We also need to patch os.makedirs and os.path.join to avoid filesystem errors
         # But verify_fix.py showed that generate_kinematicCloudProperties calls os.path.join
+
+        # We also need to patch shutil because backup/restore logic might trigger?
+        # No, generate_kinematicCloudProperties writes directly.
 
         with patch('builtins.open', m_open), \
              patch('os.makedirs'), \
@@ -44,29 +47,49 @@ class TestFoamDriverCloud(unittest.TestCase):
             # Get the content written to the file
             # m_open() returns a mock file object.
             # We want to check all writes to it.
+            # Note: mock_open creates a new mock on every call() unless reused.
+            # But the 'm_open' object itself acts as the opener.
+            # The context manager returns the file handle.
+
+            # Retrieve the file handle that was returned by open() context manager
+            # The structure of mock_open return value is tricky if multiple opens happen.
+            # But here only one file is opened inside the method.
 
             handle = m_open()
-            # It's possible multiple write calls were made.
-            # Or one big write.
-            # In foam_driver.py: with open(...) as f: f.write(content)
 
             # Check if write was called
             if not handle.write.called:
-                self.fail("File write not called")
+                # Try getting calls from m_open directly if handle fails
+                # But handle usually works.
+                # Debugging: check calls on m_open
+                pass
 
             # Combine all written content
-            content = "".join(call.args[0] for call in handle.write.call_args_list)
+            # Usually handle.write calls contain the content
+            content = ""
+            for call in handle.write.call_args_list:
+                args, _ = call
+                if args:
+                   content += args[0]
 
-            # Assertions
-            self.assertIn("parcelBasisType number;", content)
-            self.assertIn("U0", content)
+            if not content:
+                 # If write wasn't called on the handle, fail
+                 self.fail("File write not called or empty content.")
 
-            # Critical Assertion: massFlowRate should NOT be active
-            self.assertNotIn("\n            massFlowRate", content)
-            self.assertNotIn(";            massFlowRate", content)
+            # Assertions for Mass Basis Fix
+            self.assertIn("parcelBasisType mass;", content)
+            self.assertIn("massFlowRate", content)
+            self.assertIn("rho0", content)
 
-            # Check for the comment explaining removal
-            self.assertIn("// massFlowRate removed", content)
+            # Verify massFlowRate is calculated and formatted (e.g. scientific notation)
+            # We check for a number.
+            import re
+            self.assertTrue(re.search(r"massFlowRate\s+[\d\.e\-\+]+;", content), "massFlowRate value not found")
+
+            # Verify problematic entries are removed (ensure they are not active keys)
+            # Use regex to avoid matching comments (e.g. "// nParticle removed")
+            self.assertFalse(re.search(r"^\s*nParticle\s+", content, re.MULTILINE), "nParticle parameter found active")
+            self.assertFalse(re.search(r"^\s*parcelsPerSecond\s+", content, re.MULTILINE), "parcelsPerSecond parameter found active")
 
     @patch('optimizer.foam_driver.run_command_with_spinner')
     @patch('optimizer.foam_driver.FoamDriver._print_log_tail')
