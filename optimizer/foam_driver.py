@@ -193,8 +193,7 @@ class FoamDriver:
         except subprocess.CalledProcessError as e:
             if not ignore_error:
                 print(f"\nError executing {' '.join(cmd)}: {e}")
-                if self.verbose:
-                    self._print_log_tail(target_log)
+                self._print_log_tail(target_log)
                 return False
             return False
         except Exception as e:
@@ -745,7 +744,7 @@ patches
             duration        1;
             SOI             0;
             nParticle       1;
-            massFlowRate    2e-6; // Approximate
+            // massFlowRate removed for number basis to prevent OpenFOAM v2406 validation errors
             flowRateProfile constant 1;
             U0              (0 0 5);
             sizeDistribution
