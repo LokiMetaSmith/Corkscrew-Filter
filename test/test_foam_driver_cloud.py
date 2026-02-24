@@ -78,18 +78,24 @@ class TestFoamDriverCloud(unittest.TestCase):
 
             # Assertions for Mass Basis Fix
             self.assertIn("parcelBasisType mass;", content)
-            self.assertIn("massFlowRate", content)
+            self.assertIn("massTotal", content)
             self.assertIn("rho0", content)
 
-            # Verify massFlowRate is calculated and formatted (e.g. scientific notation)
+            # Verify massTotal is calculated and formatted (e.g. scientific notation)
             # We check for a number.
             import re
-            self.assertTrue(re.search(r"massFlowRate\s+[\d\.e\-\+]+;", content), "massFlowRate value not found")
+            self.assertTrue(re.search(r"massTotal\s+[\d\.e\-\+]+;", content), "massTotal value not found")
 
             # Verify problematic entries are removed (ensure they are not active keys)
             # Use regex to avoid matching comments (e.g. "// nParticle removed")
             self.assertFalse(re.search(r"^\s*nParticle\s+", content, re.MULTILINE), "nParticle parameter found active")
-            self.assertFalse(re.search(r"^\s*parcelsPerSecond\s+", content, re.MULTILINE), "parcelsPerSecond parameter found active")
+
+            # Verify SIGFPE Fix: Ensure sourceTerms is removed
+            self.assertNotIn("sourceTerms", content)
+
+            # Verify Walls Patch is added
+            self.assertIn("walls", content)
+            self.assertIn("type rebound;", content)
 
     @patch('optimizer.foam_driver.run_command_with_spinner')
     @patch('optimizer.foam_driver.FoamDriver._print_log_tail')

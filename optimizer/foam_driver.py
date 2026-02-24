@@ -768,6 +768,10 @@ patches
             {
                 type stick;
             }
+            walls
+            {
+                type rebound;
+            }
             outlet
             {
                 type escape;
@@ -843,14 +847,6 @@ solution
     integrationSchemes
     {{
         U               Euler;
-    }}
-
-    sourceTerms
-    {{
-        schemes
-        {{
-            U               explicit 1;
-        }}
     }}
 }}
 
