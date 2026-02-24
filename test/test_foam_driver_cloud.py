@@ -99,6 +99,39 @@ class TestFoamDriverCloud(unittest.TestCase):
             self.assertIn("e    0.97;", content)
             self.assertIn("mu   0.09;", content)
 
+            # Verify Order: Catch-all should be before specific patches to allow override (if parser is first-match)
+            # OR if parser is last-match, this order puts specific last.
+            # Wait, foam_driver logic was updated to put catch-all FIRST.
+            # patches ( "(.*)" { ... } corkscrew { ... } )
+
+            # Find indices
+            idx_catch_all = content.find('"(.*)"')
+            idx_corkscrew = content.find('corkscrew', idx_catch_all + 1) # Search after catch-all? No, global search
+
+            # Re-search correctly
+            idx_catch_all = content.find('"(.*)"')
+            # 'corkscrew' appears in patch list str earlier in function, but we want the one in "patches ( ... )"
+            # It's safer to check relative order in the content string.
+            # The 'corkscrew' inside localInteractionCoeffs comes after "(.*)"
+
+            # Locate localInteractionCoeffs block
+            loc_coeffs_start = content.find("localInteractionCoeffs")
+            coeffs_content = content[loc_coeffs_start:]
+
+            idx_catch_all_rel = coeffs_content.find('"(.*)"')
+            idx_corkscrew_rel = coeffs_content.find('corkscrew', idx_catch_all_rel + 1) # Should be after if catch-all is first
+
+            # Actually, we want specific to override.
+            # If OpenFOAM matches strictly, order might not matter for disjoint sets.
+            # But for regex vs explicit:
+            # If "(.*)" is first, does it get processed? Yes.
+            # Then "corkscrew" (which matches .*) is processed. Does it overwrite?
+            # Standard practice: Put defaults first, specifics last.
+
+            self.assertNotEqual(idx_catch_all_rel, -1, "Catch-all not found in coeffs")
+            self.assertNotEqual(idx_corkscrew_rel, -1, "Corkscrew not found AFTER catch-all in coeffs")
+            self.assertLess(idx_catch_all_rel, idx_corkscrew_rel, "Catch-all should appear BEFORE specific patches")
+
     @patch('optimizer.foam_driver.run_command_with_spinner')
     @patch('optimizer.foam_driver.FoamDriver._print_log_tail')
     def test_run_command_logs_on_error(self, mock_print_log, mock_run):

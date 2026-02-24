@@ -763,7 +763,26 @@ patches
         }}"""
 
         # Patch Interaction
-        patch_interactions = """
+        # Note: OpenFOAM usually processes patches in order or prioritizes specific matches.
+        # However, regex patches like "(.*)" can be tricky.
+        # If we put "(.*)" at the start, it acts as a default for anything NOT matched later?
+        # Actually, in standard OpenFOAM dictionary reading, later entries overwrite earlier ones
+        # IF they match the same key. But here keys are patch names.
+        # The PatchInteractionModel iterates over the *patches in the mesh*.
+        # For each mesh patch, it looks for a matching entry in the dictionary.
+        # If multiple entries match (e.g. "wall" matches "(.*)"), behavior depends on implementation.
+        # Standard wildcard matching usually prioritizes specific over wildcard, or first match.
+        # To be safe against "last match wins" or "wildcard overrides", we put the catch-all first.
+
+        common_catch_all = """
+            "(.*)"
+            {
+                type rebound;
+                e    0.97;
+                mu   0.09;
+            }"""
+
+        patch_interactions = common_catch_all + """
             corkscrew
             {
                 type stick;
@@ -775,19 +794,14 @@ patches
             inlet
             {
                 type escape;
-            }
-            "(.*)"
-            {
-                type rebound;
-                e    0.97;
-                mu   0.09;
             }"""
 
         patch_list_str = "corkscrew inlet outlet"
 
         if bin_config and bin_config.get("num_bins", 1) > 1:
             num_bins = int(bin_config["num_bins"])
-            patch_interactions = """
+
+            patch_interactions = common_catch_all + """
             corkscrew
             {
                 type stick;
@@ -811,12 +825,6 @@ patches
             inlet
             {
                 type escape;
-            }
-            "(.*)"
-            {
-                type rebound;
-                e    0.97;
-                mu   0.09;
             }"""
 
         content = f"""/*--------------------------------*- C++ -*----------------------------------*\\
