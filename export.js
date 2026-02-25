@@ -108,6 +108,7 @@ async function main() {
     let inputDirect = '';
     let globalParams = [];
     let generatePng = false;
+    let paramsFile = null;
 
     // Check for PNG flag
     if (args.includes('--png')) {
@@ -122,6 +123,21 @@ async function main() {
             outputDirect = args[oIndex + 1];
         } else {
             console.error("Error: -o requires an output filename.");
+            process.exit(1);
+        }
+    }
+
+    // Check for Custom Parameters File (--params)
+    if (args.includes('--params')) {
+        const pIndex = args.indexOf('--params');
+        if (pIndex + 1 < args.length) {
+            paramsFile = args[pIndex + 1];
+            if (!fs.existsSync(paramsFile)) {
+                console.error(`Error: Custom parameter file not found: ${paramsFile}`);
+                process.exit(1);
+            }
+        } else {
+            console.error("Error: --params requires a filename.");
             process.exit(1);
         }
     }
@@ -160,6 +176,7 @@ async function main() {
             if (args[i] === '-o') { i++; continue; }
             if (args[i] === '-D') { i++; continue; }
             if (args[i] === '--png') { continue; }
+            if (args[i] === '--params') { i++; continue; }
             if (!args[i].startsWith('-')) {
                 inputDirect = args[i];
                 break;
@@ -186,10 +203,13 @@ async function main() {
         }
     }
 
-    async function renderFile(inputFile, outputFile, params = []) {
+    async function renderFile(inputFile, outputFile, params = [], customParamsFile = null) {
         console.log(`Rendering ${inputFile} -> ${outputFile}...`);
         if (params.length > 0) {
              console.log(`  Params: ${params.join(' ')}`);
+        }
+        if (customParamsFile) {
+            console.log(`  Using custom params file: ${customParamsFile}`);
         }
 
         // Create fresh instance for each render to avoid memory issues/state pollution
@@ -239,6 +259,30 @@ async function main() {
         const rootFiles = fs.readdirSync('.').filter(f => f.endsWith('.scad'));
         for(const f of rootFiles) {
             instance.FS.writeFile('/' + f, fs.readFileSync(f));
+        }
+
+        // Override config.scad if --params is provided
+        // We append the custom params to the existing config.scad to preserve structural definitions
+        // and allow the params file to override values.
+        if (customParamsFile) {
+            try {
+                const baseConfig = fs.readFileSync(path.join(CONFIGS_DIR, '../config.scad')); // Assuming config.scad is in root
+                const paramsContent = fs.readFileSync(customParamsFile);
+                const combinedConfig = Buffer.concat([baseConfig, Buffer.from('\n// --- Custom Parameters Injection ---\n'), paramsContent]);
+
+                instance.FS.writeFile('/config.scad', combinedConfig);
+                console.log(`  Overwrote /config.scad with base config + content from ${customParamsFile}`);
+            } catch (e) {
+                console.error(`  Failed to load custom params file or base config: ${e.message}`);
+                // Fallback: Try just the params file if base fails (unlikely)
+                try {
+                     const paramsContent = fs.readFileSync(customParamsFile);
+                     instance.FS.writeFile('/config.scad', paramsContent);
+                     console.log(`  Fallback: Overwrote /config.scad with ONLY content from ${customParamsFile}`);
+                } catch(e2) {
+                     return false;
+                }
+            }
         }
 
         // Handle Input File
@@ -295,7 +339,7 @@ async function main() {
             console.error("No input file specified.");
             process.exit(1);
         }
-        const success = await renderFile(inputDirect, outputDirect, globalParams);
+        const success = await renderFile(inputDirect, outputDirect, globalParams, paramsFile);
         if (success && generatePng) {
             await generatePngs(outputDirect);
         }
@@ -317,7 +361,7 @@ async function main() {
             const inputPath = path.join(CONFIGS_DIR, file);
             const outputPath = path.join(OUTPUT_DIR, file.replace('.scad', '.stl'));
 
-            const success = await renderFile(inputPath, outputPath, globalParams);
+            const success = await renderFile(inputPath, outputPath, globalParams, paramsFile);
             if (success) {
                 successCount++;
                 if (generatePng) {
