@@ -6,6 +6,7 @@ import re
 import math
 import sys
 import contextlib
+import shlex
 import numpy as np
 from utils import run_command_with_spinner
 
@@ -160,7 +161,7 @@ class FoamDriver:
             "-w", container_workdir,
         ] + uid_gid_args + [
             self.docker_image,
-            "/bin/bash", "-lc", f"cd {container_workdir} && " + " ".join(cmd)
+            "/bin/bash", "-lc", f"cd {container_workdir} && " + shlex.join(cmd)
         ]
 
         return container_cmd
