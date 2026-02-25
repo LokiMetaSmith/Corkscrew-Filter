@@ -54,6 +54,7 @@ tube_wall_mm = 1;                // The wall thickness of the tube. Used to calc
 tube_length_override = 0;        // Custom length for the visualized tube (0 = auto/match component).
 insert_length_mm = 50 ;      // The total length of the filter insert from end to end.
 num_bins = 3;                    // The number of separate helical screw segments in the modular assembly.
+cfd_shape = "circle";            // Shape of the fluid domain for CFD ["circle", "square", "hex"].
 
 // --- Helical Screw Parameters ---
 number_of_complete_revolutions = 1; // How many full 360-degree turns the screw makes over its total length.

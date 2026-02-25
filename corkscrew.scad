@@ -62,11 +62,14 @@ module GenerateSelectedPart() {
             tube_wall = tube_wall_mm
         );
     } else if (target_part == "inlet_cap") {
-        InletCap(tube_od_mm - 2 * tube_wall_mm, insert_length_mm);
+        shape = is_undef(cfd_shape) ? "circle" : cfd_shape;
+        InletCap(tube_od_mm - 2 * tube_wall_mm, insert_length_mm, shape);
     } else if (target_part == "outlet_cap") {
-        OutletCap(tube_od_mm - 2 * tube_wall_mm, insert_length_mm);
+        shape = is_undef(cfd_shape) ? "circle" : cfd_shape;
+        OutletCap(tube_od_mm - 2 * tube_wall_mm, insert_length_mm, shape);
     } else if (target_part == "cfd_wall") {
-        CFDWall(tube_od_mm - 2 * tube_wall_mm, insert_length_mm);
+        shape = is_undef(cfd_shape) ? "circle" : cfd_shape;
+        CFDWall(tube_od_mm - 2 * tube_wall_mm, insert_length_mm, shape);
     } else {
         echo("Error: `part_to_generate` variable is not set to a valid option.");
         echo("Please check `config.scad` and choose from the `part_options` list.");
