@@ -871,7 +871,7 @@ solution
 
     integrationSchemes
     {{
-        U               Euler;
+        U               analytical;
     }}
 }}
 
@@ -902,7 +902,7 @@ subModels
         {injections}
     }}
 
-    dispersionModel none;
+    dispersionModel StochasticDispersionRAS;
 
     patchInteractionModel localInteraction;
 
@@ -919,7 +919,12 @@ subModels
 
 cloudFunctions
 {{
-    // patchPostProcessing removed due to incompatibility with OpenFOAM v2406
+    particleCollector1
+    {{
+        type            particleCollector;
+        mode            primitive;
+        patches         ( {patch_list_str} );
+    }}
 }}
 
 // ************************************************************************* //
@@ -1228,27 +1233,6 @@ boundaryField
                     except Exception as e:
                          print(f"Error restoring {src}: {e}. You may need to manually recover from {dst}.")
 
-    def _disable_turbulence(self):
-        """
-        Sets 'turbulence off' in constant/turbulenceProperties to prevent
-        icoUncoupledKinematicParcelFoam from loading turbulence models (which may cause errors
-        like missing wallDist or fields).
-        """
-        tp_path = os.path.join(self.case_dir, "constant", "turbulenceProperties")
-        if not os.path.exists(tp_path):
-            return
-
-        with open(tp_path, 'r') as f:
-            content = f.read()
-
-        # turbulence on; -> turbulence off;
-        pattern = re.compile(r"turbulence\s+on;", re.DOTALL)
-        if pattern.search(content):
-            content = pattern.sub("turbulence      off;", content)
-
-        with open(tp_path, 'w') as f:
-            f.write(content)
-
     def _switch_fvSchemes_to_transient(self):
         """
         Switches ddtSchemes to Euler for transient particle tracking.
@@ -1283,13 +1267,20 @@ boundaryField
 
         # 2. Copy fields
         fields_to_copy = ["U", "p", "phi", "k", "epsilon", "omega", "nut"]
+
+        # Check if phi exists, if not generate it
+        phi_src = os.path.join(source_dir, "phi")
+        if not os.path.exists(phi_src):
+            print("Generating missing 'phi' field...")
+            self.run_command(["postProcess", "-func", "writePhi", "-time", str(source_time)], description="Generating phi")
+
         for field in fields_to_copy:
             src = os.path.join(source_dir, field)
             dst = os.path.join(zero_dir, field)
             if os.path.exists(src):
                 shutil.copy2(src, dst)
             elif field == "phi":
-                 print("Warning: 'phi' field missing in source time. Solver might fail.")
+                 print("Warning: 'phi' field still missing after generation attempt. Solver might fail.")
 
         # 3. Generate rho and mu (in both 0 and source_time for robustness)
         self._generate_particle_tracking_fields("0", fallback_dirs=[source_time])
@@ -1380,7 +1371,10 @@ boundaryField
             # 3. Update Configurations
             self._update_controlDict_for_particles()
             self._switch_fvSchemes_to_transient()
-            self._disable_turbulence()
+            # Turbulence is KEPT ON for StochasticDispersionRAS
+
+            # Generate wallDist for turbulence models (prevents yWall crash)
+            self.run_command(["postProcess", "-func", "wallDist"], log_file=log_file, description="Generating wallDist")
 
             # Verify carrier field (U) - helps debug SIGFPE if U is zero/NaN
             print("Verifying carrier field (U) before particle tracking...")
@@ -1545,15 +1539,15 @@ boundaryField
             # Let's try to find ANY mention of "bin_" and numbers.
             # If not found, we leave the dict empty.
 
-            # Try to parse `patchPostProcessing` file output if available
-            # Path: case/postProcessing/lagrangian/cloud/patchPostProcessing1/*/patchPostProcessing.dat
-            pp_base = os.path.join(self.case_dir, "postProcessing", "lagrangian", "cloud", "patchPostProcessing1")
+            # Try to parse `particleCollector` file output if available (replaced patchPostProcessing)
+            # Path: case/postProcessing/lagrangian/cloud/particleCollector1/*/particleCollector1.dat
+            pp_base = os.path.join(self.case_dir, "postProcessing", "lagrangian", "cloud", "particleCollector1")
             if os.path.exists(pp_base):
                  # Find latest time
                  time_dirs = glob.glob(os.path.join(pp_base, "*"))
                  if time_dirs:
                      latest_pp_dir = max(time_dirs, key=os.path.getmtime)
-                     dat_file = os.path.join(latest_pp_dir, "patchPostProcessing1.dat")
+                     dat_file = os.path.join(latest_pp_dir, "particleCollector1.dat")
                      if os.path.exists(dat_file):
                          # Format: # Time patch1 patch2 ...
                          # Data: time val1 val2 ...
