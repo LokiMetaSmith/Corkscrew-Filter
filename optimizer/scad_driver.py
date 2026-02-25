@@ -464,6 +464,66 @@ class ScadDriver:
             print(f"Error calculating internal point: {e}")
             return None
 
+    def generate_cfd_assets(self, params, output_dir, log_file=None, params_file=None):
+        """
+        Generates all STLs required for CFD: fluid, inlet, outlet, wall.
+
+        Args:
+            params (dict): Parameters for the model.
+            output_dir (str): Directory to save the STLs.
+            log_file (str): Path to log file.
+            params_file (str): Path to a SCAD parameter file to use as config.
+
+        Returns:
+            dict: Paths to the generated STLs {'fluid', 'inlet', 'outlet', 'wall'}, or None if failed.
+        """
+        # Ensure output directory exists
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
+        # 1. Main Fluid Volume
+        fluid_params = params.copy()
+        fluid_params["GENERATE_CFD_VOLUME"] = "true"
+        # Ensure correct part is selected (default to modular if not set)
+        if "part_to_generate" not in fluid_params:
+            fluid_params["part_to_generate"] = "modular_filter_assembly"
+
+        fluid_path = os.path.join(output_dir, "corkscrew_fluid.stl")
+        if not self.generate_stl(fluid_params, fluid_path, log_file, params_file):
+            print("Failed to generate fluid volume.")
+            return None
+
+        # 2. Inlet Cap
+        inlet_params = fluid_params.copy()
+        inlet_params["part_to_generate"] = "inlet_cap"
+        inlet_path = os.path.join(output_dir, "inlet.stl")
+        if not self.generate_stl(inlet_params, inlet_path, log_file, params_file):
+            print("Failed to generate inlet cap.")
+            return None
+
+        # 3. Outlet Cap
+        outlet_params = fluid_params.copy()
+        outlet_params["part_to_generate"] = "outlet_cap"
+        outlet_path = os.path.join(output_dir, "outlet.stl")
+        if not self.generate_stl(outlet_params, outlet_path, log_file, params_file):
+            print("Failed to generate outlet cap.")
+            return None
+
+        # 4. Wall
+        wall_params = fluid_params.copy()
+        wall_params["part_to_generate"] = "cfd_wall"
+        wall_path = os.path.join(output_dir, "wall.stl")
+        if not self.generate_stl(wall_params, wall_path, log_file, params_file):
+            print("Failed to generate CFD wall.")
+            return None
+
+        return {
+            "fluid": fluid_path,
+            "inlet": inlet_path,
+            "outlet": outlet_path,
+            "wall": wall_path
+        }
+
 if __name__ == "__main__":
     # Test stub
     driver = ScadDriver("corkscrew.scad")

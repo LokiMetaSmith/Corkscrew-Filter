@@ -538,11 +538,10 @@ functions
 
         return True
 
-    def _generate_topoSetDict(self, bin_config=None):
+    def _generate_topoSetDict(self, bin_config=None, skip_io=False):
         """
         Generates system/topoSetDict.
-        If bin_config is provided ({'num_bins': int, 'total_length': float}), it generates
-        bin-specific face sets.
+        skip_io: if True, skips generation of inlet/outlet face sets (assumes snappy did it).
         """
         bin_actions = ""
         if bin_config and bin_config.get("num_bins", 1) > 1:
@@ -582,6 +581,45 @@ functions
     }}
 """
 
+        io_actions = ""
+        if not skip_io:
+            io_actions = """
+    // 2. Select Inlet Faces (Bottom, Normal 0 0 -1)
+    {
+        name    inletFaces;
+        type    faceSet;
+        action  new;
+        source  normalToFace;
+        normal  (0 0 -1);
+        cos     0.8; // Tolerance (allow some deviation)
+    }
+    // Intersect with corkscrew boundary faces
+    {
+        name    inletFaces;
+        type    faceSet;
+        action  subset;
+        source  faceToFace;
+        set     corkscrewFaces;
+    }
+
+    // 3. Select Outlet Faces (Top, Normal 0 0 1)
+    {
+        name    outletFaces;
+        type    faceSet;
+        action  new;
+        source  normalToFace;
+        normal  (0 0 1);
+        cos     0.8;
+    }
+    {
+        name    outletFaces;
+        type    faceSet;
+        action  subset;
+        source  faceToFace;
+        set     corkscrewFaces;
+    }
+"""
+
         content = f"""/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
@@ -609,42 +647,7 @@ actions
         source  patchToFace;
         patch   corkscrew;
     }}
-
-    // 2. Select Inlet Faces (Bottom, Normal 0 0 -1)
-    {{
-        name    inletFaces;
-        type    faceSet;
-        action  new;
-        source  normalToFace;
-        normal  (0 0 -1);
-        cos     0.8; // Tolerance (allow some deviation)
-    }}
-    // Intersect with corkscrew boundary faces
-    {{
-        name    inletFaces;
-        type    faceSet;
-        action  subset;
-        source  faceToFace;
-        set     corkscrewFaces;
-    }}
-
-    // 3. Select Outlet Faces (Top, Normal 0 0 1)
-    {{
-        name    outletFaces;
-        type    faceSet;
-        action  new;
-        source  normalToFace;
-        normal  (0 0 1);
-        cos     0.8;
-    }}
-    {{
-        name    outletFaces;
-        type    faceSet;
-        action  subset;
-        source  faceToFace;
-        set     corkscrewFaces;
-    }}
-
+    {io_actions}
     // 4. Bin Split Actions
     {bin_actions}
 );
@@ -654,7 +657,7 @@ actions
         with open(os.path.join(self.case_dir, "system", "topoSetDict"), 'w') as f:
             f.write(content)
 
-    def _generate_createPatchDict(self, bin_config=None):
+    def _generate_createPatchDict(self, bin_config=None, skip_io=False):
         """
         Generates system/createPatchDict.
         """
@@ -673,6 +676,30 @@ actions
         constructFrom set;
         set bin_{i+1}_faces;
     }}"""
+
+        io_patches = ""
+        if not skip_io:
+            io_patches = """
+    {
+        name inlet;
+        patchInfo
+        {{
+            type patch;
+            inGroups (inletGroup);
+        }}
+        constructFrom set;
+        set inletFaces;
+    }
+    {
+        name outlet;
+        patchInfo
+        {{
+            type patch;
+            inGroups (outletGroup);
+        }}
+        constructFrom set;
+        set outletFaces;
+    }"""
 
         content = f"""/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
@@ -694,26 +721,7 @@ pointSync false;
 
 patches
 (
-    {{
-        name inlet;
-        patchInfo
-        {{
-            type patch;
-            inGroups (inletGroup);
-        }}
-        constructFrom set;
-        set inletFaces;
-    }}
-    {{
-        name outlet;
-        patchInfo
-        {{
-            type patch;
-            inGroups (outletGroup);
-        }}
-        constructFrom set;
-        set outletFaces;
-    }}
+    {io_patches}
     {bin_patches}
 );
 
@@ -954,24 +962,117 @@ cloudFunctions
                     f.write(f"\nError renaming scaled mesh: {e}\n")
             return False
 
-    def run_meshing(self, log_file=None, bin_config=None, stl_filename="corkscrew_fluid.stl"):
+    def _replace_block(self, content, block_name, new_inner_content):
+        """Helper to replace a block like geometry { ... } in a dictionary string."""
+        start_idx = content.find(block_name)
+        if start_idx == -1: return content
+
+        open_brace = content.find("{", start_idx)
+        if open_brace == -1: return content
+
+        cnt = 1
+        pos = open_brace + 1
+        while cnt > 0 and pos < len(content):
+            if content[pos] == '{': cnt += 1
+            elif content[pos] == '}': cnt -= 1
+            pos += 1
+
+        if cnt == 0:
+            before = content[:open_brace+1]
+            after = content[pos-1:]
+            return before + "\n" + new_inner_content + "\n    " + after
+        return content
+
+    def _generate_snappyHexMeshDict(self, stl_assets):
+        """
+        Updates system/snappyHexMeshDict to include all assets as geometry/patches.
+        stl_assets: {'fluid': 'f.stl', 'inlet': 'i.stl', ...}
+        """
+        geometry_str = ""
+        refinement_str = ""
+
+        # Ensure we have at least fluid
+        if not stl_assets: return
+
+        for key, filename in stl_assets.items():
+            # Determine snappy patch name
+            # fluid -> corkscrew
+            # wall -> corkscrew (merge)
+            # inlet -> inlet
+            # outlet -> outlet
+
+            patch_name = "corkscrew"
+            if key == "inlet": patch_name = "inlet"
+            elif key == "outlet": patch_name = "outlet"
+            elif key == "wall": patch_name = "corkscrew"
+
+            geometry_str += f"""
+    {filename}
+    {{
+        type triSurfaceMesh;
+        name {patch_name};
+    }}
+"""
+            # Refinement Surface
+            level = "(1 1)"
+
+            patch_info = ""
+            if key in ["inlet", "outlet"]:
+                patch_info = f"""
+            patchInfo
+            {{
+                type patch;
+                inGroups ({patch_name}Group);
+            }}"""
+
+            refinement_str += f"""
+        {patch_name}
+        {{
+            level {level};{patch_info}
+        }}
+"""
+
+        template_path = os.path.join(self.case_dir, "system", "snappyHexMeshDict.template")
+        if os.path.exists(template_path):
+            with open(template_path, 'r') as f: content = f.read()
+        else:
+            print("Error: snappyHexMeshDict.template missing")
+            return
+
+        content = self._replace_block(content, "geometry", geometry_str)
+        content = self._replace_block(content, "refinementSurfaces", refinement_str)
+
+        with open(os.path.join(self.case_dir, "system", "snappyHexMeshDict"), 'w') as f:
+            f.write(content)
+
+    def run_meshing(self, log_file=None, bin_config=None, stl_assets=None):
         """
         Runs the meshing pipeline.
-        bin_config: {'num_bins': int, 'total_length': float (mm)}
+        stl_assets: dict of filenames {'fluid': '...', 'inlet': '...', ...}
         """
-        # STL is assumed to be already scaled to meters by simulation_runner.
+        # 1. Update snappyHexMeshDict if assets provided
+        using_assets = False
+        if stl_assets and isinstance(stl_assets, dict):
+            self._generate_snappyHexMeshDict(stl_assets)
+            using_assets = True
 
-        # Generate patch creation configs
-        self._generate_topoSetDict(bin_config)
-        self._generate_createPatchDict(bin_config)
+        # 2. Generate patch creation configs
+        # Pass using_assets flag to conditionally skip inlet/outlet creation
+        self._generate_topoSetDict(bin_config, skip_io=using_assets)
+        self._generate_createPatchDict(bin_config, skip_io=using_assets)
 
         # Ensure we capture output
         # Step 1: Base Mesh
         if not self.run_command(["blockMesh"], log_file=log_file, description="Meshing (blockMesh)"): return False
+
+        # For surfaceFeatureExtract, if using assets, we might need to update that dict too?
+        # Typically checks 'corkscrew_fluid.stl'. If fluid asset has different name, might fail.
+        # But simulation_runner handles fluid name.
         if not self.run_command(["surfaceFeatureExtract"], log_file=log_file, description="Meshing (surfaceFeatureExtract)"): return False
+
         if not self.run_command(["snappyHexMesh", "-overwrite"], log_file=log_file, description="Meshing (snappyHexMesh)"): return False
 
-        # Step 2: Create Patches
+        # Step 2: Create Patches (Bin faces only if using_assets)
         if not self.run_command(["topoSet"], log_file=log_file, description="Meshing (topoSet)"): return False
         if not self.run_command(["createPatch", "-overwrite"], log_file=log_file, description="Meshing (createPatch)"): return False
 

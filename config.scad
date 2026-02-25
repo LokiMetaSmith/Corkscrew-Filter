@@ -10,7 +10,7 @@
 
 // --- 1. Model Selection ---
 // This variable controls which component is rendered.
-part_options = ["modular_filter_assembly", "hex_array_filter", "single_cell_filter", "hose_adapter_cap", "flat_end_screw", "filter_holder", "custom_coupling"];
+part_options = ["modular_filter_assembly", "hex_array_filter", "single_cell_filter", "hose_adapter_cap", "flat_end_screw", "filter_holder", "custom_coupling", "inlet_cap", "outlet_cap", "cfd_wall"];
 // We use is_undef to prevent overwriting if this file is included after variables are set.
 default_part_to_generate = part_options[0];
 
@@ -54,6 +54,7 @@ tube_wall_mm = 1;                // The wall thickness of the tube. Used to calc
 tube_length_override = 0;        // Custom length for the visualized tube (0 = auto/match component).
 insert_length_mm = 50 ;      // The total length of the filter insert from end to end.
 num_bins = 3;                    // The number of separate helical screw segments in the modular assembly.
+cfd_shape = "circle";            // Shape of the fluid domain for CFD ["circle", "square", "hex"].
 
 // --- Helical Screw Parameters ---
 number_of_complete_revolutions = 1; // How many full 360-degree turns the screw makes over its total length.
@@ -135,6 +136,7 @@ slit_axial_length_mm = 1.5;      // The height (Z-axis) of the slit cut for Cork
 slit_chamfer_height = 0.5;       // The height of the chamfer on the leading edge of the slit knife.
 
 // --- Tolerances & Fit ---
-tolerance_tube_fit = 0.2;        // Clearance between the spacers and the inner wall of the main tube.
+_tolerance_tube_fit_base = 0.2;        // Clearance between the spacers and the inner wall of the main tube.
+tolerance_tube_fit = GENERATE_CFD_VOLUME ? 0 : _tolerance_tube_fit_base; // Force 0 tolerance for CFD to seal bins
 tolerance_socket_fit = 0.4;      // Clearance for sockets and recesses, like for the inlet flange.
 tolerance_channel = 0.1;         // Extra clearance for the helical void to prevent binding during assembly.
