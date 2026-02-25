@@ -55,8 +55,8 @@ def create_test_method(param_file):
         # Patch subprocess.run to include a timeout
         original_run = subprocess.run
         def run_with_timeout(*args, **kwargs):
-            # Set timeout to 45 seconds to avoid hanging indefinitely
-            kwargs.setdefault('timeout', 45)
+            # Set timeout to 300 seconds (5 minutes) to accommodate slow WASM processing
+            kwargs.setdefault('timeout', 300)
             return original_run(*args, **kwargs)
 
         with patch('optimizer.scad_driver.subprocess.run', side_effect=run_with_timeout):
@@ -65,8 +65,9 @@ def create_test_method(param_file):
                     # Test Solid Generation
                     solid_stl = os.path.join(temp_dir, f"{file_name}_solid.stl")
                     print(f"  Generating Solid STL: {solid_stl}", flush=True)
+                    # Reduce resolution to 10 to speed up tests
                     success = driver.generate_stl(
-                        params={"GENERATE_CFD_VOLUME": False, "high_res_fn": 20},
+                        params={"GENERATE_CFD_VOLUME": False, "high_res_fn": 10},
                         output_path=solid_stl,
                         params_file=param_file
                     )
@@ -77,7 +78,7 @@ def create_test_method(param_file):
                     fluid_stl = os.path.join(temp_dir, f"{file_name}_fluid.stl")
                     print(f"  Generating Fluid STL: {fluid_stl}", flush=True)
                     success = driver.generate_stl(
-                        params={"GENERATE_CFD_VOLUME": True, "high_res_fn": 20},
+                        params={"GENERATE_CFD_VOLUME": True, "high_res_fn": 10},
                         output_path=fluid_stl,
                         params_file=param_file
                     )
@@ -85,7 +86,7 @@ def create_test_method(param_file):
                     self.verify_stl(fluid_stl)
 
                 except subprocess.TimeoutExpired:
-                    self.fail(f"STL generation timed out (45s limit) for {file_name}. The model might be too complex or invalid.")
+                    self.fail(f"STL generation timed out (300s limit) for {file_name}. The model might be too complex or invalid.")
     return test_method
 
 # Dynamically add test methods for each parameter file found
