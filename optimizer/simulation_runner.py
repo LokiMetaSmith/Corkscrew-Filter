@@ -6,7 +6,7 @@ import shutil
 from utils import Timer, get_container_memory_gb
 from parameter_validator import validate_parameters
 
-def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False, skip_cfd=False, iteration=0, reuse_mesh=False, output_prefix=None, verbose=False):
+def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False, skip_cfd=False, iteration=0, reuse_mesh=False, output_prefix=None, verbose=False, params_file=None):
     """
     Executes the full simulation pipeline:
     1. Generate Fluid Geometry (STL)
@@ -25,6 +25,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         iteration (int): The current iteration number (used for logging).
         reuse_mesh (bool): If True, skips geometry generation and meshing, using existing mesh.
         output_prefix (str): Prefix for output files (e.g. "exports/run_123"). If None, generates timestamped default.
+        params_file (str): Path to a SCAD parameter file to use as config.
 
     Returns:
         tuple: (metrics, image_paths, solid_stl_path, fluid_stl_path, vtk_zip_path)
@@ -46,10 +47,14 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
     vis_log = os.path.join(log_dir, "visualization.log")
 
     # 0. Validate Parameters
-    is_valid, error_msg = validate_parameters(params)
-    if not is_valid:
-        print(f"Parameter Validation Failed: {error_msg}")
-        return {"error": "invalid_parameters", "details": error_msg}, [], None, None, None
+    # If params_file is provided, we trust the file content (or cannot validate it easily from Python)
+    if not params_file:
+        is_valid, error_msg = validate_parameters(params)
+        if not is_valid:
+            print(f"Parameter Validation Failed: {error_msg}")
+            return {"error": "invalid_parameters", "details": error_msg}, [], None, None, None
+    else:
+        print("Skipping parameter validation due to external params file.")
 
     # 1. Generate Geometry (Fluid Volume for CFD)
     stl_path = os.path.join(foam_driver.case_dir, "constant", "triSurface", output_stl_name)
@@ -60,7 +65,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
     if not dry_run:
         if not reuse_mesh:
             with Timer("Geometry Generation"):
-                success = scad_driver.generate_stl(params, stl_path, log_file=geom_log)
+                success = scad_driver.generate_stl(params, stl_path, log_file=geom_log, params_file=params_file)
 
             if success:
                 # Scale STL to meters immediately to avoid container issues
@@ -306,7 +311,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         vis_params["high_res_fn"] = 20 # Low res enough for shape check
 
         with Timer("Visualization"):
-            png_paths = scad_driver.generate_visualization(vis_params, vis_base, log_file=vis_log)
+            png_paths = scad_driver.generate_visualization(vis_params, vis_base, log_file=vis_log, params_file=params_file)
 
         # Copy Fluid STL to output location
         if os.path.exists(stl_path):
