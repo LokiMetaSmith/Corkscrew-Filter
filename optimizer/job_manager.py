@@ -97,7 +97,7 @@ class JobManager:
         for _ in range(num_samples):
             params = {}
             for key, val in param_ranges.items():
-                if isinstance(val, (tuple, list)) and len(val) == 2 and isinstance(val[0], (int, float)):
+                if isinstance(val, tuple) and len(val) == 2 and isinstance(val[0], (int, float)):
                     # Random sample
                     if isinstance(val[0], int) and isinstance(val[1], int):
                         params[key] = random.randint(val[0], val[1])
