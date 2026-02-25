@@ -915,7 +915,7 @@ cloudFunctions
     {{
         type            particleCollector;
         mode            patch;
-        patches         ({patch_list_str});
+        patches         ( {patch_list_str} );
         polygonData     off;
     }}
 }}
@@ -1167,13 +1167,20 @@ boundaryField
 
         # 2. Copy fields
         fields_to_copy = ["U", "p", "phi", "k", "epsilon", "omega", "nut"]
+
+        # Check if phi exists, if not generate it
+        phi_src = os.path.join(source_dir, "phi")
+        if not os.path.exists(phi_src):
+            print("Generating missing 'phi' field...")
+            self.run_command(["postProcess", "-func", "writePhi", "-time", str(source_time)], description="Generating phi")
+
         for field in fields_to_copy:
             src = os.path.join(source_dir, field)
             dst = os.path.join(zero_dir, field)
             if os.path.exists(src):
                 shutil.copy2(src, dst)
             elif field == "phi":
-                 print("Warning: 'phi' field missing in source time. Solver might fail.")
+                 print("Warning: 'phi' field still missing after generation attempt. Solver might fail.")
 
         # 3. Generate rho and mu (in both 0 and source_time for robustness)
         self._generate_particle_tracking_fields("0", fallback_dirs=[source_time])
@@ -1261,18 +1268,17 @@ boundaryField
             # 2. Reset Time & Prepare Fields
             self._prepare_transient_run(latest_time)
 
-            # Generate Phi and WallDist
-            self.run_command(["postProcess", "-func", '"writePhi"'], log_file=log_file, description="Reconstructing Phi")
-            self.run_command(["postProcess", "-func", '"wallDist"'], log_file=log_file, description="Calculating Wall Distance")
-
             # 3. Update Configurations
             self._update_controlDict_for_particles()
             self._switch_fvSchemes_to_transient()
-            # Turbulence enabled for StochasticDispersionRAS
+            # Turbulence is KEPT ON for StochasticDispersionRAS
+
+            # Generate wallDist for turbulence models (prevents yWall crash)
+            self.run_command(["postProcess", "-func", "wallDist"], log_file=log_file, description="Generating wallDist")
 
             # Verify carrier field (U) - helps debug SIGFPE if U is zero/NaN
             print("Verifying carrier field (U) before particle tracking...")
-            self.run_command(["postProcess", "-func", '"minMax(U)"'], log_file=log_file, description="Verifying Field U")
+            self.run_command(["postProcess", "-func", "minMax(U)"], log_file=log_file, description="Verifying Field U")
 
             # 4. Run Solver
             return self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking")
@@ -1410,6 +1416,29 @@ boundaryField
                      metrics['particles_injected'] = total_injected_parsed
 
             # -- Parse Spatial Capture (Bin Patches) --
+            # Look for: "Patch bin_X: stick N" (if patchInteractionModel detail is enabled)
+            # OpenFOAM usually reports:
+            # "Interaction with patch bin_1: ... stick N"
+            # Or in the table?
+            # The standard table is by *Interaction Type* (escape, stick), not by Patch.
+
+            # However, if we use `patchInteractionModel localInteraction`, it might log per patch?
+            # Actually, `StandardWallInteraction` usually doesn't log per patch in the table.
+            # But the `patchInteraction` function object does.
+            # We haven't enabled `cloudFunctions` in the config yet.
+            # To get per-patch stats, we really need the `patchInteractionFields` or similar function object.
+            # OR we rely on the log if `debug` is on?
+
+            # Let's Add `patchPostProcessing` function object to `cloudFunctions` in `_generate_kinematicCloudProperties`?
+            # That's complicated to parse.
+
+            # Alternative: Assume for now we only get global, but check log for any "Patch <name>" patterns.
+            # Sometimes "Parcel fate" has a detailed table?
+            # In v2406, it's usually compact.
+
+            # Let's try to find ANY mention of "bin_" and numbers.
+            # If not found, we leave the dict empty.
+
             # Parse output from particleCollector1
             # Path: case/postProcessing/lagrangian/cloud/particleCollector1/<time>/<patchName>.dat (or similar)
             pc_base = os.path.join(self.case_dir, "postProcessing", "lagrangian", "cloud", "particleCollector1")

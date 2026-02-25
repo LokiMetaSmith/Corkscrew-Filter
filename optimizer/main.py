@@ -6,11 +6,13 @@ import subprocess
 import shutil
 import hashlib
 import sys
+import uuid
 from scad_driver import ScadDriver
 from foam_driver import FoamDriver
 from llm_agent import LLMAgent
 from data_store import DataStore
 from simulation_runner import run_simulation
+from job_manager import JobManager
 from constraints import CONSTRAINTS
 try:
     from scoring import calculate_score
@@ -43,6 +45,7 @@ def main():
     parser.add_argument("--batch-size", type=int, default=5, help="Number of parameter sets to generate per LLM call")
     parser.add_argument("--no-cleanup", action="store_true", help="Disable cleanup of artifacts (STLs, images) for non-top runs")
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output (e.g. error logs)")
+    parser.add_argument("--parallel-workers", type=int, default=0, help="Number of parallel worker processes to spawn (0 = sequential)")
     args = parser.parse_args()
 
     # Parse iterations argument
@@ -64,18 +67,17 @@ def main():
     scad = ScadDriver(args.scad_file)
     foam = FoamDriver(args.case_dir, container_engine=args.container_engine, num_processors=args.cpus, verbose=args.verbose)
 
-    # Handle --no-llm logic: explicitly disable by unsetting env var
+    # Handle --no-llm logic
     if args.no_llm and "GEMINI_API_KEY" in os.environ:
         print("Explicitly disabling LLM due to --no-llm flag.")
         del os.environ["GEMINI_API_KEY"]
 
-    agent = LLMAgent() # Expects GEMINI_API_KEY env var
+    agent = LLMAgent()
     store = DataStore()
+    manager = JobManager(store)
 
     # Create artifacts directory
-    artifacts_dir = "artifacts"
-    os.makedirs(artifacts_dir, exist_ok=True)
-    # Ensure exports directory exists
+    os.makedirs("artifacts", exist_ok=True)
     os.makedirs("exports", exist_ok=True)
 
     # Get git commit
@@ -105,7 +107,7 @@ def main():
     # Load History & Populate Visited Set
     print("Loading history from data store...")
     full_history = store.load_history()
-    agent.history = full_history # Pre-load agent history
+    agent.history = full_history
 
     visited_params = set()
     for run in full_history:
@@ -113,22 +115,17 @@ def main():
             visited_params.add(get_params_hash(run["parameters"]))
 
     print(f"Loaded {len(full_history)} past runs. Found {len(visited_params)} unique parameter sets.")
+    print(f"Starting optimization loop... (Target: {max_iterations} iterations, Parallel Workers: {args.parallel_workers})")
 
-    print(f"Starting optimization loop... (Target: {max_iterations} iterations, Infinite: {infinite_mode})")
-
-    # Queue logic
     parameter_queue = []
 
-    # If we have no history, start with default params
-    # If we have history, we can start by asking LLM (queue empty) OR verifying default hasn't been run.
-    # To keep it simple: Start with default params if they haven't been run.
+    # Initial seed
     if get_params_hash(initial_params) not in visited_params:
         parameter_queue.append(initial_params)
 
-    # Keep track of the last valid run's images to feed to LLM
     last_run_images = []
-
     i = 0
+
     while True:
         if not infinite_mode and i >= max_iterations:
             break
@@ -139,10 +136,6 @@ def main():
         if not parameter_queue:
             print(f"Parameter queue empty. Requesting {args.batch_size} new sets from LLM...")
 
-            # Determine images to send (from last successful run in history if available)
-            # 'last_run_images' tracks the current session, but if we just started, we might want from history?
-            # For now, rely on session variable or empty.
-
             campaign_params = agent.suggest_campaign(
                 history=full_history,
                 constraints=CONSTRAINTS,
@@ -150,107 +143,171 @@ def main():
                 image_paths=last_run_images
             )
 
-            # Check for stop signal (wrapped in list or dict?)
-            # suggest_campaign returns a list of dicts. If one has stop_opt, handle it.
             if campaign_params and campaign_params[0].get("stop_optimization") is True:
-                print("\n>>> OPTIMIZATION COMPLETE: LLM signaled stop (Success criteria met). <<<")
+                print("\n>>> OPTIMIZATION COMPLETE: LLM signaled stop. <<<")
                 break
 
             if campaign_params:
                 print(f"LLM returned {len(campaign_params)} parameter sets.")
-                parameter_queue.extend(campaign_params)
+                # Filter duplicates immediately
+                added = 0
+                for p in campaign_params:
+                     if get_params_hash(p) not in visited_params:
+                         parameter_queue.append(p)
+                         added += 1
+                     else:
+                         print("Skipping duplicate suggested by LLM.")
+                if added == 0:
+                    print("All suggestions were duplicates.")
             else:
-                print("LLM failed to return valid parameters. Falling back to random generation.")
-                # Generate 1 random set to keep going
+                print("LLM failed/fallback. Generating random.")
                 base_params = full_history[-1]["parameters"] if full_history else initial_params
                 random_params = agent._generate_random_parameters(base_params, CONSTRAINTS)
-                parameter_queue.append(random_params)
+                if get_params_hash(random_params) not in visited_params:
+                    parameter_queue.append(random_params)
 
-        # Pop next parameters
         if not parameter_queue:
-            print("Error: Parameter queue is empty after refill attempt. Aborting loop to prevent infinite error spin.")
+            print("Queue empty after refill. Retrying next loop (or breaking if strictly limited).")
+            # Force random if stuck?
+            # For now, break to avoid infinite loop of nothing.
             break
 
-        current_params = parameter_queue.pop(0)
+        # === EXECUTION PHASE ===
 
-        # Deduplication Check
-        param_hash = get_params_hash(current_params)
-        if param_hash in visited_params:
-            print(f"Skipping duplicate parameters (Hash: {param_hash}).")
-            # If queue is empty, we'll hit refill next loop. If not, we just take next.
-            continue
+        if args.parallel_workers > 0:
+            # Parallel Execution Strategy
+            print(f"Parallel Mode: Processing {len(parameter_queue)} items with {args.parallel_workers} workers.")
 
-        print(f"Testing parameters: {current_params}")
-        visited_params.add(param_hash)
+            current_batch_ids = []
 
-        # Generate Run ID and Output Prefix
-        # Use timestamp to ensure uniqueness
-        run_timestamp = time.time()
-        run_id_hash = hashlib.md5(f"{i}_{run_timestamp}".encode()).hexdigest()
-        run_id_short = run_id_hash[:8]
-        output_prefix = os.path.join("exports", f"run_{run_id_short}")
+            # 1. Submit all queue items to JobManager
+            while parameter_queue:
+                params = parameter_queue.pop(0)
+                phash = get_params_hash(params)
+                visited_params.add(phash)
 
-        # Run Simulation via Runner
-        # output_stl is strictly 'corkscrew_fluid.stl' for OpenFOAM compatibility
-        metrics, png_paths, solid_stl_path, fluid_stl_path, vtk_zip_path = run_simulation(
-            scad,
-            foam,
-            current_params,
-            output_stl_name=args.output_stl,
-            dry_run=args.dry_run,
-            skip_cfd=args.skip_cfd,
-            iteration=i,
-            reuse_mesh=args.reuse_mesh,
-            output_prefix=output_prefix,
-            verbose=args.verbose
-        )
+                job_id = manager.create_job(params)
+                current_batch_ids.append(job_id)
+                print(f"Submitted Job {job_id}")
 
-        print(f"Result metrics: {metrics}")
+            # 2. Spawn Workers
+            workers = []
+            print(f"Spawning {args.parallel_workers} workers...")
+            for w in range(args.parallel_workers):
+                cmd = [sys.executable, "optimizer/worker.py", "--id", f"worker-{w}", "--loop", "--local"]
+                if args.dry_run: cmd.append("--dry-run")
+                if args.scad_file: cmd.extend(["--scad-file", args.scad_file])
+                if args.case_dir: cmd.extend(["--case-dir", args.case_dir])
+                # We assume workers pick up from the same DB file location (default behavior)
 
-        # Update images for next LLM call
-        if png_paths:
-            last_run_images = png_paths
+                p = subprocess.Popen(cmd)
+                workers.append(p)
 
-        # Check for critical failure
-        if "error" in metrics:
-            if metrics["error"] == "environment_missing_tools":
-                print("\nCRITICAL ERROR: OpenFOAM tools not found.")
-                print("Switching to geometry-only mode (--skip-cfd) for remaining iterations.")
-                args.skip_cfd = True
-            elif metrics["error"] == "geometry_generation_failed":
-                print("Geometry generation failed.")
+            # 3. Wait for Batch
+            try:
+                while True:
+                    time.sleep(5)
+                    states = manager._get_all_latest_states()
 
-        # Save Results
-        run_data = {
-            "id": run_id_hash, # Unique ID
-            "status": "completed",
-            "git_commit": git_commit,
-            "agent_id": "optimizer-script",
-            "iteration": i,
-            "timestamp": run_timestamp,
-            "parameters": current_params.copy(),
-            "metrics": metrics,
-            "images": png_paths,
-            "solid_stl_path": solid_stl_path,
-            "fluid_stl_path": fluid_stl_path,
-            "artifact_stl_path": fluid_stl_path, # Backward compatibility / Alias
-            "artifact_vtk_path": vtk_zip_path
-        }
-        store.append_result(run_data)
+                    completed_count = 0
+                    failed_count = 0
+                    running_count = 0
 
-        # Reload history to include this run
-        full_history.append(run_data)
-        agent.history = full_history
+                    for jid in current_batch_ids:
+                        state = states.get(jid, {})
+                        status = state.get("status", "unknown")
+                        if status == "completed": completed_count += 1
+                        elif status == "failed": failed_count += 1
+                        elif status == "running": running_count += 1
 
-        # Cleanup Artifacts (Keep Top 10)
-        # We do this every run to save space
-        if not args.no_cleanup:
-            top_runs = store.get_top_runs(10)
-            store.clean_artifacts(top_runs)
+                    print(f"Batch Progress: {completed_count} done, {failed_count} failed, {running_count} running...", end='\r')
+
+                    if completed_count + failed_count == len(current_batch_ids):
+                        print("\nBatch Complete.")
+                        break
+            except KeyboardInterrupt:
+                print("\nInterrupted. Killing workers...")
+                for p in workers: p.terminate()
+                raise
+            finally:
+                # Terminate workers
+                for p in workers:
+                    if p.poll() is None:
+                        p.terminate()
+
+            # 4. Collect Results
+            full_history = store.load_history()
+            agent.history = full_history
+
+            # Update last_run_images from one of the successful jobs
+            for run in full_history:
+                if run.get("id") in current_batch_ids and run.get("status") == "completed":
+                    if run.get("images"):
+                        last_run_images = run["images"]
+
+            if not args.no_cleanup:
+                store.clean_artifacts(store.get_top_runs(10))
+
+            i += len(current_batch_ids)
+
         else:
-            print("Cleanup disabled (--no-cleanup). Keeping all artifacts.")
+            # Sequential / Legacy Execution (One item at a time)
+            current_params = parameter_queue.pop(0)
+            phash = get_params_hash(current_params)
+            visited_params.add(phash)
 
-        i += 1
+            print(f"Processing parameters: {current_params}")
+
+            # Run
+            run_timestamp = time.time()
+            run_id_hash = hashlib.md5(f"{i}_{run_timestamp}".encode()).hexdigest()
+            run_id_short = run_id_hash[:8]
+            output_prefix = os.path.join("exports", f"run_{run_id_short}")
+
+            metrics, png_paths, solid_stl, fluid_stl, vtk_zip = run_simulation(
+                scad, foam, current_params,
+                output_stl_name=args.output_stl,
+                dry_run=args.dry_run,
+                skip_cfd=args.skip_cfd,
+                iteration=i,
+                reuse_mesh=args.reuse_mesh,
+                output_prefix=output_prefix,
+                verbose=args.verbose
+            )
+
+            print(f"Result metrics: {metrics}")
+            if png_paths:
+                last_run_images = png_paths
+
+            if "error" in metrics:
+                if metrics["error"] == "environment_missing_tools":
+                    print("\nCRITICAL ERROR: OpenFOAM tools not found.")
+                    print("Switching to geometry-only mode (--skip-cfd) for remaining iterations.")
+                    args.skip_cfd = True
+
+            # Save
+            run_data = {
+                "id": run_id_hash,
+                "status": "completed",
+                "git_commit": git_commit,
+                "agent_id": "optimizer-main-seq",
+                "iteration": i,
+                "timestamp": run_timestamp,
+                "parameters": current_params.copy(),
+                "metrics": metrics,
+                "images": png_paths,
+                "solid_stl_path": solid_stl,
+                "fluid_stl_path": fluid_stl,
+                "artifact_vtk_path": vtk_zip
+            }
+            store.append_result(run_data)
+            full_history.append(run_data)
+            agent.history = full_history
+
+            if not args.no_cleanup:
+                store.clean_artifacts(store.get_top_runs(10))
+
+            i += 1
 
     print("\nOptimization loop finished.")
 
