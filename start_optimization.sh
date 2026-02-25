@@ -1,35 +1,78 @@
 #!/bin/bash
 set -e
 
-echo "=== Corkscrew Filter Optimization Startup ==="
-
-# 1. Check Dependencies
-HAS_OPENSCAD=false
-if command -v openscad &> /dev/null; then
-    echo "Found native OpenSCAD."
-    HAS_OPENSCAD=true
+# Load Utility Functions
+if [ -f "lib/utils.sh" ]; then
+    source lib/utils.sh
+else
+    echo "Error: lib/utils.sh not found."
+    exit 1
 fi
 
-# Always check for Node and install deps if needed (even if OpenSCAD is present)
-if command -v node &> /dev/null; then
-    # Ensure dependencies for export.js are installed if package.json exists
-    if [ -f "package.json" ]; then
-         if [ ! -d "node_modules" ]; then
-            echo "Installing Node.js dependencies..."
-            npm install
-         fi
-    fi
-elif [ "$HAS_OPENSCAD" = false ]; then
-    echo "Error: Neither 'openscad' nor 'node' found. Please install one of them."
+# Function to print usage
+usage() {
+    print_header "Start Optimization - Usage"
+    echo "This script initializes the environment and starts the optimization loop."
+    echo ""
+    echo "Usage: ./start_optimization.sh [options]"
+    echo ""
+    echo "Options:"
+    echo "  --iterations <N>       Number of iterations to run (default: 5)"
+    echo "  --scad-file <path>     Path to the SCAD file (default: corkscrew.scad)"
+    echo "  --case-dir <path>      Path to OpenFOAM case directory (default: corkscrewFilter)"
+    echo "  --output-stl <name>    Output STL filename (default: corkscrew_fluid.stl)"
+    echo "  --dry-run              Skip actual OpenFOAM execution (mocks everything)"
+    echo "  --skip-cfd             Generate geometry but skip CFD simulation"
+    echo "  --reuse-mesh           Reuse existing mesh (skips geometry generation and meshing)"
+    echo "  --container-engine <E> Force specific container engine (auto, podman, docker)"
+    echo "  --cpus <N>             Number of CPUs to use for parallel execution (default: 1)"
+    echo "  --no-llm               Disable LLM guidance (use random parameters)"
+    echo "  --batch-size <N>       Number of parameter sets to generate per LLM call (default: 5)"
+    echo "  --no-cleanup           Disable cleanup of artifacts for non-top runs"
+    echo "  --verbose, -v          Enable verbose output"
+    echo "  --params-file <file>   Path to a SCAD parameter file to override defaults"
+    echo "  -h, --help             Show this help message and exit"
+    echo ""
+    echo "Example:"
+    echo "  ./start_optimization.sh --iterations 10 --cpus 4 --verbose"
+}
+
+# Check for Help Flag
+check_help "$1"
+
+print_header "Corkscrew Filter Optimization Startup"
+
+# 1. Check Dependencies (OpenSCAD, Node, Python)
+if check_openscad; then
+    echo "Found native OpenSCAD."
+    HAS_OPENSCAD=true
+else
+    HAS_OPENSCAD=false
+fi
+
+# Try to setup node (and install deps if present)
+if setup_node_env; then
+    HAS_NODE=true
+else
+    HAS_NODE=false
+fi
+
+# Check for OpenSCAD or Node requirement
+if [ "$HAS_OPENSCAD" = false ] && [ "$HAS_NODE" = false ]; then
+    print_error "Neither 'openscad' nor 'node' found. Please install one of them."
     exit 1
+fi
+
+if [ "$HAS_NODE" = false ]; then
+     print_warning "Node.js not found. Visualization (PNG) generation will be disabled."
 fi
 
 # 2. Check API Key
 if [ -z "$GEMINI_API_KEY" ] && [ -z "$OPENAI_API_KEY" ] && [ -z "$OPENAI_BASE_URL" ]; then
     if [[ "$*" == *"--no-llm"* ]] || [ "$NON_INTERACTIVE" == "1" ]; then
-        echo "Warning: No LLM API Key found (GEMINI/OPENAI). Proceeding in dry-run/random mode (prompt suppressed)."
+        print_warning "No LLM API Key found. Proceeding in dry-run/random mode."
     else
-        echo "Warning: No LLM API Key found (GEMINI_API_KEY, OPENAI_API_KEY, or OPENAI_BASE_URL)."
+        print_warning "No LLM API Key found (GEMINI_API_KEY, OPENAI_API_KEY, or OPENAI_BASE_URL)."
         echo "The optimizer will run in 'dry-run' or 'random' mode without LLM guidance."
         read -p "Do you want to continue without LLM? (y/n) " -n 1 -r
         echo
@@ -40,45 +83,8 @@ if [ -z "$GEMINI_API_KEY" ] && [ -z "$OPENAI_API_KEY" ] && [ -z "$OPENAI_BASE_UR
 fi
 
 # 3. Setup Python Environment
-VENV_DIR=".venv"
-
-# Detect Python Executable
-PYTHON_CMD=""
-if command -v python &> /dev/null; then
-    PYTHON_CMD="python"
-elif command -v python3 &> /dev/null; then
-    PYTHON_CMD="python3"
-elif command -v py &> /dev/null; then
-    PYTHON_CMD="py"
-else
-    echo "Error: Python not found (tried 'python', 'python3', 'py'). Please install Python."
-    exit 1
-fi
-echo "Using Python executable: $PYTHON_CMD"
-
-if [ ! -d "$VENV_DIR" ]; then
-    echo "Creating Python virtual environment in $VENV_DIR..."
-    "$PYTHON_CMD" -m venv "$VENV_DIR"
-fi
-
-# Activate venv
-if [ -f "$VENV_DIR/Scripts/activate" ]; then
-    # Windows (Git Bash)
-    source "$VENV_DIR/Scripts/activate"
-elif [ -f "$VENV_DIR/bin/activate" ]; then
-    # Unix
-    source "$VENV_DIR/bin/activate"
-else
-    echo "Error: Virtual environment activation script not found in $VENV_DIR."
-    exit 1
-fi
-
-if [ -f "optimizer/requirements.txt" ]; then
-    echo "Installing/Updating Python requirements..."
-    pip install -r optimizer/requirements.txt
-fi
+setup_python_env
 
 # 4. Run Optimizer
-echo "Starting Optimization Loop..."
-# Pass arguments if any
+print_header "Starting Optimization Loop"
 python optimizer/main.py "$@"
