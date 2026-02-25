@@ -862,7 +862,7 @@ solution
 
     integrationSchemes
     {{
-        U               Euler;
+        U               analytical;
     }}
 }}
 
@@ -893,7 +893,7 @@ subModels
         {injections}
     }}
 
-    dispersionModel none;
+    dispersionModel StochasticDispersionRAS;
 
     patchInteractionModel localInteraction;
 
@@ -910,7 +910,13 @@ subModels
 
 cloudFunctions
 {{
-    // patchPostProcessing removed due to incompatibility with OpenFOAM v2406
+    particleCollector1
+    {{
+        type            particleCollector;
+        mode            patch;
+        patches         ({patch_list_str});
+        polygonData     off;
+    }}
 }}
 
 // ************************************************************************* //
@@ -1126,27 +1132,6 @@ boundaryField
                     except Exception as e:
                          print(f"Error restoring {src}: {e}. You may need to manually recover from {dst}.")
 
-    def _disable_turbulence(self):
-        """
-        Sets 'turbulence off' in constant/turbulenceProperties to prevent
-        icoUncoupledKinematicParcelFoam from loading turbulence models (which may cause errors
-        like missing wallDist or fields).
-        """
-        tp_path = os.path.join(self.case_dir, "constant", "turbulenceProperties")
-        if not os.path.exists(tp_path):
-            return
-
-        with open(tp_path, 'r') as f:
-            content = f.read()
-
-        # turbulence on; -> turbulence off;
-        pattern = re.compile(r"turbulence\s+on;", re.DOTALL)
-        if pattern.search(content):
-            content = pattern.sub("turbulence      off;", content)
-
-        with open(tp_path, 'w') as f:
-            f.write(content)
-
     def _switch_fvSchemes_to_transient(self):
         """
         Switches ddtSchemes to Euler for transient particle tracking.
@@ -1275,14 +1260,18 @@ boundaryField
             # 2. Reset Time & Prepare Fields
             self._prepare_transient_run(latest_time)
 
+            # Generate Phi and WallDist
+            self.run_command(["postProcess", "-func", '"writePhi"'], log_file=log_file, description="Reconstructing Phi")
+            self.run_command(["postProcess", "-func", '"wallDist"'], log_file=log_file, description="Calculating Wall Distance")
+
             # 3. Update Configurations
             self._update_controlDict_for_particles()
             self._switch_fvSchemes_to_transient()
-            self._disable_turbulence()
+            # Turbulence enabled for StochasticDispersionRAS
 
             # Verify carrier field (U) - helps debug SIGFPE if U is zero/NaN
             print("Verifying carrier field (U) before particle tracking...")
-            self.run_command(["postProcess", "-func", "minMax(U)"], log_file=log_file, description="Verifying Field U")
+            self.run_command(["postProcess", "-func", '"minMax(U)"'], log_file=log_file, description="Verifying Field U")
 
             # 4. Run Solver
             return self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking")
@@ -1420,68 +1409,29 @@ boundaryField
                      metrics['particles_injected'] = total_injected_parsed
 
             # -- Parse Spatial Capture (Bin Patches) --
-            # Look for: "Patch bin_X: stick N" (if patchInteractionModel detail is enabled)
-            # OpenFOAM usually reports:
-            # "Interaction with patch bin_1: ... stick N"
-            # Or in the table?
-            # The standard table is by *Interaction Type* (escape, stick), not by Patch.
+            # Parse output from particleCollector1
+            # Path: case/postProcessing/lagrangian/cloud/particleCollector1/<time>/<patchName>.dat (or similar)
+            pc_base = os.path.join(self.case_dir, "postProcessing", "lagrangian", "cloud", "particleCollector1")
+            if os.path.exists(pc_base):
+                # Find latest time directory
+                time_dirs = [d for d in glob.glob(os.path.join(pc_base, "*")) if os.path.isdir(d)]
+                if time_dirs:
+                    latest_pp_dir = max(time_dirs, key=os.path.getmtime)
+                    # Iterate over files in latest directory
+                    for fname in os.listdir(latest_pp_dir):
+                        fpath = os.path.join(latest_pp_dir, fname)
+                        if os.path.isfile(fpath) and not fname.startswith("#"):
+                            # Count lines (assuming one line per particle)
+                            try:
+                                with open(fpath, 'r') as f:
+                                    # Count non-empty lines that don't start with #
+                                    count = sum(1 for line in f if line.strip() and not line.strip().startswith("#"))
 
-            # However, if we use `patchInteractionModel localInteraction`, it might log per patch?
-            # Actually, `StandardWallInteraction` usually doesn't log per patch in the table.
-            # But the `patchInteraction` function object does.
-            # We haven't enabled `cloudFunctions` in the config yet.
-            # To get per-patch stats, we really need the `patchInteractionFields` or similar function object.
-            # OR we rely on the log if `debug` is on?
-
-            # Let's Add `patchPostProcessing` function object to `cloudFunctions` in `_generate_kinematicCloudProperties`?
-            # That's complicated to parse.
-
-            # Alternative: Assume for now we only get global, but check log for any "Patch <name>" patterns.
-            # Sometimes "Parcel fate" has a detailed table?
-            # In v2406, it's usually compact.
-
-            # Let's try to find ANY mention of "bin_" and numbers.
-            # If not found, we leave the dict empty.
-
-            # Try to parse `patchPostProcessing` file output if available
-            # Path: case/postProcessing/lagrangian/cloud/patchPostProcessing1/*/patchPostProcessing.dat
-            pp_base = os.path.join(self.case_dir, "postProcessing", "lagrangian", "cloud", "patchPostProcessing1")
-            if os.path.exists(pp_base):
-                 # Find latest time
-                 time_dirs = glob.glob(os.path.join(pp_base, "*"))
-                 if time_dirs:
-                     latest_pp_dir = max(time_dirs, key=os.path.getmtime)
-                     dat_file = os.path.join(latest_pp_dir, "patchPostProcessing1.dat")
-                     if os.path.exists(dat_file):
-                         # Format: # Time patch1 patch2 ...
-                         # Data: time val1 val2 ...
-                         try:
-                             with open(dat_file, 'r') as f:
-                                 lines = f.readlines()
-                                 # Parse header to get patch names
-                                 header = None
-                                 for line in lines:
-                                     if line.startswith("#") and "Time" in line:
-                                         header = line.replace("#", "").split()
-                                         break
-
-                                 if header:
-                                     # Get last data line
-                                     last_line = lines[-1].strip()
-                                     if last_line and not last_line.startswith("#"):
-                                         data = last_line.split()
-                                         # Map header to data
-                                         # Header: Time patch1 patch2 ...
-                                         # Data: time val1 val2 ...
-                                         for i, col_name in enumerate(header):
-                                             if col_name.startswith("bin_"):
-                                                 try:
-                                                     val = float(data[i])
-                                                     metrics['capture_by_bin'][col_name] = val
-                                                 except (IndexError, ValueError):
-                                                     pass
-                         except Exception as e:
-                             print(f"Error parsing patchPostProcessing: {e}")
+                                # Use filename as bin/patch name (e.g., bin_1.dat -> bin_1)
+                                patch_name = os.path.splitext(fname)[0]
+                                metrics['capture_by_bin'][patch_name] = count
+                            except Exception as e:
+                                print(f"Error reading particle collector file {fname}: {e}")
 
         return metrics
 
