@@ -34,3 +34,4 @@ This file tracks planned enhancements and future work for the Thirsty Corkscrew 
 
 ## Optimization Loop & Architecture
 * [ ] **Inter-Simulation Parallelization:** Refactor the optimization orchestrator (`main.py` / `worker.py`) to process LLM-generated parameter batches concurrently by spinning up multiple asynchronous OpenFOAM container instances, rather than evaluating one design at a time.
+- [x] **Bug Fix:** Fixed parameter type handling in `JobManager` to correctly distinguish between ranges (tuples) and discrete choices (lists).

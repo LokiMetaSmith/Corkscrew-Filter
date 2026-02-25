@@ -4,6 +4,7 @@ import shutil
 import trimesh
 import numpy as np
 import warnings
+import tempfile
 from utils import run_command_with_spinner
 
 class ScadDriver:
@@ -53,7 +54,7 @@ class ScadDriver:
         except ValueError:
             return False
 
-    def generate_stl(self, params, output_path, log_file=None):
+    def generate_stl(self, params, output_path, log_file=None, params_file=None):
         """
         Runs OpenSCAD to generate an STL file with the given parameters.
 
@@ -61,6 +62,7 @@ class ScadDriver:
             params (dict): Dictionary of parameter names and values.
             output_path (str): Path to save the generated STL.
             log_file (str): Path to log file.
+            params_file (str): Path to a SCAD parameter file to use as config.
 
         Returns:
             bool: True if successful, False otherwise.
@@ -88,6 +90,10 @@ class ScadDriver:
         if "high_res_fn" not in run_params:
              run_params["high_res_fn"] = 100
 
+        # Special handling for Native OpenSCAD with params_file
+        if self.use_native and params_file:
+            return self._generate_stl_native_with_params(run_params, output_path, log_file, params_file)
+
         param_args = []
         for key, value in run_params.items():
             param_args.extend(self._format_param(key, value))
@@ -97,7 +103,13 @@ class ScadDriver:
         else:
             # Fallback to Node.js script
             # Assumes export.js is in the root directory relative to where this is run
-            cmd = ["node", "export.js", "-o", output_path] + param_args + [self.scad_file_path]
+            cmd = ["node", "export.js", "-o", output_path]
+
+            if params_file:
+                cmd.extend(["--params", params_file])
+
+            cmd.extend(param_args)
+            cmd.append(self.scad_file_path)
 
         if not log_file:
             print(f"Running geometry generation: {' '.join(cmd)}")
@@ -127,7 +139,110 @@ class ScadDriver:
             print("Error: Execution command failed. Ensure 'openscad' or 'node' is available.")
             return False
 
-    def generate_visualization(self, params, output_base, log_file=None):
+    def _generate_stl_native_with_params(self, params, output_path, log_file, params_file):
+        """
+        Handles generation for Native OpenSCAD when a params file is involved.
+        Uses a temporary directory to safely swap config.scad without race conditions.
+        """
+        cwd = os.getcwd()
+        abs_output_path = os.path.abspath(output_path)
+        abs_params_file = os.path.abspath(params_file)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            try:
+                # 1. Copy necessary files to temp_dir
+                # Copy *.scad files in root
+                for item in os.listdir(cwd):
+                    src = os.path.join(cwd, item)
+                    if os.path.isfile(src) and item.endswith('.scad'):
+                        shutil.copy2(src, os.path.join(temp_dir, item))
+
+                # Copy directories
+                for d in ['modules', 'configs', 'parameters']:
+                    src = os.path.join(cwd, d)
+                    if os.path.exists(src):
+                        shutil.copytree(src, os.path.join(temp_dir, d))
+
+                # Symlink BOSL2 (to avoid large copy)
+                bosl2_src = os.path.join(cwd, 'BOSL2')
+                if os.path.exists(bosl2_src):
+                    try:
+                        os.symlink(bosl2_src, os.path.join(temp_dir, 'BOSL2'))
+                    except OSError:
+                        # Fallback to copy if symlink fails (e.g. Windows without privs)
+                        shutil.copytree(bosl2_src, os.path.join(temp_dir, 'BOSL2'))
+
+                # 2. Overwrite config.scad with params_file content (Append to preserve structure)
+                config_dest = os.path.join(temp_dir, 'config.scad')
+                base_config_path = os.path.join(cwd, 'config.scad')
+
+                try:
+                    with open(base_config_path, 'rb') as f:
+                        base_content = f.read()
+                    with open(abs_params_file, 'rb') as f:
+                        params_content = f.read()
+
+                    with open(config_dest, 'wb') as f:
+                        f.write(base_content)
+                        f.write(b'\n// --- Custom Parameters Injection ---\n')
+                        f.write(params_content)
+                except Exception as e:
+                    print(f"Warning: Failed to merge configs ({e}). Falling back to simple copy.")
+                    shutil.copy2(abs_params_file, config_dest)
+
+                # 3. Build command
+                param_args = []
+                for key, value in params.items():
+                    param_args.extend(self._format_param(key, value))
+
+                # Output to a temp file inside the directory first
+                temp_output = "output.stl"
+
+                cmd = ["openscad", "-o", temp_output] + param_args + [self.scad_file_path]
+
+                if not log_file:
+                    print(f"Running geometry generation (Native Temp): {' '.join(cmd)}")
+
+                # Run inside temp_dir
+                # subprocess.run with cwd argument
+                if log_file:
+                    # run_command_with_spinner doesn't support cwd argument easily without modification
+                    # So we use standard subprocess here for simplicity, or modify utils. But modifying utils is out of scope.
+                    # Actually, run_command_with_spinner might not be usable here if we need CWD.
+                    # We will use subprocess directly and log to file manually if needed.
+                    with open(log_file, 'a') as f:
+                        f.write(f"\nRunning in {temp_dir}: {' '.join(cmd)}\n")
+                        proc = subprocess.run(cmd, cwd=temp_dir, capture_output=True, text=True)
+                        f.write(proc.stdout)
+                        f.write(proc.stderr)
+                        if proc.returncode != 0:
+                            print(f"Generation failed. Check {log_file}")
+                            return False
+                else:
+                    proc = subprocess.run(cmd, cwd=temp_dir, capture_output=True, text=True)
+                    if proc.returncode != 0:
+                        print(proc.stderr)
+                        return False
+
+                # 4. Copy result back
+                generated_stl = os.path.join(temp_dir, temp_output)
+                if os.path.exists(generated_stl):
+                    shutil.copy2(generated_stl, abs_output_path)
+                    if not log_file:
+                         print(f"STL generated successfully at {output_path}")
+                    return True
+                else:
+                    print("Generation finished but output file missing.")
+                    return False
+
+            except Exception as e:
+                print(f"Native generation with params failed: {e}")
+                if log_file:
+                    with open(log_file, 'a') as f:
+                        f.write(f"\nException: {e}\n")
+                return False
+
+    def generate_visualization(self, params, output_base, log_file=None, params_file=None):
         """
         Generates the solid model and PNG screenshots using export.js.
 
@@ -136,6 +251,7 @@ class ScadDriver:
             output_base (str): Base path for output (e.g., 'temp/vis_model').
                               Will generate 'temp/vis_model.stl' and 'temp/vis_model_viewX.png'.
             log_file (str): Path to log file.
+            params_file (str): Path to a SCAD parameter file to use as config.
 
         Returns:
             list: List of paths to the generated PNG files, or empty list on failure.
@@ -157,7 +273,12 @@ class ScadDriver:
             param_args.extend(self._format_param(key, value))
 
         # Use node export.js specifically
-        cmd = ["node", "export.js", "-o", stl_path, "--png"] + param_args + [self.scad_file_path]
+        cmd = ["node", "export.js", "-o", stl_path, "--png"]
+
+        if params_file:
+            cmd.extend(["--params", params_file])
+
+        cmd = cmd + param_args + [self.scad_file_path]
 
         if not log_file:
             print(f"Running visualization generation: {' '.join(cmd)}")
@@ -342,6 +463,66 @@ class ScadDriver:
         except Exception as e:
             print(f"Error calculating internal point: {e}")
             return None
+
+    def generate_cfd_assets(self, params, output_dir, log_file=None, params_file=None):
+        """
+        Generates all STLs required for CFD: fluid, inlet, outlet, wall.
+
+        Args:
+            params (dict): Parameters for the model.
+            output_dir (str): Directory to save the STLs.
+            log_file (str): Path to log file.
+            params_file (str): Path to a SCAD parameter file to use as config.
+
+        Returns:
+            dict: Paths to the generated STLs {'fluid', 'inlet', 'outlet', 'wall'}, or None if failed.
+        """
+        # Ensure output directory exists
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
+        # 1. Main Fluid Volume
+        fluid_params = params.copy()
+        fluid_params["GENERATE_CFD_VOLUME"] = "true"
+        # Ensure correct part is selected (default to modular if not set)
+        if "part_to_generate" not in fluid_params:
+            fluid_params["part_to_generate"] = "modular_filter_assembly"
+
+        fluid_path = os.path.join(output_dir, "corkscrew_fluid.stl")
+        if not self.generate_stl(fluid_params, fluid_path, log_file, params_file):
+            print("Failed to generate fluid volume.")
+            return None
+
+        # 2. Inlet Cap
+        inlet_params = fluid_params.copy()
+        inlet_params["part_to_generate"] = "inlet_cap"
+        inlet_path = os.path.join(output_dir, "inlet.stl")
+        if not self.generate_stl(inlet_params, inlet_path, log_file, params_file):
+            print("Failed to generate inlet cap.")
+            return None
+
+        # 3. Outlet Cap
+        outlet_params = fluid_params.copy()
+        outlet_params["part_to_generate"] = "outlet_cap"
+        outlet_path = os.path.join(output_dir, "outlet.stl")
+        if not self.generate_stl(outlet_params, outlet_path, log_file, params_file):
+            print("Failed to generate outlet cap.")
+            return None
+
+        # 4. Wall
+        wall_params = fluid_params.copy()
+        wall_params["part_to_generate"] = "cfd_wall"
+        wall_path = os.path.join(output_dir, "wall.stl")
+        if not self.generate_stl(wall_params, wall_path, log_file, params_file):
+            print("Failed to generate CFD wall.")
+            return None
+
+        return {
+            "fluid": fluid_path,
+            "inlet": inlet_path,
+            "outlet": outlet_path,
+            "wall": wall_path
+        }
 
 if __name__ == "__main__":
     # Test stub

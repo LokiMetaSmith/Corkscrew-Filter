@@ -5,8 +5,9 @@ import numpy as np
 import shutil
 from utils import Timer, get_container_memory_gb
 from parameter_validator import validate_parameters
+from validator import Validator
 
-def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False, skip_cfd=False, iteration=0, reuse_mesh=False, output_prefix=None, verbose=False):
+def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False, skip_cfd=False, iteration=0, reuse_mesh=False, output_prefix=None, verbose=False, params_file=None):
     """
     Executes the full simulation pipeline:
     1. Generate Fluid Geometry (STL)
@@ -25,6 +26,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         iteration (int): The current iteration number (used for logging).
         reuse_mesh (bool): If True, skips geometry generation and meshing, using existing mesh.
         output_prefix (str): Prefix for output files (e.g. "exports/run_123"). If None, generates timestamped default.
+        params_file (str): Path to a SCAD parameter file to use as config.
 
     Returns:
         tuple: (metrics, image_paths, solid_stl_path, fluid_stl_path, vtk_zip_path)
@@ -46,39 +48,86 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
     vis_log = os.path.join(log_dir, "visualization.log")
 
     # 0. Validate Parameters
-    is_valid, error_msg = validate_parameters(params)
-    if not is_valid:
-        print(f"Parameter Validation Failed: {error_msg}")
-        return {"error": "invalid_parameters", "details": error_msg}, [], None, None, None
+    # If params_file is provided, we trust the file content (or cannot validate it easily from Python)
+    if not params_file:
+        is_valid, error_msg = validate_parameters(params)
+        if not is_valid:
+            print(f"Parameter Validation Failed: {error_msg}")
+            return {"error": "invalid_parameters", "details": error_msg}, [], None, None, None
+    else:
+        print("Skipping parameter validation due to external params file.")
 
-    # 1. Generate Geometry (Fluid Volume for CFD)
-    stl_path = os.path.join(foam_driver.case_dir, "constant", "triSurface", output_stl_name)
-    os.makedirs(os.path.dirname(stl_path), exist_ok=True)
+    # 1. Generate Geometry (Fluid Volume + CFD Assets)
+    tri_surface_dir = os.path.join(foam_driver.case_dir, "constant", "triSurface")
+    os.makedirs(tri_surface_dir, exist_ok=True)
+
+    # Use specified output name for fluid, others are fixed
+    fluid_stl_path = os.path.join(tri_surface_dir, output_stl_name)
 
     SCALE_FACTOR = 0.001 # mm to meters
+    cfd_assets = {} # Dictionary of absolute paths
 
     if not dry_run:
         if not reuse_mesh:
             with Timer("Geometry Generation"):
-                success = scad_driver.generate_stl(params, stl_path, log_file=geom_log)
+                # Use generate_cfd_assets to create all required STLs
+                # Note: generate_cfd_assets returns paths to 'corkscrew_fluid.stl', 'inlet.stl', etc.
+                # We should rename the fluid one if output_stl_name is different, but for now we trust generate_cfd_assets defaults or move it.
+                assets = scad_driver.generate_cfd_assets(params, tri_surface_dir, log_file=geom_log, params_file=params_file)
 
-            if success:
-                # Scale STL to meters immediately to avoid container issues
-                print(f"Scaling STL to meters...")
-                if not scad_driver.scale_mesh(stl_path, SCALE_FACTOR):
-                    print("Failed to scale mesh.")
-                    return {"error": "mesh_scaling_failed"}, [], None, None, None
+            if assets:
+                cfd_assets = assets
+                # If the generated fluid name doesn't match requested output_stl_name, rename/copy?
+                # generate_cfd_assets produces 'corkscrew_fluid.stl' fixed name.
+                # If output_stl_name is different, we handle it.
+                generated_fluid = cfd_assets["fluid"]
+                if os.path.basename(generated_fluid) != output_stl_name:
+                    shutil.move(generated_fluid, fluid_stl_path)
+                    cfd_assets["fluid"] = fluid_stl_path
+
+                # 1.1 Validation (in mm, before scaling)
+                print("Validating Geometry...")
+                validator = Validator(verbose=verbose)
+                val_res = validator.validate_assembly(
+                    cfd_assets["fluid"],
+                    cfd_assets["inlet"],
+                    cfd_assets["outlet"],
+                    cfd_assets["wall"],
+                    tolerance=1.0 # 1mm tolerance
+                )
+
+                if not val_res["valid"]:
+                    print(f"Geometry Validation Failed: {val_res['messages']}")
+                    return {"error": "geometry_validation_failed", "details": val_res['messages']}, [], None, None, None
+
+                print("Geometry Validation Passed.")
+
+                # 1.2 Scaling (to meters)
+                print(f"Scaling STLs to meters...")
+                for key, path in cfd_assets.items():
+                    if not scad_driver.scale_mesh(path, SCALE_FACTOR):
+                        print(f"Failed to scale mesh: {key}")
+                        return {"error": "mesh_scaling_failed"}, [], None, None, None
             else:
                 print(f"Geometry generation failed. Check {geom_log} for details.")
                 return {"error": "geometry_generation_failed"}, [], None, None, None
         else:
             print("[Reuse Mesh] Skipping geometry generation.")
+            # Populate cfd_assets assuming files exist
+            cfd_assets = {
+                "fluid": fluid_stl_path,
+                "inlet": os.path.join(tri_surface_dir, "inlet.stl"),
+                "outlet": os.path.join(tri_surface_dir, "outlet.stl"),
+                "wall": os.path.join(tri_surface_dir, "wall.stl")
+            }
     else:
-        print(f"[Dry Run] Generated STL at {stl_path}")
-        if not os.path.exists(stl_path):
-            with open(stl_path, 'w') as f: f.write("solid dryrun\nendsolid dryrun")
+        print(f"[Dry Run] Generated STL at {fluid_stl_path}")
+        if not os.path.exists(fluid_stl_path):
+            with open(fluid_stl_path, 'w') as f: f.write("solid dryrun\nendsolid dryrun")
 
     # 2. Update Mesh Config
+    stl_path = fluid_stl_path # For bounds check
+
     if not dry_run and not skip_cfd:
         # Early check for environment
         if not foam_driver.has_tools:
@@ -238,8 +287,10 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
 
         if not reuse_mesh:
             with Timer("Meshing"):
-                # Pass bin config to create bin patches
-                success = foam_driver.run_meshing(log_file=mesh_log, bin_config=bin_config, stl_filename=output_stl_name)
+                # Pass bin config AND assets
+                # We pass just filenames as they are in triSurface
+                asset_filenames = {k: os.path.basename(v) for k, v in cfd_assets.items()}
+                success = foam_driver.run_meshing(log_file=mesh_log, bin_config=bin_config, stl_assets=asset_filenames)
         else:
             print("[Reuse Mesh] Skipping meshing pipeline.")
             success = True
@@ -306,7 +357,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         vis_params["high_res_fn"] = 20 # Low res enough for shape check
 
         with Timer("Visualization"):
-            png_paths = scad_driver.generate_visualization(vis_params, vis_base, log_file=vis_log)
+            png_paths = scad_driver.generate_visualization(vis_params, vis_base, log_file=vis_log, params_file=params_file)
 
         # Copy Fluid STL to output location
         if os.path.exists(stl_path):

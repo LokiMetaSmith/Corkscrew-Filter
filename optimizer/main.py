@@ -46,6 +46,7 @@ def main():
     parser.add_argument("--no-cleanup", action="store_true", help="Disable cleanup of artifacts (STLs, images) for non-top runs")
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output (e.g. error logs)")
     parser.add_argument("--parallel-workers", type=int, default=0, help="Number of parallel worker processes to spawn (0 = sequential)")
+    parser.add_argument("--params-file", type=str, help="Path to a SCAD parameter file to use as the base configuration (overrides defaults)")
     args = parser.parse_args()
 
     # Parse iterations argument
@@ -91,18 +92,24 @@ def main():
         git_commit = "unknown"
 
     # Initial parameters
-    initial_params = {
-        "part_to_generate": "modular_filter_assembly",
-        "num_bins": 1,
-        "number_of_complete_revolutions": 2,
-        "helix_path_radius_mm": 1.8,
-        "helix_profile_radius_mm": 1.7,
-        "helix_void_profile_radius_mm": 1.0,
-        "helix_profile_scale_ratio": 1.4,
-        "tube_od_mm": 32,
-        "insert_length_mm": 50,
-        "GENERATE_CFD_VOLUME": True
-    }
+    if args.params_file:
+        print(f"Using parameters file: {args.params_file}. Clearing initial_params to allow file to take precedence.")
+        # We must provide a non-empty dictionary for DataStore validation, but we don't want to override file values.
+        # Adding a metadata key like "_source" is safe as OpenSCAD likely ignores it or it just sets a variable.
+        initial_params = {"_source": args.params_file}
+    else:
+        initial_params = {
+            "part_to_generate": "modular_filter_assembly",
+            "num_bins": 1,
+            "number_of_complete_revolutions": 2,
+            "helix_path_radius_mm": 1.8,
+            "helix_profile_radius_mm": 1.7,
+            "helix_void_profile_radius_mm": 1.0,
+            "helix_profile_scale_ratio": 1.4,
+            "tube_od_mm": 32,
+            "insert_length_mm": 50,
+            "GENERATE_CFD_VOLUME": True
+        }
 
     # Load History & Populate Visited Set
     print("Loading history from data store...")
@@ -172,6 +179,7 @@ def main():
             # For now, break to avoid infinite loop of nothing.
             break
 
+<<<<<<< feature/parallel-opt-physics-upgrade-4539963120723569908
         # === EXECUTION PHASE ===
 
         if args.parallel_workers > 0:
@@ -247,6 +255,86 @@ def main():
 
             i += len(current_batch_ids)
 
+=======
+        current_params = parameter_queue.pop(0)
+
+        # Deduplication Check
+        param_hash = get_params_hash(current_params)
+        if param_hash in visited_params:
+            print(f"Skipping duplicate parameters (Hash: {param_hash}).")
+            # If queue is empty, we'll hit refill next loop. If not, we just take next.
+            continue
+
+        print(f"Testing parameters: {current_params}")
+        visited_params.add(param_hash)
+
+        # Generate Run ID and Output Prefix
+        # Use timestamp to ensure uniqueness
+        run_timestamp = time.time()
+        run_id_hash = hashlib.md5(f"{i}_{run_timestamp}".encode()).hexdigest()
+        run_id_short = run_id_hash[:8]
+        output_prefix = os.path.join("exports", f"run_{run_id_short}")
+
+        # Run Simulation via Runner
+        # output_stl is strictly 'corkscrew_fluid.stl' for OpenFOAM compatibility
+        metrics, png_paths, solid_stl_path, fluid_stl_path, vtk_zip_path = run_simulation(
+            scad,
+            foam,
+            current_params,
+            output_stl_name=args.output_stl,
+            dry_run=args.dry_run,
+            skip_cfd=args.skip_cfd,
+            iteration=i,
+            reuse_mesh=args.reuse_mesh,
+            output_prefix=output_prefix,
+            verbose=args.verbose,
+            params_file=args.params_file
+        )
+
+        print(f"Result metrics: {metrics}")
+
+        # Update images for next LLM call
+        if png_paths:
+            last_run_images = png_paths
+
+        # Check for critical failure
+        if "error" in metrics:
+            if metrics["error"] == "environment_missing_tools":
+                print("\nCRITICAL ERROR: OpenFOAM tools not found.")
+                print("Switching to geometry-only mode (--skip-cfd) for remaining iterations.")
+                args.skip_cfd = True
+            elif metrics["error"] == "geometry_generation_failed":
+                print("Geometry generation failed.")
+
+        # Save Results
+        run_data = {
+            "id": run_id_hash, # Unique ID
+            "status": "completed",
+            "git_commit": git_commit,
+            "agent_id": "optimizer-script",
+            "iteration": i,
+            "timestamp": run_timestamp,
+            "parameters": current_params.copy(),
+            "params_file": args.params_file,
+            "metrics": metrics,
+            "images": png_paths,
+            "solid_stl_path": solid_stl_path,
+            "fluid_stl_path": fluid_stl_path,
+            "artifact_stl_path": fluid_stl_path, # Backward compatibility / Alias
+            "artifact_vtk_path": vtk_zip_path
+        }
+        store.append_result(run_data)
+
+        # Reload history to include this run
+        full_history.append(run_data)
+        agent.history = full_history
+
+        # Cleanup Artifacts (Keep Top 10)
+        # We do this every run to save space
+        if not args.no_cleanup:
+            top_runs = store.get_top_runs(10)
+            store.clean_artifacts(top_runs)
+>>>>>>> main
         else:
             # Sequential / Legacy Execution (One item at a time)
             current_params = parameter_queue.pop(0)
