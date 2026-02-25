@@ -52,6 +52,7 @@ def main():
     parser.add_argument("--scad-file", type=str, default="corkscrew.scad")
     parser.add_argument("--case-dir", type=str, default="corkscrewFilter")
     parser.add_argument("--poll-interval", type=int, default=10, help="Seconds to wait between polls in loop mode")
+    parser.add_argument("--local", action="store_true", help="Run in local mode (skip git sync)")
     args = parser.parse_args()
 
     worker_id = args.id if args.id else get_default_worker_id()
@@ -65,12 +66,15 @@ def main():
 
     while True:
         # 1. Sync
-        print("\n--- Syncing with remote ---")
-        success, msg = git_pull_rebase()
-        if not success:
-            print("Sync failed. Retrying in 10s...")
-            time.sleep(10)
-            continue
+        if not args.local:
+            print("\n--- Syncing with remote ---")
+            success, msg = git_pull_rebase()
+            if not success:
+                print("Sync failed. Retrying in 10s...")
+                time.sleep(10)
+                continue
+        else:
+            print("\n--- Local Mode: Skipping Git Sync ---")
 
         # 2. Check Queue
         pending_jobs = manager.get_pending_jobs()
@@ -90,14 +94,18 @@ def main():
         manager.claim_job(job_id, worker_id)
 
         # Commit Claim
-        if not git_commit("optimization_log.jsonl", f"Worker {worker_id} claims job {job_id}"):
-            print("Failed to commit claim. Retrying loop.")
-            continue
+        if not args.local:
+            if not git_commit("optimization_log.jsonl", f"Worker {worker_id} claims job {job_id}"):
+                print("Failed to commit claim. Retrying loop.")
+                continue
 
-        # Push Claim
-        if not git_push_with_retry():
-            print("Failed to push claim. Retrying loop (pull will happen next).")
-            continue
+            # Push Claim
+            if not git_push_with_retry():
+                print("Failed to push claim. Retrying loop (pull will happen next).")
+                continue
+        else:
+            # Local mode: ensure file is flushed (JobManager handles write)
+            pass
 
         # 4. Verify Claim (Did we win?)
         # Read the file from disk (which has merged content now)
@@ -135,17 +143,21 @@ def main():
         # 6. Commit Results
         # If we failed, we still record the fail status.
         commit_msg = f"Worker {worker_id} completed job {job_id}"
-        if not git_commit("optimization_log.jsonl", commit_msg):
-            print("Failed to commit results. Leaving local changes.")
-            # If we fail here, the job is completed locally but not on remote.
-            # Next loop will pull.
-            # If we don't push, others won't see it.
-            # We should try to push.
 
-        if not git_push_with_retry():
-            print("Failed to push results. Please check git status.")
-            # If push fails after retries, we are in a tough spot.
-            # But the loop continues.
+        if not args.local:
+            if not git_commit("optimization_log.jsonl", commit_msg):
+                print("Failed to commit results. Leaving local changes.")
+                # If we fail here, the job is completed locally but not on remote.
+                # Next loop will pull.
+                # If we don't push, others won't see it.
+                # We should try to push.
+
+            if not git_push_with_retry():
+                print("Failed to push results. Please check git status.")
+                # If push fails after retries, we are in a tough spot.
+                # But the loop continues.
+        else:
+            print("Local mode: results saved to disk but not committed/pushed.")
 
         if not args.loop:
             break
