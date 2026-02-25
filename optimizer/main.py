@@ -43,6 +43,7 @@ def main():
     parser.add_argument("--batch-size", type=int, default=5, help="Number of parameter sets to generate per LLM call")
     parser.add_argument("--no-cleanup", action="store_true", help="Disable cleanup of artifacts (STLs, images) for non-top runs")
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output (e.g. error logs)")
+    parser.add_argument("--params-file", type=str, help="Path to a SCAD parameter file to use as the base configuration (overrides defaults)")
     args = parser.parse_args()
 
     # Parse iterations argument
@@ -89,18 +90,24 @@ def main():
         git_commit = "unknown"
 
     # Initial parameters
-    initial_params = {
-        "part_to_generate": "modular_filter_assembly",
-        "num_bins": 1,
-        "number_of_complete_revolutions": 2,
-        "helix_path_radius_mm": 1.8,
-        "helix_profile_radius_mm": 1.7,
-        "helix_void_profile_radius_mm": 1.0,
-        "helix_profile_scale_ratio": 1.4,
-        "tube_od_mm": 32,
-        "insert_length_mm": 50,
-        "GENERATE_CFD_VOLUME": True
-    }
+    if args.params_file:
+        print(f"Using parameters file: {args.params_file}. Clearing initial_params to allow file to take precedence.")
+        # We must provide a non-empty dictionary for DataStore validation, but we don't want to override file values.
+        # Adding a metadata key like "_source" is safe as OpenSCAD likely ignores it or it just sets a variable.
+        initial_params = {"_source": args.params_file}
+    else:
+        initial_params = {
+            "part_to_generate": "modular_filter_assembly",
+            "num_bins": 1,
+            "number_of_complete_revolutions": 2,
+            "helix_path_radius_mm": 1.8,
+            "helix_profile_radius_mm": 1.7,
+            "helix_void_profile_radius_mm": 1.0,
+            "helix_profile_scale_ratio": 1.4,
+            "tube_od_mm": 32,
+            "insert_length_mm": 50,
+            "GENERATE_CFD_VOLUME": True
+        }
 
     # Load History & Populate Visited Set
     print("Loading history from data store...")
@@ -202,7 +209,8 @@ def main():
             iteration=i,
             reuse_mesh=args.reuse_mesh,
             output_prefix=output_prefix,
-            verbose=args.verbose
+            verbose=args.verbose,
+            params_file=args.params_file
         )
 
         print(f"Result metrics: {metrics}")
@@ -229,6 +237,7 @@ def main():
             "iteration": i,
             "timestamp": run_timestamp,
             "parameters": current_params.copy(),
+            "params_file": args.params_file,
             "metrics": metrics,
             "images": png_paths,
             "solid_stl_path": solid_stl_path,
