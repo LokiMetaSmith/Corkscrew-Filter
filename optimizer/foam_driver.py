@@ -927,6 +927,7 @@ cloudFunctions
         removeCollected false;
         resetOnWrite    false;
         log             true;
+        negateParcelsOppositeNormal false;
         polygonData     off;
     }}
 }}
