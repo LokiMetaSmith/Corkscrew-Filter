@@ -366,9 +366,11 @@ The separation efficiency of a corkscrew filter is critically dependent on $De$.
 In a helical filter, a solid particle is subject to a complex balance of forces that dictates its trajectory. The "clog-free" nature of the device depends on these forces effectively dominating the particle's motion, ensuring it is directed toward the trapping zones rather than remaining entrained in the clean gas stream.
 
 **Stokes Number ($Stk$)**
-The ability of a particle to follow fluid streamlines is dimensionless characterized by the Stokes number:
+The ability of a particle to follow fluid streamlines is characterized by the dimensionless Stokes number:
+
 $$ Stk = \frac{\tau_p U}{D_h} = \frac{\rho_p d_p^2 U}{18 \mu D_h} $$
-Where $\tau_p$ is the particle relaxation time, $d_p$ is particle diameter, and $\rho_p$ is particle density.
+
+Where $\tau_{p}$ is the particle relaxation time, $d_{p}$ is particle diameter, and $\rho_{p}$ is particle density.
 *   $Stk \ll 1$: Particles follow streamlines (no separation).
 *   $Stk > 1$: Particles detach due to inertia (separation).
 
