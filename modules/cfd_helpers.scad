@@ -53,23 +53,16 @@ module CapGeometry(d, shape="circle", thickness=0.5, anchor=CENTER, spin=0, orie
  * Description: Generates the inlet patch attached to the BOTTOM of the fluid domain.
  */
 module InletCap(d, h, shape="circle") {
-    // Create the phantom fluid volume and attach the cap to its bottom
-    %CFD_Reference_Shape(d, h, shape=shape)
-        attach(BOTTOM)
-            CapGeometry(d, shape=shape, thickness=0.5, anchor=CENTER); // anchor=CENTER aligns center of cap with bottom of fluid
-            // Wait, attach(BOTTOM) puts the child at the bottom face.
-            // If child anchor is CENTER, the child's center is at the parent's bottom face.
-            // This means half the cap is inside, half outside.
-            // Ideally, the patch surface is the interface.
-            // If the fluid is -H/2 to H/2. Bottom is -H/2.
-            // We want the cap face to be at -H/2.
-            // If we use anchor=TOP for the cap, its TOP face touches the parent's BOTTOM face.
-            // That places the cap strictly OUTSIDE (below) the fluid.
-            // If we use anchor=BOTTOM, it's inside.
-            // For CFD patches, we usually want the face itself.
-            // SnappyHexMesh works best if the STL surface is exactly on the boundary.
-            // A 0.5mm thick plate centered at the boundary is fine.
-            // So anchor=CENTER is robust.
+    // Create the phantom fluid volume for visualization (separate from the exported geometry)
+    // NOTE: We do not wrap CapGeometry in %CFD_Reference_Shape because the % modifier
+    // propagates to children, preventing the cap from being exported in the STL.
+    %CFD_Reference_Shape(d, h, shape=shape);
+
+    // Manually position the cap at the bottom
+    // CFD_Reference_Shape defaults to anchor=CENTER, so BOTTOM is at -h/2.
+    // anchor=CENTER aligns center of cap with bottom of fluid.
+    down(h/2)
+        CapGeometry(d, shape=shape, thickness=0.5, anchor=CENTER);
 }
 
 /**
@@ -77,9 +70,13 @@ module InletCap(d, h, shape="circle") {
  * Description: Generates the outlet patch attached to the TOP of the fluid domain.
  */
 module OutletCap(d, h, shape="circle") {
-    %CFD_Reference_Shape(d, h, shape=shape)
-        attach(TOP)
-            CapGeometry(d, shape=shape, thickness=0.5, anchor=CENTER);
+    // Visualization phantom
+    %CFD_Reference_Shape(d, h, shape=shape);
+
+    // Manually position the cap at the top
+    // CFD_Reference_Shape defaults to anchor=CENTER, so TOP is at h/2.
+    up(h/2)
+        CapGeometry(d, shape=shape, thickness=0.5, anchor=CENTER);
 }
 
 /**
