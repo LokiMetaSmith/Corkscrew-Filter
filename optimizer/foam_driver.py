@@ -1413,6 +1413,7 @@ boundaryField
             'delta_p': None,
             'residuals': None,
             'capture_by_bin': {},
+            'efficiency_by_bin': {},
             'injected_by_model': {}
         }
 
@@ -1578,6 +1579,18 @@ boundaryField
                                                      pass
                          except Exception as e:
                              print(f"Error parsing patchPostProcessing: {e}")
+
+        # Calculate Efficiency Per Bin (Percent)
+        # Relies on total injected particles (sum of all models)
+        total_injected = metrics.get('particles_injected', 0)
+
+        # Ensure capture_by_bin exists
+        if 'capture_by_bin' in metrics:
+            for bin_name, count in metrics['capture_by_bin'].items():
+                if total_injected > 0:
+                    metrics['efficiency_by_bin'][bin_name] = (count / total_injected) * 100.0
+                else:
+                    metrics['efficiency_by_bin'][bin_name] = 0.0
 
         return metrics
 

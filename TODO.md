@@ -28,8 +28,8 @@ This file tracks planned enhancements and future work for the Thirsty Corkscrew 
 * [ ] **Switch Integration Scheme:** Change the particle tracking integration scheme from `Euler` to `analytical` in `kinematicCloudProperties` to resolve the SIGFPE math explosion caused by explicit integration overshooting drag equilibrium on fine particles.
 
 ## Metric Extraction & Data Handling
-* [ ] **Implement `particleCollector`:** Inject `particleCollector` into the `cloudFunctions` dictionary to capture discrete particle fate data for individual trapping bins.
-* [ ] **Aggregate Patch Data:** Update `foam_driver.get_metrics()` to parse the `particleCollector` CSV/OBJ outputs. Aggregate the raw hit counts into LLM-friendly summary statistics (e.g., capture efficiency per bin).
+- [x] **Implement `particleCollector`:** Inject `particleCollector` into the `cloudFunctions` dictionary to capture discrete particle fate data for individual trapping bins.
+- [x] **Aggregate Patch Data:** Update `foam_driver.get_metrics()` to parse the `particleCollector` CSV/OBJ outputs. Aggregate the raw hit counts into LLM-friendly summary statistics (e.g., capture efficiency per bin).
 * [ ] **Ensure Face Flux (Phi):** Run `postProcess -func writePhi` automatically when preparing the transient `0` directory from steady-state results to ensure velocity interpolation works for all sub-models.
 
 ## Optimization Loop & Architecture
