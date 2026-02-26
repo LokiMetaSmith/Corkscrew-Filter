@@ -992,7 +992,7 @@ cloudFunctions
             return before + "\n" + new_inner_content + "\n    " + after
         return content
 
-    def _generate_snappyHexMeshDict(self, stl_assets):
+    def _generate_snappyHexMeshDict(self, stl_assets, add_layers=True):
         """
         Updates system/snappyHexMeshDict to include all assets as geometry/patches.
         stl_assets: {'fluid': 'f.stl', 'inlet': 'i.stl', ...}
@@ -1048,13 +1048,16 @@ cloudFunctions
             print("Error: snappyHexMeshDict.template missing")
             return
 
+        # Replace addLayers flag
+        content = content.replace("_ADD_LAYERS_FLAG_", "true" if add_layers else "false")
+
         content = self._replace_block(content, "geometry", geometry_str)
         content = self._replace_block(content, "refinementSurfaces", refinement_str)
 
         with open(os.path.join(self.case_dir, "system", "snappyHexMeshDict"), 'w') as f:
             f.write(content)
 
-    def run_meshing(self, log_file=None, bin_config=None, stl_assets=None):
+    def run_meshing(self, log_file=None, bin_config=None, stl_assets=None, add_layers=True):
         """
         Runs the meshing pipeline.
         stl_assets: dict of filenames {'fluid': '...', 'inlet': '...', ...}
@@ -1062,7 +1065,7 @@ cloudFunctions
         # 1. Update snappyHexMeshDict if assets provided
         using_assets = False
         if stl_assets and isinstance(stl_assets, dict):
-            self._generate_snappyHexMeshDict(stl_assets)
+            self._generate_snappyHexMeshDict(stl_assets, add_layers=add_layers)
             using_assets = True
 
         # 2. Generate patch creation configs
@@ -1079,7 +1082,19 @@ cloudFunctions
         # But simulation_runner handles fluid name.
         if not self.run_command(["surfaceFeatureExtract"], log_file=log_file, description="Meshing (surfaceFeatureExtract)"): return False
 
-        if not self.run_command(["snappyHexMesh", "-overwrite"], log_file=log_file, description="Meshing (snappyHexMesh)"): return False
+        if not self.run_command(["snappyHexMesh", "-overwrite"], log_file=log_file, description="Meshing (snappyHexMesh)"):
+            # Fallback Loop
+            if add_layers:
+                print("Warning: Meshing failed with layers enabled. Retrying with layers disabled (Auto-Fallback)...")
+                # Regenerate config with layers=False
+                if using_assets:
+                    self._generate_snappyHexMeshDict(stl_assets, add_layers=False)
+                    if not self.run_command(["snappyHexMesh", "-overwrite"], log_file=log_file, description="Meshing (snappyHexMesh - Fallback)"):
+                        return False
+                else:
+                    return False # Cannot regenerate without assets
+            else:
+                return False
 
         # Step 2: Create Patches (Bin faces only if using_assets)
         if not self.run_command(["topoSet"], log_file=log_file, description="Meshing (topoSet)"): return False

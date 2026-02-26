@@ -13,4 +13,5 @@ CONSTRAINTS = """
     - Consider increasing number_of_complete_revolutions to increase centrifugal force.
     - Experiment with `slit_axial_length_mm` (range: 1.0 - 3.0) and `slit_chamfer_height` (range: 0.1 - 1.0) to optimize particle rejection at the slit.
     - Ensure `slit_chamfer_height` < `slit_axial_length_mm`.
+    - `add_layers` (boolean): Default true. Enables boundary layer generation in meshing. Can be set to false if meshing fails or to save time, though it reduces simulation accuracy.
 """
