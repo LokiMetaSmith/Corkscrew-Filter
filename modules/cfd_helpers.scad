@@ -53,15 +53,12 @@ module CapGeometry(d, shape="circle", thickness=0.5, anchor=CENTER, spin=0, orie
  * Description: Generates the inlet patch attached to the BOTTOM of the fluid domain.
  */
 module InletCap(d, h, shape="circle") {
-    // Create the phantom fluid volume for visualization (separate from the exported geometry)
-    // NOTE: We do not wrap CapGeometry in %CFD_Reference_Shape because the % modifier
-    // propagates to children, preventing the cap from being exported in the STL.
+    // Show phantom fluid volume for reference
     %CFD_Reference_Shape(d, h, shape=shape);
 
-    // Manually position the cap at the bottom
-    // CFD_Reference_Shape defaults to anchor=CENTER, so BOTTOM is at -h/2.
-    // anchor=CENTER aligns center of cap with bottom of fluid.
-    down(h/2)
+    // Explicitly place the cap at the bottom
+    // Default anchor of ReferenceShape is CENTER, so it spans from -h/2 to h/2.
+    translate([0, 0, -h/2])
         CapGeometry(d, shape=shape, thickness=0.5, anchor=CENTER);
 }
 
@@ -70,12 +67,11 @@ module InletCap(d, h, shape="circle") {
  * Description: Generates the outlet patch attached to the TOP of the fluid domain.
  */
 module OutletCap(d, h, shape="circle") {
-    // Visualization phantom
+    // Show phantom fluid volume for reference
     %CFD_Reference_Shape(d, h, shape=shape);
 
-    // Manually position the cap at the top
-    // CFD_Reference_Shape defaults to anchor=CENTER, so TOP is at h/2.
-    up(h/2)
+    // Explicitly place the cap at the top
+    translate([0, 0, h/2])
         CapGeometry(d, shape=shape, thickness=0.5, anchor=CENTER);
 }
 
