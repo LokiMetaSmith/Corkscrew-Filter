@@ -35,3 +35,11 @@ This file tracks planned enhancements and future work for the Thirsty Corkscrew 
 ## Optimization Loop & Architecture
 - [x] **Inter-Simulation Parallelization:** Refactor the optimization orchestrator (`main.py` / `worker.py`) to process LLM-generated parameter batches concurrently by spinning up multiple asynchronous OpenFOAM container instances, rather than evaluating one design at a time.
 - [x] **Bug Fix:** Fixed parameter type handling in `JobManager` to correctly distinguish between ranges (tuples) and discrete choices (lists).
+
+## Project Readiness & Review (Jan 2026)
+- [x] **Comprehensive Review:** Conducted a full review of the codebase, documentation, and tests.
+- [x] **Geometry Fixes:** Attempted to fix non-planar faces in `RampedKnifeShape` (triangulation) and added epsilon overlap to cutters to improve CSG stability.
+- [x] **Test Reliability:** Increased timeouts for WASM-based tests (`test/regression.js` and `test/test_parameter_stls.py`) to prevent false failures on slower environments.
+- [x] **Documentation:** Updated `README.md` with explicit installation/testing instructions and `TECHNICAL_REPORT.md` with notes on missing figures.
+- [ ] **Geometry Stability:** Resolve persistent `CGAL error: precondition violation` in `single_cell_filter.scad` and `flat_end_screw.scad` when running in `openscad-wasm`. (Native OpenSCAD may work fine).
+- [ ] **Visual Assets:** Generate and insert Figure 3 (Velocity Streamlines) into `TECHNICAL_REPORT.md` using ParaView.

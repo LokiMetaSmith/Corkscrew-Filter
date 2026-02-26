@@ -10,11 +10,14 @@
  * Arguments: (Same as MultiHelixRamp)
  */
 module SimpleSlitCutter(h, twist, dia, helices, offset_angle=ramp_width_degrees/2) {
+    // Overlap epsilon to ensure clean cuts
+    eps = 0.1;
     for (i = [0 : helices - 1]) {
         rotate([0, 0, i * (360 / helices) + offset_angle])
         linear_extrude(height = h, twist = twist, center = true, slices = h > 0 ? h * 2 : 1)
-            translate([dia / 2 - slit_depth_mm / 2, 0])
-                square([slit_depth_mm, slit_width_mm], center = true);
+            // Shift outward by eps/2 and increase width by eps
+            translate([dia / 2 - slit_depth_mm / 2 + eps/2, 0])
+                square([slit_depth_mm + eps, slit_width_mm], center = true);
     }
 }
 
@@ -27,6 +30,7 @@ module RampedSlitKnife(h, twist, dia, helices, offset_angle=ramp_width_degrees/2
     twist_per_mm = twist / h;
     ramp_len = slit_ramp_length_mm;
     open_len = slit_open_length_mm;
+    eps = 0.1; // Overlap epsilon
 
     for (i = [0 : helices - 1]) {
         rotate([0, 0, i * (360 / helices) + offset_angle]) {
@@ -35,18 +39,19 @@ module RampedSlitKnife(h, twist, dia, helices, offset_angle=ramp_width_degrees/2
                     // 1. The Ramp using hull (interpolates between start surface and full depth)
                     hull() {
                         // Bottom slice: A thin rectangle at dia/2 (surface), depth ~0
+                        // Extend outward by eps
                         translate([0,0,0])
                         rotate([0,0,0])
                         translate([dia/2, 0])
                         translate([-0.01, -slit_width_mm/2]) // Depth 0.01
-                            cube([0.01, slit_width_mm, 0.01]);
+                            cube([0.01 + eps, slit_width_mm, 0.01]);
 
                         // Top slice: A rectangle at dia/2 - depth, depth full
-                        // Rotated to match twist at ramp_len
+                        // Extend outward by eps
                         translate([0,0,ramp_len])
                         rotate([0,0,twist_per_mm * ramp_len])
                         translate([dia/2 - slit_depth_mm, -slit_width_mm/2, -0.01])
-                            cube([slit_depth_mm, slit_width_mm, 0.01]);
+                            cube([slit_depth_mm + eps, slit_width_mm, 0.01]);
                     }
 
                     // 2. The Body (Open Slit)
@@ -54,7 +59,7 @@ module RampedSlitKnife(h, twist, dia, helices, offset_angle=ramp_width_degrees/2
                      rotate([0, 0, twist_per_mm * ramp_len])
                      linear_extrude(height = open_len, twist = twist_per_mm * open_len, center=false) {
                          translate([dia/2 - slit_depth_mm, -slit_width_mm/2])
-                             square([slit_depth_mm, slit_width_mm]);
+                             square([slit_depth_mm + eps, slit_width_mm]);
                      }
                 }
             }
@@ -107,10 +112,13 @@ module RampedKnifeShape(h, twist, radius, profile_radius) {
     chamfer_points = [p0, p1, p2, p3, p4, p5];
     chamfer_faces = [
         [0, 2, 1], // Bottom
-        [3, 4, 5], // Top
-        [0, 1, 4, 3], // Side 1
-        [1, 2, 5, 4], // Side 2
-        [2, 0, 3, 5]  // Side 3
+        [3, 5, 4], // Top (Reordered to be CW when viewed from outside)
+        // Side 1 (Triangulated for planarity)
+        [0, 1, 4], [0, 4, 3],
+        // Side 2
+        [1, 2, 5], [1, 5, 4],
+        // Side 3
+        [2, 0, 3], [2, 3, 5]
     ];
 
     // Shift to match center=true of original linear_extrude

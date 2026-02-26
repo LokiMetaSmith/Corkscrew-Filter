@@ -28,9 +28,11 @@ The design of such a filter involves a complex trade-off between **separation ef
 
 The 3D models for the filter are generated using OpenSCAD.
 
-1.  **Install OpenSCAD**: If you don't have it already, download and install OpenSCAD from [openscad.org](https://openscad.org/).
-2.  **Open the Main File**: Open the `ThirstyCorkscrew.scad` file in OpenSCAD.
-3.  **Configure Parameters**: Adjust the parameters in the file to customize the filter to your needs. The most important parameters are located at the top of the file.
+1.  **Install Dependencies**:
+    *   **Node.js**: Run `npm install` in the root directory to install geometry generation tools (`openscad-wasm`).
+    *   **Python**: Run `pip install -r optimizer/requirements.txt` to install the optimization and testing framework.
+2.  **Open the Main File**: Open the `ThirstyCorkscrew.scad` file in OpenSCAD (or use the CLI tools provided).
+3.  **Configure Parameters**: Adjust the parameters in `config.scad` or the `configs/` directory.
 4.  **Render and Export**: Render the model (F6) and export it as an STL file for 3D printing.
 
 ### Key Parameters (`ThirstyCorkscrew.scad`)
@@ -54,6 +56,13 @@ This project includes a case setup for running a CFD simulation using OpenFOAM t
 For those looking to optimize the filter design programmatically, the `optimizer/` directory contains tools to automate the design-simulation-analysis loop using Generative AI.
 *   See [optimizer/README.md](./optimizer/README.md) for details on the AI-driven optimization workflow.
 *   See [parameters/README.md](./parameters/README.md) for information on parameter configuration files.
+
+## Testing
+
+To ensure the system is working correctly:
+
+1.  **Geometry Regression**: Run `npm test` to verify that the OpenSCAD modules can generate STLs for all configuration files.
+2.  **Unit Tests**: Run `python3 -m pytest test/` to verify the optimization and simulation drivers.
 
 ## Future Work
 
