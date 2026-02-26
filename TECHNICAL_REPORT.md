@@ -1,6 +1,6 @@
 # NASA Technical Memorandum: Analysis of Corkscrew Filter Autonomous Design Framework
 
-**Date:** January 26, 2026
+**Date:** February 25, 2026
 **Subject:** Technical Evaluation of the Parametric Corkscrew Filter Repository
 **Target Audience:** Technical Review Board, Open Source Community
 **Author:** Lawrence Kincheloe
@@ -93,6 +93,14 @@ graph TD
     Gemini --> Params
 ```
 
+### 3.1. Distributed Optimization (Git-Based)
+
+To address the computational cost of high-fidelity CFD simulations, the system architecture has been extended to support distributed, asynchronous optimization.
+
+*   **Job Manager:** A new `JobManager` class facilitates the segmentation of the parameter space. It allows multiple agents to "check out" specific regions of interest and generate local job queues.
+*   **Git-Based Synchronization:** Results are stored in an append-only JSONL format (`optimization_log.jsonl`) and synchronized via Git. A hashing mechanism links each result to the specific codebase commit, ensuring reproducibility.
+*   **Campaign Mode:** The `LLMAgent` can now generate batch "campaigns"—sequences of parameter sets—rather than single-step iterations. This allows for parallel execution across multiple worker nodes, significantly accelerating the exploration of the design space.
+
 ## 4. Subsystem Analysis: Parametric Modeling (OpenSCAD)
 
 The geometric modeling is performed by OpenSCAD, a script-based CAD modeler. The codebase has evolved from a monolithic structure to a highly modular library.
@@ -133,6 +141,13 @@ Meshing helical geometries is notoriously difficult due to the complex curvature
 The `FoamDriver` dynamically injects `functionObjects` (`surfaceFieldValue`) into the `controlDict`. This provides a robust, code-driven method to extract the area-averaged pressure at the inlet and outlet patches, automating the calculation of $$\Delta P$$.
 
 [Figure 3: Velocity streamlines through the helical channel (OpenFOAM Output)]
+
+![Figure 4: Pressure distribution ($p$) within the corkscrew filter geometry.](images/openfoam-pressure.PNG)
+
+### 5.3. Lagrangian Particle Tracking
+Recent enhancements have re-enabled Lagrangian particle tracking using the `StochasticDispersionRAS` dispersion model. This allows for the simulation of particle trajectories influenced by turbulent eddies.
+*   **`particleCollector`:** A custom `cloudFunction` has been integrated to count particle hits on specific trap boundaries. This provides a direct measure of separation efficiency by bin, which is parsed and fed back to the LLM agent.
+*   **Integration Scheme:** The integration scheme for particle motion has been updated to `analytical` to prevent numerical instability (SIGFPE errors) when tracking fine particles with high drag coefficients.
 
 ## 6. Subsystem Analysis: Autonomous Optimization (AI Agent)
 
@@ -278,15 +293,17 @@ A review of the `legacy/` directory (specifically `ThirstyCorkscrew.scad`) revea
 The Corkscrew Filter repository demonstrates a high Technology Readiness Level (TRL) for an automated design framework. It successfully bridges the gap between parametric CAD and high-fidelity CFD using modern AI orchestration.
 
 ### 9.1. Technical Recommendations for Improvement
-1.  **Turbulence Model Verification:** Explicitly define the turbulence model (e.g., $$k-\omega$$ SST) to ensure the simulation accurately captures the rotational flow separation.
-2.  **Convergence Criteria:** The `FoamDriver` currently runs for a fixed number of iterations. Implementing a residual-based stopping criterion (e.g., stop when residuals < $$10^{-4}$$) would optimize computational resource usage.
-3.  **Parallel Execution:** The current optimization loop is sequential. Running multiple simulations in parallel would significantly accelerate the exploration of the high-dimensional parameter space.
+1.  **Convergence Criteria:** The `FoamDriver` currently runs for a fixed number of iterations. Implementing a residual-based stopping criterion (e.g., stop when residuals < $$10^{-4}$$) would optimize computational resource usage.
 
 ### 9.2. Recent Improvements
 The following recommendations from previous evaluations have been successfully implemented:
 1.  **Repository Integrity:** The missing `corkscrewFilter/constant` directory has been restored, ensuring the OpenFOAM simulation case is fully defined with `transportProperties` and `turbulenceProperties`.
 2.  **WASM Portability:** The generation pipeline has been migrated to `openscad-wasm`, decoupling the runtime environment from local binary dependencies.
 3.  **Standardized Configuration:** A scalable "Configuration-as-Code" structure (`configs/`) has replaced ad-hoc variable modification, enabling reproducible batch generation.
+4.  **Lagrangian Turbulence:** The `StochasticDispersionRAS` model has been re-enabled in `kinematicCloudProperties`, allowing for accurate modeling of particle dispersion due to turbulent eddies.
+5.  **Parallel Execution:** The optimization loop now supports concurrent simulation execution via asynchronous worker processes, significantly accelerating parameter space exploration.
+6.  **Distributed Optimization:** A Git-based synchronization mechanism allows for distributed optimization across multiple machines, with results tracked via commit hashes.
+7.  **Component Modularization:** The `Barb` generator and `FilterHolder` components have been fully parameterized and standardized, replacing legacy hardcoded geometry.
 
 ---
 
