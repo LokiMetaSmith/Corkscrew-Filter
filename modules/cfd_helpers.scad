@@ -53,23 +53,13 @@ module CapGeometry(d, shape="circle", thickness=0.5, anchor=CENTER, spin=0, orie
  * Description: Generates the inlet patch attached to the BOTTOM of the fluid domain.
  */
 module InletCap(d, h, shape="circle") {
-    // Create the phantom fluid volume and attach the cap to its bottom
-    %CFD_Reference_Shape(d, h, shape=shape)
-        attach(BOTTOM)
-            CapGeometry(d, shape=shape, thickness=0.5, anchor=CENTER); // anchor=CENTER aligns center of cap with bottom of fluid
-            // Wait, attach(BOTTOM) puts the child at the bottom face.
-            // If child anchor is CENTER, the child's center is at the parent's bottom face.
-            // This means half the cap is inside, half outside.
-            // Ideally, the patch surface is the interface.
-            // If the fluid is -H/2 to H/2. Bottom is -H/2.
-            // We want the cap face to be at -H/2.
-            // If we use anchor=TOP for the cap, its TOP face touches the parent's BOTTOM face.
-            // That places the cap strictly OUTSIDE (below) the fluid.
-            // If we use anchor=BOTTOM, it's inside.
-            // For CFD patches, we usually want the face itself.
-            // SnappyHexMesh works best if the STL surface is exactly on the boundary.
-            // A 0.5mm thick plate centered at the boundary is fine.
-            // So anchor=CENTER is robust.
+    // Show phantom fluid volume for reference
+    %CFD_Reference_Shape(d, h, shape=shape);
+
+    // Explicitly place the cap at the bottom
+    // Default anchor of ReferenceShape is CENTER, so it spans from -h/2 to h/2.
+    translate([0, 0, -h/2])
+        CapGeometry(d, shape=shape, thickness=0.5, anchor=CENTER);
 }
 
 /**
@@ -77,9 +67,12 @@ module InletCap(d, h, shape="circle") {
  * Description: Generates the outlet patch attached to the TOP of the fluid domain.
  */
 module OutletCap(d, h, shape="circle") {
-    %CFD_Reference_Shape(d, h, shape=shape)
-        attach(TOP)
-            CapGeometry(d, shape=shape, thickness=0.5, anchor=CENTER);
+    // Show phantom fluid volume for reference
+    %CFD_Reference_Shape(d, h, shape=shape);
+
+    // Explicitly place the cap at the top
+    translate([0, 0, h/2])
+        CapGeometry(d, shape=shape, thickness=0.5, anchor=CENTER);
 }
 
 /**
