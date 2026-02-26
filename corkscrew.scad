@@ -44,7 +44,11 @@ module GenerateSelectedPart() {
     } else if (target_part == "hose_adapter_cap") {
         HoseAdapterEndCap(tube_od_mm, adapter_hose_id_mm, oring_cross_section_mm, tube_wall_mm, ADAPTER_AXIAL_SEAL);
     } else if (target_part == "flat_end_screw") {
-        total_twist = 360 * number_of_complete_revolutions;
+        revs = number_of_complete_revolutions;
+        // Use accumulate_sum (defined in modules/assemblies.scad) to sum the revolutions if it's a list.
+        // accumulate_sum returns a list of cumulative sums, the last element is the total.
+        total_revs = is_list(revs) ? accumulate_sum(revs)[len(revs)] : revs;
+        total_twist = 360 * total_revs;
         FlatEndScrew(insert_length_mm, total_twist, num_bins);
     } else if (target_part == "custom_coupling") {
         CustomCoupling();

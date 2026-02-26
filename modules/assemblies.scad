@@ -4,11 +4,18 @@
 // This file contains the top-level modules that assemble complete,
 // printable parts.
 
+// Helper function: Cumulative sum of a list.
+// Returns a list where list[i] is the sum of v[0]...v[i-1].
+// The result has length len(v) + 1.
+function accumulate_sum(v, i=0, current=0) =
+    (i >= len(v)) ? [current] :
+    concat([current], accumulate_sum(v, i+1, current + v[i]));
+
+
 /**
  * Module: ModularFilterAssembly
  * Description: Assembles the complete modular filter, including screw segments, spacers,
- * and optional inlets and supports. It uses a robust "Master Helix" method
- * to ensure perfect alignment of all components, avoiding floating-point errors.
+ * and optional inlets and supports.
  * Arguments:
  * tube_id:      The inner diameter of the tube this assembly will fit into.
  * total_length: The total desired length of the filter assembly.
@@ -18,99 +25,164 @@ module ModularFilterAssembly(tube_id, total_length) {
     total_spacer_length = (num_bins + 1) * spacer_height_mm;
     total_screw_length = total_length - total_spacer_length;
     bin_length = total_screw_length / num_bins;
-    twist_rate = (360 * number_of_complete_revolutions) / total_length; // degrees per mm
 
-    // --- Master Helix Definitions ---
-    module MasterSolidHelix() { Corkscrew(total_length + 2, twist_rate * (total_length + 2), void = false); }
-    module MasterVoidHelix() { Corkscrew(total_length + 2, twist_rate * (total_length + 2), void = true); }
-    module MasterHollowHelix() {
-        HollowHelicalShape(
-            total_length + 2,
-            twist_rate * (total_length + 2),
-            helix_path_radius_mm,
-            helix_profile_radius_mm,
-            helix_void_profile_radius_mm + tolerance_channel
-        );
-    }
-    // --- Optimized Generation (Local Segments) ---
-    // We use the Master Helix method to ensure perfect alignment.
-    // Screw segments are intersections of the MasterHollowHelix and a defining cylinder.
-    // Spacer holes are differences of the MasterSolidHelix.
+    // --- Parse Revolutions (Scalar or Array) ---
+    // Calculate twist rates (degrees per mm) for each bin.
+    // If array: Interpreted as revolutions PER BIN (e.g. 1 means 1 full turn in that bin).
+    // If scalar: Interpreted as revolutions OVER TOTAL LENGTH (legacy behavior).
+    _rates = is_list(number_of_complete_revolutions)
+        ? [for (r = number_of_complete_revolutions) 360 * r / bin_length]
+        : [for (i=[0:num_bins-1]) 360 * number_of_complete_revolutions / total_length];
+
+    // --- Component Sequence Definition ---
+    // We treat the assembly as a stack of components: Spacers and Bins.
+    // Sequence: S0, B0, S1, B1, ..., Sn-1, Bn-1, Sn
+    // Total components: 2 * num_bins + 1
+    component_count = 2 * num_bins + 1;
+
+    // Component Heights
+    // Even indices are Spacers, Odd indices are Bins.
+    _comp_heights = [for (k=[0:component_count-1]) (k % 2 == 0) ? spacer_height_mm : bin_length];
+
+    // Component Twist Rates
+    // Spacer k (index 2k) uses rate[k] (except last spacer uses rate[last])
+    // Bin k (index 2k+1) uses rate[k]
+    // Mapping component index k to bin index for rate lookup:
+    function get_rate_index(k) = min(floor(k/2), num_bins-1);
+    _comp_rates = [for (k=[0:component_count-1]) _rates[get_rate_index(k)]];
+
+    // Calculate Z-positions (cumulative heights)
+    // _z_starts[k] is the Z position of the bottom of component k relative to the bottom of the stack.
+    _z_offsets = accumulate_sum(_comp_heights);
+    z_bottom = -total_length / 2;
+
+    // Calculate Rotation Phases (cumulative rotations)
+    // We integrate twist_rate * height along the stack.
+    _rot_increments = [for (k=[0:component_count-1]) _comp_rates[k] * _comp_heights[k]];
+    _rot_starts = accumulate_sum(_rot_increments);
 
     color(USE_TRANSLUCENCY ? [0.9, 0.9, 0.9, 0.5] : "Gainsboro")
     union() {
-        // --- Create the screw segments (bins) ---
-        for (i = [0 : num_bins - 1]) {
-            z_pos = -total_length / 2 + spacer_height_mm + i * (bin_length + spacer_height_mm) + bin_length / 2;
-            rot = twist_rate * z_pos;
+        // Loop through all components
+        for (k = [0 : component_count - 1]) {
+            is_bin = (k % 2 != 0);
+            bin_idx = floor(k / 2); // For bins: 0..num_bins-1. For spacers: 0..num_bins.
 
-            translate([0, 0, z_pos]) rotate([0, 0, rot]) {
-                 difference() {
-                     intersection() {
-                        rotate([0, 0, -rot]) translate([0, 0, -z_pos]) MasterHollowHelix();
-                        cylinder(h = bin_length + 0.1, d = tube_id * 2, center = true);
-                     }
-                     if (slit_type == "simple") {
-                         SimpleSlitCutter(bin_length, twist_rate * bin_length, 2 * (helix_path_radius_mm + helix_profile_radius_mm), 1, offset_angle=0);
-                     } else if (slit_type == "ramped") {
-                         RampedSlitKnife(bin_length, twist_rate * bin_length, 2 * (helix_path_radius_mm + helix_profile_radius_mm), 1, offset_angle=0);
-                     }
-                 }
-            }
-        }
+            // Dimensions and Properties
+            h = _comp_heights[k];
+            rate = _comp_rates[k];
 
-        // --- Create the spacers ---
-        for (i = [0 : num_bins]) {
-            z_pos = -total_length / 2 + i * (bin_length + spacer_height_mm) + spacer_height_mm / 2;
-            rot = twist_rate * z_pos;
-            is_base = (i == 0);
-            is_top = (i == num_bins);
-            spacer_od = tube_id - tolerance_tube_fit;
+            // Position and Rotation
+            z_start = z_bottom + _z_offsets[k];
+            z_center = z_start + h / 2;
 
-            translate([0, 0, z_pos]) rotate([0, 0, rot]) {
-                union() {
+            rot_start = _rot_starts[k];
+            rot_center = rot_start + (rate * h / 2); // Rotation at the center of the component
+
+            translate([0, 0, z_center]) rotate([0, 0, rot_center]) {
+                if (is_bin) {
+                    // --- Generate Bin ---
                     difference() {
-                        cylinder(d = spacer_od, h = spacer_height_mm, center = true);
-                        // Cut with MasterVoidHelix (cut the inner channel, leaving the wall material)
-                        rotate([0, 0, -rot]) translate([0, 0, -z_pos]) MasterVoidHelix();
-                        union(){
-                            OringGroove_OD_Cutter(spacer_od, oring_cross_section_mm);
-                            if ((is_top || is_base) && inlet_type != "none") {
-                                recess_d = (inlet_type == "threaded" || inlet_type == "pressfit")
-                                    ? threaded_inlet_flange_od + tolerance_socket_fit
-                                    : barb_inlet_flange_od + tolerance_socket_fit;
+                        // Solid Screw Segment
+                        HollowHelicalShape(
+                            h + 0.02, // Add overlap for robust union
+                            rate * (h + 0.02),
+                            helix_path_radius_mm + 0.01, // Add tiny offset to prevent singularity at axis
+                            helix_profile_radius_mm,
+                            helix_void_profile_radius_mm + tolerance_channel
+                        );
 
-                                // Align recess with the helix interface
-                                z_interface = is_top ? (spacer_height_mm / 2 - 1) : (-spacer_height_mm / 2 + 2);
-                                z_recess_pos = is_top ? (spacer_height_mm / 2 - 1) : (-spacer_height_mm / 2);
-                                ra = twist_rate * z_interface;
-
-                                rotate([0, 0, ra]) translate([helix_path_radius_mm, 0, z_recess_pos]) cylinder(d = recess_d, h = 2);
-                            }
+                        // Slits
+                        if (slit_type == "simple") {
+                            SimpleSlitCutter(h + 0.02, rate * (h + 0.02), 2 * (helix_path_radius_mm + helix_profile_radius_mm), 1, offset_angle=0);
+                        } else if (slit_type == "ramped") {
+                            RampedSlitKnife(h + 0.02, rate * (h + 0.02), 2 * (helix_path_radius_mm + helix_profile_radius_mm), 1, offset_angle=0);
                         }
                     }
+                } else {
+                    // --- Generate Spacer ---
+                    spacer_idx = bin_idx; // 0..num_bins
+                    is_base = (spacer_idx == 0);
+                    is_top = (spacer_idx == num_bins);
+                    spacer_od = tube_id - tolerance_tube_fit;
 
-                    if ((is_top || is_base) && inlet_type != "none") {
-                        mirror_vec = [0, 0, is_top ? 0 : 1];
+                    union() {
+                        difference() {
+                            cylinder(d = spacer_od, h = h + 0.02, center = true); // Add overlap
 
-                        z_local = is_top ? (spacer_height_mm / 2 - 1) : (-spacer_height_mm / 2 + 2);
-                        ra = twist_rate * z_local;
+                            // Cut the helical void
+                            Corkscrew(h + 0.04, rate * (h + 0.04), void = true);
 
-                        rotate([0, 0, ra]) translate([helix_path_radius_mm, 0, z_local]) mirror(mirror_vec) {
-                            if (inlet_type == "threaded" || inlet_type == "pressfit") {
-                                ThreadedInlet();
-                            } else if (inlet_type == "barb") {
-                                BarbInlet();
+                            union(){
+                                OringGroove_OD_Cutter(spacer_od, oring_cross_section_mm);
+
+                                // Inlet/Outlet Recess
+                                if ((is_top || is_base) && inlet_type != "none") {
+                                    recess_d = (inlet_type == "threaded" || inlet_type == "pressfit")
+                                        ? threaded_inlet_flange_od + tolerance_socket_fit
+                                        : barb_inlet_flange_od + tolerance_socket_fit;
+
+                                    // Align recess with the helix interface
+                                    // Interface is at z_center +/- h/2.
+                                    // But we are in local coordinates centered at 0.
+                                    // Top spacer: Interface is at bottom (-h/2). Recess at -h/2.
+                                    // Base spacer: Interface is at top (h/2). Recess at h/2.
+                                    // Wait, original logic:
+                                    // z_interface = is_top ? (h / 2 - 1) : (-h / 2 + 2); -- Original values were hardcoded/relative.
+
+                                    // Let's replicate original placement logic carefully.
+                                    // Original:
+                                    // z_recess_pos = is_top ? (spacer_height_mm / 2 - 1) : (-spacer_height_mm / 2);
+                                    // We are centered.
+
+                                    z_recess_pos = is_top ? (h / 2 - 1) : (-h / 2);
+
+                                    // Rotation at recess:
+                                    // We need to match the rotation at that Z height.
+                                    // Local Z = z_recess_pos.
+                                    // Local Rot = rate * z_recess_pos.
+                                    // Note: `rotate([0, 0, rot_center])` is already applied to the parent.
+                                    // So we just need local rotation relative to center?
+                                    // Yes.
+
+                                    ra = rate * z_recess_pos;
+
+                                    rotate([0, 0, ra]) translate([helix_path_radius_mm, 0, z_recess_pos]) cylinder(d = recess_d, h = 2);
+                                }
                             }
                         }
-                    }
 
-                    if (SHOW_O_RINGS) { OringVisualizer(spacer_od, oring_cross_section_mm); }
-                    // Disable support generation during CFD volume creation to prevent timeouts due to CSG complexity
-                    if (ADD_HELICAL_SUPPORT && !GENERATE_CFD_VOLUME && !is_top) {
-                        translate([0, 0, spacer_height_mm / 2])
-                            rotate([0, 0, twist_rate * spacer_height_mm / 2])
-                            HelicalOuterSupport(spacer_od, bin_length, support_rib_thickness_mm, twist_rate);
+                        // Inlet/Outlet Attachments
+                        if ((is_top || is_base) && inlet_type != "none") {
+                            mirror_vec = [0, 0, is_top ? 0 : 1];
+                            // Original: z_local = is_top ? (spacer_height_mm / 2 - 1) : (-spacer_height_mm / 2 + 2);
+                            z_local = is_top ? (h / 2 - 1) : (-h / 2 + 2);
+                            ra = rate * z_local;
+
+                            rotate([0, 0, ra]) translate([helix_path_radius_mm, 0, z_local]) mirror(mirror_vec) {
+                                if (inlet_type == "threaded" || inlet_type == "pressfit") {
+                                    ThreadedInlet();
+                                } else if (inlet_type == "barb") {
+                                    BarbInlet();
+                                }
+                            }
+                        }
+
+                        if (SHOW_O_RINGS) { OringVisualizer(spacer_od, oring_cross_section_mm); }
+
+                        // Supports
+                        // Only add support if it's below a bin (not top spacer)
+                        if (ADD_HELICAL_SUPPORT && !GENERATE_CFD_VOLUME && !is_top) {
+                            // Support covers the bin above this spacer.
+                            // The support module generates geometry of height `bin_length`.
+                            // We need to position it correctly.
+                            // Original: translate([0, 0, spacer_height_mm / 2]) rotate(...) HelicalOuterSupport(...)
+                            // It starts from the top of the spacer.
+
+                            translate([0, 0, h / 2])
+                                rotate([0, 0, rate * h / 2])
+                                HelicalOuterSupport(spacer_od, bin_length, support_rib_thickness_mm, rate);
+                        }
                     }
                 }
             }
