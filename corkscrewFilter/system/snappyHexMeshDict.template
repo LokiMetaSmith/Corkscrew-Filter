@@ -19,7 +19,7 @@ mergeTolerance 1e-6;
 
 castellatedMesh true;
 snap            true;
-addLayers       true;
+addLayers       _ADD_LAYERS_FLAG_;
 
 geometry
 {

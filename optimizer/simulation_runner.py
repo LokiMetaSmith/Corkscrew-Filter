@@ -290,7 +290,11 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                 # Pass bin config AND assets
                 # We pass just filenames as they are in triSurface
                 asset_filenames = {k: os.path.basename(v) for k, v in cfd_assets.items()}
-                success = foam_driver.run_meshing(log_file=mesh_log, bin_config=bin_config, stl_assets=asset_filenames)
+
+                # Extract add_layers parameter, default True
+                add_layers = params.get("add_layers", True)
+
+                success = foam_driver.run_meshing(log_file=mesh_log, bin_config=bin_config, stl_assets=asset_filenames, add_layers=add_layers)
         else:
             print("[Reuse Mesh] Skipping meshing pipeline.")
             success = True
