@@ -244,8 +244,23 @@ class FoamDriver:
             shutil.rmtree(edge_mesh)
         os.makedirs(edge_mesh, exist_ok=True)
 
-        # Clean previous results
-        self.run_command(["foamListTimes", "-rm"], ignore_error=True)
+        # Clean previous results (numeric time directories and processors)
+        for d in os.listdir(self.case_dir):
+            path = os.path.join(self.case_dir, d)
+            # Use float check to catch scientific notation like 1e-5
+            try:
+                is_numeric = False
+                if d != "0":
+                    float(d)
+                    is_numeric = True
+            except ValueError:
+                is_numeric = False
+
+            if os.path.isdir(path) and is_numeric:
+                shutil.rmtree(path, ignore_errors=True)
+
+        for p_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
+            shutil.rmtree(p_dir, ignore_errors=True)
 
         # Ensure 0 folder
         zero_orig = os.path.join(self.case_dir, "0.orig")
