@@ -14,7 +14,7 @@ def validate_parameters(params):
         # Extract parameters with defaults matching config.scad where appropriate
         # Dimensions
         tube_od = float(params.get("tube_od_mm", 32))
-        tube_wall = float(params.get("tube_wall_mm", 1.5))
+        tube_wall = float(params.get("tube_wall_mm", 1.0))
 
         path_r = float(params.get("helix_path_radius_mm", 1.8))
         profile_r = float(params.get("helix_profile_radius_mm", 1.8))

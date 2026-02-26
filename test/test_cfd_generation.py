@@ -102,5 +102,33 @@ class TestCFDGeneration(unittest.TestCase):
             self.assertTrue(success, "Outlet Cap generation failed")
             self.verify_stl(output_path)
 
+    def test_fluid_volume_watertightness(self):
+        """Test generation of Fluid Volume STL (main CFD body) using exact parameters from user report."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = os.path.join(temp_dir, "corkscrew_fluid.stl")
+            params = {
+                "part_to_generate": "modular_filter_assembly",
+                "num_bins": 1,
+                "number_of_complete_revolutions": 2,
+                "helix_path_radius_mm": 8.0,
+                "helix_profile_radius_mm": 6.0,
+                "helix_void_profile_radius_mm": 4.0,
+                "helix_profile_scale_ratio": 1.0,
+                "tube_od_mm": 32,
+                "insert_length_mm": 50,
+                "GENERATE_CFD_VOLUME": True,
+                "slit_axial_length_mm": 2.0,
+                "slit_chamfer_height": 0.5,
+                "GENERATE_SLICE": False,
+                "CUT_FOR_VISIBILITY": False,
+                "SHOW_TUBE": False,
+                "high_res_fn": 100
+            }
+
+            print("Generating Fluid Volume with repro parameters...")
+            success = self.driver.generate_stl(params, output_path)
+            self.assertTrue(success, "Fluid Volume generation failed")
+            self.verify_stl(output_path)
+
 if __name__ == '__main__':
     unittest.main()
