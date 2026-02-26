@@ -119,13 +119,17 @@ def main():
         params = target_job["parameters"]
         output_prefix = os.path.join("exports", f"job_{job_id}")
 
+        # Check for params file source (e.g. from --params-file passed via main.py)
+        params_file = params.get("_source")
+
         try:
             # Unpack all 5 return values
             metrics, png_paths, solid_stl, fluid_stl, vtk_zip = run_simulation(
                 scad, foam, params,
                 output_stl_name="corkscrew_fluid.stl", # Standard name for Foam
                 dry_run=args.dry_run,
-                output_prefix=output_prefix
+                output_prefix=output_prefix,
+                params_file=params_file
             )
 
             # Check for critical failures in metrics

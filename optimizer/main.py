@@ -179,7 +179,6 @@ def main():
             # For now, break to avoid infinite loop of nothing.
             break
 
-<<<<<<< feature/parallel-opt-physics-upgrade-4539963120723569908
         # === EXECUTION PHASE ===
 
         if args.parallel_workers > 0:
@@ -255,142 +254,85 @@ def main():
 
             i += len(current_batch_ids)
 
-=======
-        current_params = parameter_queue.pop(0)
-
-        # Deduplication Check
-        param_hash = get_params_hash(current_params)
-        if param_hash in visited_params:
-            print(f"Skipping duplicate parameters (Hash: {param_hash}).")
-            # If queue is empty, we'll hit refill next loop. If not, we just take next.
-            continue
-
-        print(f"Testing parameters: {current_params}")
-        visited_params.add(param_hash)
-
-        # Generate Run ID and Output Prefix
-        # Use timestamp to ensure uniqueness
-        run_timestamp = time.time()
-        run_id_hash = hashlib.md5(f"{i}_{run_timestamp}".encode()).hexdigest()
-        run_id_short = run_id_hash[:8]
-        output_prefix = os.path.join("exports", f"run_{run_id_short}")
-
-        # Run Simulation via Runner
-        # output_stl is strictly 'corkscrew_fluid.stl' for OpenFOAM compatibility
-        metrics, png_paths, solid_stl_path, fluid_stl_path, vtk_zip_path = run_simulation(
-            scad,
-            foam,
-            current_params,
-            output_stl_name=args.output_stl,
-            dry_run=args.dry_run,
-            skip_cfd=args.skip_cfd,
-            iteration=i,
-            reuse_mesh=args.reuse_mesh,
-            output_prefix=output_prefix,
-            verbose=args.verbose,
-            params_file=args.params_file
-        )
-
-        print(f"Result metrics: {metrics}")
-
-        # Update images for next LLM call
-        if png_paths:
-            last_run_images = png_paths
-
-        # Check for critical failure
-        if "error" in metrics:
-            if metrics["error"] == "environment_missing_tools":
-                print("\nCRITICAL ERROR: OpenFOAM tools not found.")
-                print("Switching to geometry-only mode (--skip-cfd) for remaining iterations.")
-                args.skip_cfd = True
-            elif metrics["error"] == "geometry_generation_failed":
-                print("Geometry generation failed.")
-
-        # Save Results
-        run_data = {
-            "id": run_id_hash, # Unique ID
-            "status": "completed",
-            "git_commit": git_commit,
-            "agent_id": "optimizer-script",
-            "iteration": i,
-            "timestamp": run_timestamp,
-            "parameters": current_params.copy(),
-            "params_file": args.params_file,
-            "metrics": metrics,
-            "images": png_paths,
-            "solid_stl_path": solid_stl_path,
-            "fluid_stl_path": fluid_stl_path,
-            "artifact_stl_path": fluid_stl_path, # Backward compatibility / Alias
-            "artifact_vtk_path": vtk_zip_path
-        }
-        store.append_result(run_data)
-
-        # Reload history to include this run
-        full_history.append(run_data)
-        agent.history = full_history
-
-        # Cleanup Artifacts (Keep Top 10)
-        # We do this every run to save space
-        if not args.no_cleanup:
-            top_runs = store.get_top_runs(10)
-            store.clean_artifacts(top_runs)
->>>>>>> main
         else:
-            # Sequential / Legacy Execution (One item at a time)
             current_params = parameter_queue.pop(0)
-            phash = get_params_hash(current_params)
-            visited_params.add(phash)
 
-            print(f"Processing parameters: {current_params}")
+            # Deduplication Check
+            param_hash = get_params_hash(current_params)
+            if param_hash in visited_params:
+                print(f"Skipping duplicate parameters (Hash: {param_hash}).")
+                # If queue is empty, we'll hit refill next loop. If not, we just take next.
+                continue
 
-            # Run
+            print(f"Testing parameters: {current_params}")
+            visited_params.add(param_hash)
+
+            # Generate Run ID and Output Prefix
+            # Use timestamp to ensure uniqueness
             run_timestamp = time.time()
             run_id_hash = hashlib.md5(f"{i}_{run_timestamp}".encode()).hexdigest()
             run_id_short = run_id_hash[:8]
             output_prefix = os.path.join("exports", f"run_{run_id_short}")
 
-            metrics, png_paths, solid_stl, fluid_stl, vtk_zip = run_simulation(
-                scad, foam, current_params,
+            # Run Simulation via Runner
+            # output_stl is strictly 'corkscrew_fluid.stl' for OpenFOAM compatibility
+            metrics, png_paths, solid_stl_path, fluid_stl_path, vtk_zip_path = run_simulation(
+                scad,
+                foam,
+                current_params,
                 output_stl_name=args.output_stl,
                 dry_run=args.dry_run,
                 skip_cfd=args.skip_cfd,
                 iteration=i,
                 reuse_mesh=args.reuse_mesh,
                 output_prefix=output_prefix,
-                verbose=args.verbose
+                verbose=args.verbose,
+                params_file=args.params_file
             )
 
             print(f"Result metrics: {metrics}")
+
+            # Update images for next LLM call
             if png_paths:
                 last_run_images = png_paths
 
+            # Check for critical failure
             if "error" in metrics:
                 if metrics["error"] == "environment_missing_tools":
                     print("\nCRITICAL ERROR: OpenFOAM tools not found.")
                     print("Switching to geometry-only mode (--skip-cfd) for remaining iterations.")
                     args.skip_cfd = True
+                elif metrics["error"] == "geometry_generation_failed":
+                    print("Geometry generation failed.")
 
-            # Save
+            # Save Results
             run_data = {
-                "id": run_id_hash,
+                "id": run_id_hash, # Unique ID
                 "status": "completed",
                 "git_commit": git_commit,
-                "agent_id": "optimizer-main-seq",
+                "agent_id": "optimizer-script",
                 "iteration": i,
                 "timestamp": run_timestamp,
                 "parameters": current_params.copy(),
+                "params_file": args.params_file,
                 "metrics": metrics,
                 "images": png_paths,
-                "solid_stl_path": solid_stl,
-                "fluid_stl_path": fluid_stl,
-                "artifact_vtk_path": vtk_zip
+                "solid_stl_path": solid_stl_path,
+                "fluid_stl_path": fluid_stl_path,
+                "artifact_stl_path": fluid_stl_path, # Backward compatibility / Alias
+                "artifact_vtk_path": vtk_zip_path
             }
             store.append_result(run_data)
+
+            # Reload history to include this run
             full_history.append(run_data)
             agent.history = full_history
 
+            # Cleanup Artifacts (Keep Top 10)
+            # We do this every run to save space
             if not args.no_cleanup:
-                store.clean_artifacts(store.get_top_runs(10))
+                top_runs = store.get_top_runs(10)
+                store.clean_artifacts(top_runs)
 
             i += 1
 
