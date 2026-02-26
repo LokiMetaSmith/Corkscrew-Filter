@@ -922,8 +922,10 @@ cloudFunctions
     particleCollector1
     {{
         type            particleCollector;
-        mode            primitive;
+        mode            patch;
         patches         ( {patch_list_str} );
+        removeCollected false;
+        polygonData     off;
     }}
 }}
 
