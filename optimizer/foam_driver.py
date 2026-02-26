@@ -926,6 +926,7 @@ cloudFunctions
         patches         ( {patch_list_str} );
         removeCollected false;
         resetOnWrite    false;
+        log             true;
         polygonData     off;
     }}
 }}
