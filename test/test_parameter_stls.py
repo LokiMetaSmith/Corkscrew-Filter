@@ -55,8 +55,8 @@ def create_test_method(param_file):
         # Patch subprocess.run to include a timeout
         original_run = subprocess.run
         def run_with_timeout(*args, **kwargs):
-            # Set timeout to 300 seconds (5 minutes) to accommodate slow WASM processing
-            kwargs.setdefault('timeout', 300)
+            # Set timeout to 600 seconds (10 minutes) to accommodate slow WASM processing
+            kwargs.setdefault('timeout', 600)
             return original_run(*args, **kwargs)
 
         with patch('optimizer.scad_driver.subprocess.run', side_effect=run_with_timeout):

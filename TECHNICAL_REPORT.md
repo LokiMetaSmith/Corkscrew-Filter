@@ -132,7 +132,7 @@ Meshing helical geometries is notoriously difficult due to the complex curvature
 ### 5.2. Instrumentation
 The `FoamDriver` dynamically injects `functionObjects` (`surfaceFieldValue`) into the `controlDict`. This provides a robust, code-driven method to extract the area-averaged pressure at the inlet and outlet patches, automating the calculation of $$\Delta P$$.
 
-[Figure 3: Velocity streamlines through the helical channel (OpenFOAM Output)]
+> **Note:** Figure 3 (Velocity streamlines) is generated via post-processing tools like ParaView after a successful OpenFOAM run. It illustrates the high-velocity core flow and the secondary Dean vortices near the walls.
 
 ## 6. Subsystem Analysis: Autonomous Optimization (AI Agent)
 

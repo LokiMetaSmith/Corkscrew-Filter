@@ -7,3 +7,4 @@ Pillow
 Rtree
 psutil
 openai
+pytest
