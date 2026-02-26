@@ -137,6 +137,6 @@ slit_chamfer_height = 0.5;       // The height of the chamfer on the leading edg
 
 // --- Tolerances & Fit ---
 _tolerance_tube_fit_base = 0.2;        // Clearance between the spacers and the inner wall of the main tube.
-tolerance_tube_fit = GENERATE_CFD_VOLUME ? 0 : _tolerance_tube_fit_base; // Force 0 tolerance for CFD to seal bins
+tolerance_tube_fit = GENERATE_CFD_VOLUME ? -0.1 : _tolerance_tube_fit_base; // Force negative tolerance (overlap) for CFD to ensure clean cut
 tolerance_socket_fit = 0.4;      // Clearance for sockets and recesses, like for the inlet flange.
 tolerance_channel = 0.1;         // Extra clearance for the helical void to prevent binding during assembly.
