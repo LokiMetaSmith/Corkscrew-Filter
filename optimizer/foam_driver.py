@@ -525,7 +525,7 @@ functions
         with open(boundary_file, 'r') as f:
             content = f.read()
 
-        for patch in ["inlet", "outlet"]:
+        for patch in ["corkscrew", "inlet", "outlet"]:
             # Match: patch_name { ... nFaces X; ... }
             # Use DOTALL to match across lines
             # Pattern: patch \s* \{ .*? nFaces \s+ (\d+) ;
@@ -946,6 +946,8 @@ cloudFunctions
         type            patchPostProcessing;
         patches         ( {patch_list_str} );
         maxStoredParcels 1000000;
+        resetOnWrite    false;
+        log             true;
     }}
 }}
 
