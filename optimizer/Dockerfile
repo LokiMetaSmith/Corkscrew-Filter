@@ -1,5 +1,5 @@
 # Use the official OpenFOAM image as the base
-FROM opencfd/openfoam-default:2406
+FROM opencfd/openfoam-default:2512
 
 # Switch to root to install dependencies
 USER root

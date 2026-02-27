@@ -40,7 +40,7 @@ The physical domain is defined by a parametric model in OpenSCAD. Unlike static 
 This "Configuration-as-Code" approach allows the optimization agent to manipulate geometry through text-based parameters.
 
 \subsection{Computational Fluid Dynamics (CFD)}
-The performance of each candidate design is evaluated using OpenFOAM v2406. The system employs the \texttt{simpleFoam} solver for steady-state, incompressible flow. A hexahedral-dominant mesh is generated using \texttt{snappyHexMesh} with specific boundary layer refinement to capture the wall shear stresses critical for accurate $\Delta P$ prediction.
+The performance of each candidate design is evaluated using OpenFOAM v2512. The system employs the \texttt{simpleFoam} solver for steady-state, incompressible flow. A hexahedral-dominant mesh is generated using \texttt{snappyHexMesh} with specific boundary layer refinement to capture the wall shear stresses critical for accurate $\Delta P$ prediction.
 
 \subsection{Agentic Reasoning}
 The cognitive layer is driven by a Large Language Model (Google Gemini). The agent receives:
