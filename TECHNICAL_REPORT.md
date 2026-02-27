@@ -125,7 +125,7 @@ The design library has expanded to support rapid prototyping and standardized in
 
 ## 5. Subsystem Analysis: Computational Fluid Dynamics (OpenFOAM)
 
-The simulation environment is built upon OpenFOAM v2406. The automation logic resides in `optimizer/foam_driver.py`.
+The simulation environment is built upon OpenFOAM v2512. The automation logic resides in `optimizer/foam_driver.py`.
 
 ### 5.1. Mesh Generation Strategy
 Meshing helical geometries is notoriously difficult due to the complex curvature. The project employs `snappyHexMesh` with specific settings to ensure solution fidelity:

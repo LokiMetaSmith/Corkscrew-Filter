@@ -15,7 +15,7 @@ class FoamDriver:
         self.case_dir = os.path.abspath(case_dir)
         self.template_dir = os.path.abspath(template_dir) if template_dir else self.case_dir
         self.log_file = os.path.join(self.case_dir, "run_foam.log")
-        self.docker_image = os.environ.get("OPENFOAM_IMAGE", "opencfd/openfoam-default:2406")
+        self.docker_image = os.environ.get("OPENFOAM_IMAGE", "opencfd/openfoam-default:2512")
         self.has_tools = False
         self.container_tool = None
         self.use_container = False
@@ -283,7 +283,7 @@ class FoamDriver:
         content = f"""/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   O peration     | Version:  v2406                                 |
+|  \\    /   O peration     | Version:  v2512                                 |
 |   \\  /    A nd           | Website:  www.openfoam.com                      |
 |    \\/     M anipulation  |                                                 |
 \\*---------------------------------------------------------------------------*/
@@ -1572,7 +1572,7 @@ boundaryField
 
             # Alternative: Assume for now we only get global, but check log for any "Patch <name>" patterns.
             # Sometimes "Parcel fate" has a detailed table?
-            # In v2406, it's usually compact.
+            # In v2512, it's usually compact.
 
             # Let's try to find ANY mention of "bin_" and numbers.
             # If not found, we leave the dict empty.
