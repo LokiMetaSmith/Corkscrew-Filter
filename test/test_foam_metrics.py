@@ -23,11 +23,12 @@ class TestFoamMetrics(unittest.TestCase):
         shutil.rmtree(self.test_dir)
 
     def test_parse_particle_collector(self):
-        # Setup directory structure for particleCollector
-        pp_dir = os.path.join(self.test_dir, "postProcessing", "lagrangian", "cloud", "particleCollector1", "0")
+        # Setup directory structure for patchPostProcessing
+        # Path: case/postProcessing/kinematicCloud/patchPostProcessing1/*/patchPostProcessing1.dat
+        pp_dir = os.path.join(self.test_dir, "postProcessing", "kinematicCloud", "patchPostProcessing1", "0")
         os.makedirs(pp_dir)
 
-        dat_file = os.path.join(pp_dir, "particleCollector1.dat")
+        dat_file = os.path.join(pp_dir, "patchPostProcessing1.dat")
 
         # Write dummy data
         # Header: # Time bin_1 bin_2 inlet outlet

@@ -928,17 +928,11 @@ subModels
 
 cloudFunctions
 {{
-    particleCollector1
+    patchPostProcessing1
     {{
-        type            particleCollector;
-        mode            patch;
+        type            patchPostProcessing;
         patches         ( {patch_list_str} );
-        removeCollected false;
-        resetOnWrite    false;
-        log             true;
-        negateParcelsOppositeNormal false;
-        surfaceFormat   vtk;
-        polygonData     off;
+        maxStoredParcels 1000000;
     }}
 }}
 
@@ -1571,14 +1565,14 @@ boundaryField
             # If not found, we leave the dict empty.
 
             # Try to parse `particleCollector` file output if available (replaced patchPostProcessing)
-            # Path: case/postProcessing/lagrangian/cloud/particleCollector1/*/particleCollector1.dat
-            pp_base = os.path.join(self.case_dir, "postProcessing", "lagrangian", "cloud", "particleCollector1")
+            # Path: case/postProcessing/kinematicCloud/patchPostProcessing1/*/patchPostProcessing1.dat
+            pp_base = os.path.join(self.case_dir, "postProcessing", "kinematicCloud", "patchPostProcessing1")
             if os.path.exists(pp_base):
                  # Find latest time
                  time_dirs = glob.glob(os.path.join(pp_base, "*"))
                  if time_dirs:
                      latest_pp_dir = max(time_dirs, key=os.path.getmtime)
-                     dat_file = os.path.join(latest_pp_dir, "particleCollector1.dat")
+                     dat_file = os.path.join(latest_pp_dir, "patchPostProcessing1.dat")
                      if os.path.exists(dat_file):
                          # Format: # Time patch1 patch2 ...
                          # Data: time val1 val2 ...
