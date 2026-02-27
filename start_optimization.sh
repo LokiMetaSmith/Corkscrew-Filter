@@ -85,6 +85,13 @@ fi
 # 3. Setup Python Environment
 setup_python_env
 
-# 4. Run Optimizer
+# 4. Check OpenFOAM Version
+print_header "Checking OpenFOAM Version"
+if ! python optimizer/check_openfoam.py "$@"; then
+    print_error "OpenFOAM version check failed. Ensure v2512 or newer is installed."
+    exit 1
+fi
+
+# 5. Run Optimizer
 print_header "Starting Optimization Loop"
 python optimizer/main.py "$@"
