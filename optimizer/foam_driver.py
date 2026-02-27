@@ -453,28 +453,22 @@ functions
     def update_snappyHexMesh_location(self, bounds, custom_location=None, helix_path_radius_mm=None):
         """
         Updates locationInMesh in system/snappyHexMeshDict to be inside the fluid domain.
-        If custom_location is provided (tuple/list of x,y,z), it uses that.
-        Otherwise, if helix_path_radius_mm is provided, uses analytic center of channel.
-        Otherwise, falls back to heuristic based on bounds.
         """
-        if custom_location:
-            location = f"({custom_location[0]:.3f} {custom_location[1]:.3f} {custom_location[2]:.3f})"
-        elif helix_path_radius_mm is not None:
-            # Analytic fallback: Use helix path radius (scaled to m)
-            # The helix center at Z=0 is at (R, 0, 0) relative to axis?
-            # Actually helix path is helical. At Z=0 (if it starts there), angle might be 0.
-            # Assuming helix starts at angle 0, X=R.
+        location = None
+
+        # 1. ALWAYS prefer the analytical center of the fluid channel
+        if helix_path_radius_mm is not None:
             try:
                 r_m = float(helix_path_radius_mm) * 0.001
-                # Use a slightly offset point to be safe inside the channel, but R should be center.
-                # Just use R.
                 location = f"({r_m:.4f} 0 0)"
-                print(f"Using analytic locationInMesh: {location}")
+                print(f"Using reliable analytical locationInMesh: {location}")
             except (ValueError, TypeError):
-                # Fallback to bounds if conversion fails
-                location = None
-        else:
-            location = None
+                pass
+
+        # 2. Fallback to custom ray-traced location ONLY if radius isn't provided
+        if location is None and custom_location is not None:
+            location = f"({custom_location[0]:.3f} {custom_location[1]:.3f} {custom_location[2]:.3f})"
+            print(f"Using ray-traced locationInMesh: {location}")
 
         if location is None:
             # Legacy fallback
@@ -943,6 +937,7 @@ cloudFunctions
         resetOnWrite    false;
         log             true;
         negateParcelsOppositeNormal false;
+        surfaceFormat   vtk;
         polygonData     off;
     }}
 }}
