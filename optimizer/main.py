@@ -7,6 +7,7 @@ import shutil
 import hashlib
 import sys
 import uuid
+import yaml
 from scad_driver import ScadDriver
 from foam_driver import FoamDriver
 from llm_agent import LLMAgent
@@ -31,9 +32,9 @@ def get_params_hash(params):
     return hashlib.md5(s.encode('utf-8')).hexdigest()
 
 def main():
-    parser = argparse.ArgumentParser(description="Generative AI Optimizer for Corkscrew Filter")
+    parser = argparse.ArgumentParser(description="Generative AI Optimizer for Config-Driven Workflows")
+    parser.add_argument("config_file", type=str, help="Path to the problem definition YAML file")
     parser.add_argument("--iterations", type=str, default="5", help="Number of iterations (int), or 'inf'/'infinite'/-1 for infinite loop")
-    parser.add_argument("--scad-file", type=str, default="corkscrew.scad", help="Path to OpenSCAD file")
     parser.add_argument("--case-dir", type=str, default="corkscrewFilter", help="Path to OpenFOAM case directory")
     parser.add_argument("--output-stl", type=str, default="corkscrew_fluid.stl", help="Output STL filename (for OpenFOAM usage)")
     parser.add_argument("--dry-run", action="store_true", help="Skip actual OpenFOAM execution (mocks everything)")
@@ -64,9 +65,19 @@ def main():
         print(f"Error: Invalid iterations value '{args.iterations}'. Using default 5.")
         max_iterations = 5
 
+    # Load YAML config
+    try:
+        with open(args.config_file, 'r') as f:
+            config = yaml.safe_load(f)
+    except Exception as e:
+        print(f"Error loading configuration file {args.config_file}: {e}")
+        sys.exit(1)
+
+    scad_file = config.get('geometry', {}).get('scad_file', 'corkscrew.scad')
+
     # Initialize components
-    scad = ScadDriver(args.scad_file)
-    foam = FoamDriver(args.case_dir, container_engine=args.container_engine, num_processors=args.cpus, verbose=args.verbose)
+    scad = ScadDriver(scad_file)
+    foam = FoamDriver(args.case_dir, config=config, container_engine=args.container_engine, num_processors=args.cpus, verbose=args.verbose)
 
     # Handle --no-llm logic
     if args.no_llm and "GEMINI_API_KEY" in os.environ:
@@ -98,18 +109,17 @@ def main():
         # Adding a metadata key like "_source" is safe as OpenSCAD likely ignores it or it just sets a variable.
         initial_params = {"_source": args.params_file}
     else:
-        initial_params = {
-            "part_to_generate": "modular_filter_assembly",
-            "num_bins": 1,
-            "number_of_complete_revolutions": 2,
-            "helix_path_radius_mm": 1.8,
-            "helix_profile_radius_mm": 1.7,
-            "helix_void_profile_radius_mm": 1.0,
-            "helix_profile_scale_ratio": 1.4,
-            "tube_od_mm": 32,
-            "insert_length_mm": 50,
-            "GENERATE_CFD_VOLUME": True
-        }
+        # Extract default parameters from YAML config
+        initial_params = {}
+        for param_name, param_def in config.get('geometry', {}).get('parameters', {}).items():
+            if 'default' in param_def:
+                initial_params[param_name] = param_def['default']
+
+    # Extract constraints for the LLM
+    constraints_str = config.get('optimization', {}).get('constraints', '')
+    objective_func = config.get('optimization', {}).get('objective_function', 'separation_efficiency')
+    optimization_target = config.get('optimization', {}).get('target', 'maximize')
+    optimization_desc = config.get('optimization', {}).get('description', '')
 
     # Load History & Populate Visited Set
     print("Loading history from data store...")
@@ -145,7 +155,11 @@ def main():
 
             campaign_params = agent.suggest_campaign(
                 history=full_history,
-                constraints=CONSTRAINTS,
+                constraints=constraints_str,
+                objective=objective_func,
+                target=optimization_target,
+                description=optimization_desc,
+                parameters_def=config.get('geometry', {}).get('parameters', {}),
                 count=args.batch_size,
                 image_paths=last_run_images
             )
@@ -169,7 +183,7 @@ def main():
             else:
                 print("LLM failed/fallback. Generating random.")
                 base_params = full_history[-1]["parameters"] if full_history else initial_params
-                random_params = agent._generate_random_parameters(base_params, CONSTRAINTS)
+                random_params = agent._generate_random_parameters(base_params, config.get('geometry', {}).get('parameters', {}))
                 if get_params_hash(random_params) not in visited_params:
                     parameter_queue.append(random_params)
 
@@ -201,9 +215,8 @@ def main():
             workers = []
             print(f"Spawning {args.parallel_workers} workers...")
             for w in range(args.parallel_workers):
-                cmd = [sys.executable, "optimizer/worker.py", "--id", f"worker-{w}", "--loop", "--local"]
+                cmd = [sys.executable, "optimizer/worker.py", "--id", f"worker-{w}", "--loop", "--local", args.config_file]
                 if args.dry_run: cmd.append("--dry-run")
-                if args.scad_file: cmd.extend(["--scad-file", args.scad_file])
                 if args.case_dir: cmd.extend(["--case-dir", args.case_dir])
                 # We assume workers pick up from the same DB file location (default behavior)
 
@@ -331,8 +344,17 @@ def main():
             # Cleanup Artifacts (Keep Top 10)
             # We do this every run to save space
             if not args.no_cleanup:
-                top_runs = store.get_top_runs(10)
-                store.clean_artifacts(top_runs)
+                # Use custom top runs method to support configs
+                try:
+                    from scoring import calculate_score
+                    sorted_runs = sorted(full_history, key=lambda r: calculate_score(r.get("metrics", {}), config), reverse=True)
+                    top_runs = sorted_runs[:10]
+                    store.clean_artifacts(top_runs)
+                except Exception as e:
+                    print(f"Error cleaning artifacts: {e}")
+                    # Fallback
+                    top_runs = store.get_top_runs(10)
+                    store.clean_artifacts(top_runs)
 
             i += 1
 

@@ -47,7 +47,9 @@ runTimeModifiable true;
 
 functions
 {
-    inletPressure
+    {% for ext in extractors %}
+    {% if ext.type == "surfaceFieldValue" %}
+    {{ ext.function_name }}
     {
         type            surfaceFieldValue;
         libs            ("libfieldFunctionObjects.so");
@@ -56,23 +58,12 @@ functions
         log             true;
         writeFields     false;
         regionType      patch;
-        name            inlet;
+        name            {{ ext.patch_name | default('inlet') }};
         operation       areaAverage;
-        fields          (p);
+        fields          ({{ ext.field | default('p') }});
     }
-    outletPressure
-    {
-        type            surfaceFieldValue;
-        libs            ("libfieldFunctionObjects.so");
-        writeControl    timeStep;
-        writeInterval   1;
-        log             true;
-        writeFields     false;
-        regionType      patch;
-        name            outlet;
-        operation       areaAverage;
-        fields          (p);
-    }
+    {% endif %}
+    {% endfor %}
 }
 
 // ************************************************************************* //

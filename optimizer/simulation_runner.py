@@ -77,6 +77,9 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
 
             if assets:
                 cfd_assets = assets
+                mesh_anchor = cfd_assets.get("mesh_anchor")
+                if "mesh_anchor" in cfd_assets:
+                    del cfd_assets["mesh_anchor"]
                 # If the generated fluid name doesn't match requested output_stl_name, rename/copy?
                 # generate_cfd_assets produces 'corkscrew_fluid.stl' fixed name.
                 # If output_stl_name is different, we handle it.
@@ -221,50 +224,53 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                 # Pass scaled bounds to foam_driver
                 foam_driver.update_blockMesh(bounds_arr, margin=BLOCK_MARGIN, target_cell_size=target_cell_size)
 
-                # 1. Try to find an internal point using robust ray tracing (trimesh)
-                # STL is in meters, so ray tracing returns meters.
-                custom_location = scad_driver.get_internal_point(stl_path)
-
-                if custom_location:
-                    print(f"Using ray-traced internal point: {custom_location}")
+                # 1. Try to use MESH_ANCHOR from OpenSCAD script
+                custom_location = None
+                if 'mesh_anchor' in locals() and mesh_anchor:
+                    custom_location = [mesh_anchor[0] * SCALE_FACTOR, mesh_anchor[1] * SCALE_FACTOR, mesh_anchor[2] * SCALE_FACTOR]
+                    print(f"Using MESH_ANCHOR from OpenSCAD: {custom_location}")
                 else:
-                    print("Warning: Could not find internal point using ray tracing. Attempting fallback calculation.")
+                    # 2. Fallback to ray tracing
+                    custom_location = scad_driver.get_internal_point(stl_path)
 
-                    # 2. Fallback to analytic calculation
-                    part = params.get("part_to_generate", "modular_filter_assembly")
-                    if part == "modular_filter_assembly":
-                        try:
-                            L = float(params.get("insert_length_mm", 50))
-                            revs = float(params.get("number_of_complete_revolutions", 2))
-                            path_r = float(params.get("helix_path_radius_mm", 1.8))
+                    if custom_location:
+                        print(f"Using ray-traced internal point: {custom_location}")
+                    else:
+                        print("Warning: Could not find internal point using ray tracing. Attempting fallback calculation.")
 
-                            # Calculate twist angle at Z=0 (center)
-                            # The helix rotates by total_twist over height H.
-                            # Total height of helix is L + 2 (from MasterHollowHelix logic).
-                            # Twist rate = 360 * revs / L.
-                            # Total twist = twist_rate * (L + 2).
-                            # At center (Z=0), rotation is total_twist / 2 (assuming linear_extrude center=true).
+                        # 3. Fallback to analytic calculation
+                        part = params.get("part_to_generate", "modular_filter_assembly")
+                        if part == "modular_filter_assembly":
+                            try:
+                                L = float(params.get("insert_length_mm", 50))
+                                revs = float(params.get("number_of_complete_revolutions", 2))
+                                path_r = float(params.get("helix_path_radius_mm", 1.8))
 
-                            twist_rate = 360.0 * revs / L
-                            total_twist = twist_rate * (L + 2.0)
-                            angle_at_center_deg = total_twist / 2.0
+                                # Calculate twist angle at Z=0 (center)
+                                # The helix rotates by total_twist over height H.
+                                # Total height of helix is L + 2 (from MasterHollowHelix logic).
+                                # Twist rate = 360 * revs / L.
+                                # Total twist = twist_rate * (L + 2).
+                                # At center (Z=0), rotation is total_twist / 2 (assuming linear_extrude center=true).
 
-                            theta_rad = math.radians(angle_at_center_deg)
+                                twist_rate = 360.0 * revs / L
+                                total_twist = twist_rate * (L + 2.0)
+                                angle_at_center_deg = total_twist / 2.0
 
-                            # Calculate position
-                            x = path_r * math.cos(theta_rad)
-                            y = path_r * math.sin(theta_rad)
-                            z = 0.0
-                            # Scale fallback calculation to meters
-                            custom_location = (x * SCALE_FACTOR, y * SCALE_FACTOR, z * SCALE_FACTOR)
-                            print(f"Calculated custom seed location for channel: {custom_location}")
-                        except Exception as e:
-                            print(f"Warning: Failed to calculate custom location: {e}")
+                                theta_rad = math.radians(angle_at_center_deg)
+
+                                # Calculate position
+                                x = path_r * math.cos(theta_rad)
+                                y = path_r * math.sin(theta_rad)
+                                z = 0.0
+                                # Scale fallback calculation to meters
+                                custom_location = (x * SCALE_FACTOR, y * SCALE_FACTOR, z * SCALE_FACTOR)
+                                print(f"Calculated custom seed location for channel: {custom_location}")
+                            except Exception as e:
+                                print(f"Warning: Failed to calculate custom location: {e}")
 
                 # Update location (if custom_location is None, foam_driver defaults to bounds-based logic)
-                # Pass helix_path_radius_mm for foam_driver's robust fallback
-                helix_path_radius_mm = params.get("helix_path_radius_mm")
-                foam_driver.update_snappyHexMesh_location(bounds_arr, custom_location=custom_location, helix_path_radius_mm=helix_path_radius_mm)
+                foam_driver.update_snappyHexMesh_location(bounds_arr, custom_location=custom_location)
         else:
             print("[Reuse Mesh] Skipping BlockMesh update.")
     elif skip_cfd:

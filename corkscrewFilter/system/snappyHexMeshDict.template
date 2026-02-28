@@ -19,15 +19,17 @@ mergeTolerance 1e-6;
 
 castellatedMesh true;
 snap            true;
-addLayers       _ADD_LAYERS_FLAG_;
+addLayers       {{ "true" if add_layers else "false" }};
 
 geometry
 {
-    corkscrew_fluid.stl
+    {% for geom in geometries %}
+    {{ geom.filename }}
     {
         type triSurfaceMesh;
-        name corkscrew;
+        name {{ geom.name }};
     }
+    {% endfor %}
 };
 
 castellatedMeshControls
@@ -48,10 +50,19 @@ castellatedMeshControls
 
     refinementSurfaces
     {
-        corkscrew
+        {% for geom in geometries %}
+        {{ geom.name }}
         {
-            level (1 1);
+            level {{ geom.level }};
+            {% if geom.patch_info %}
+            patchInfo
+            {
+                type patch;
+                inGroups ({{ geom.name }}Group);
+            }
+            {% endif %}
         }
+        {% endfor %}
     }
 
     refinementRegions
@@ -59,7 +70,7 @@ castellatedMeshControls
 
     resolveFeatureAngle 30;
 
-    locationInMesh (-0.007 -0.007 -0.012); // A point inside the fluid volume (annulus)
+    locationInMesh {{ location_in_mesh }}; // A point inside the fluid volume
 }
 
 addLayersControls

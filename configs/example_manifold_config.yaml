@@ -1,0 +1,37 @@
+# example_manifold_config.yaml
+project_name: "Parametric_Exhaust_Manifold"
+geometry:
+  scad_file: "manifold.scad"
+  fluid_volume_module: "generate_cfd_domain"
+  parameters:
+    inlet_diameter: { type: "float", min: 10.0, max: 50.0, default: 25.0 }
+    branch_angle: { type: "float", min: 15.0, max: 90.0, default: 45.0 }
+
+physics:
+  solver: "simpleFoam"
+  fluid: "air" # Maps to a library of transportProperties
+  boundaries:
+    inlet:
+      type: "patch"
+      U: "fixedValue uniform (10 0 0)"
+    outlet_1:
+      type: "patch"
+      p: "fixedValue uniform 0"
+    outlet_2:
+      type: "patch"
+      p: "fixedValue uniform 0"
+
+optimization:
+  target: "minimize"
+  objective_function: "delta_p_total + 10 * variance(mass_flux_outlets)"
+  description: "Minimize flow separation in the exhaust branches and ensure equal mass flux distribution across outlets."
+  extractors:
+    - type: "surfaceFieldValue"
+      function_name: "inletPressure"
+      metric_name: "p_in"
+    - type: "surfaceFieldValue"
+      function_name: "outletPressure1"
+      metric_name: "p_out1"
+    - type: "surfaceFieldValue"
+      function_name: "outletPressure2"
+      metric_name: "p_out2"

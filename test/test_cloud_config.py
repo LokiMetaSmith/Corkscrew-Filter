@@ -31,21 +31,13 @@ class TestCloudConfig(unittest.TestCase):
         with open(config_path, 'r') as f:
             content = f.read()
 
-        # Verify patchPostProcessing1 block exists and parameters are INSIDE it
-        # Extract block content
-        pattern = re.compile(r"patchPostProcessing1\s*\{(.*?)\}", re.DOTALL)
-        match = pattern.search(content)
-        self.assertIsNotNone(match, "patchPostProcessing1 block not found")
+        # In v2512 we commented out patchPostProcessing1
+        # Let's verify the patch interaction coeffs
 
-        block_content = match.group(1)
-
-        self.assertIn("type            patchPostProcessing;", block_content)
-        self.assertIn("patches         ( corkscrew inlet outlet );", block_content)
-        self.assertIn("maxStoredParcels 1000000;", block_content)
-
-        # Check for newly added parameters (should fail initially)
-        self.assertIn("resetOnWrite    false;", block_content)
-        self.assertIn("log             true;", block_content)
+        self.assertIn("patchInteractionModel localInteraction;", content)
+        self.assertIn("corkscrew", content)
+        self.assertIn("inlet", content)
+        self.assertIn("outlet", content)
 
 if __name__ == '__main__':
     unittest.main()
