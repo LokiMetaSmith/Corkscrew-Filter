@@ -911,7 +911,7 @@ subModels
         {injections}
     }}
 
-    dispersionModel StochasticDispersionRAS;
+    dispersionModel stochasticDispersionRAS;
 
     patchInteractionModel localInteraction;
 
@@ -1410,7 +1410,7 @@ boundaryField
             # 3. Update Configurations
             self._update_controlDict_for_particles()
             self._switch_fvSchemes_to_transient()
-            # Turbulence is KEPT ON for StochasticDispersionRAS
+            # Turbulence is KEPT ON for stochasticDispersionRAS
 
             # Generate wallDist for turbulence models (prevents yWall crash)
             self.run_command(["postProcess", "-func", "wallDist"], log_file=log_file, description="Generating wallDist")
