@@ -913,7 +913,7 @@ subModels
         {injections}
     }}
 
-    dispersionModel stochasticDispersionRAS;
+    dispersionModel gradientDispersionRAS; //stochasticDispersionRAS;
 
     patchInteractionModel localInteraction;
 
