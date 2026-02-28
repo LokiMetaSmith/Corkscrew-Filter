@@ -1090,8 +1090,8 @@ cloudFunctions
 
         # 2. Generate patch creation configs
         # Pass using_assets flag to conditionally skip inlet/outlet creation
-        self._generate_topoSetDict(bin_config, skip_io=using_assets)
-        self._generate_createPatchDict(bin_config, skip_io=using_assets)
+        self._generate_topoSetDict(bin_config, skip_io=False)
+        self._generate_createPatchDict(bin_config, skip_io=False)
 
         # Ensure we capture output
         # Step 1: Base Mesh
