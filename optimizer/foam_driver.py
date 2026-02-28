@@ -685,6 +685,28 @@ actions
         set bin_{i+1}_faces;
     }}"""
 
+        io_patches = ""
+        if not skip_io:
+            io_patches = """
+    {
+        name inlet;
+        dictionary
+        {
+            type patch;
+        }
+        constructFrom set;
+        set inletFaces;
+    }
+    {
+        name outlet;
+        dictionary
+        {
+            type patch;
+        }
+        constructFrom set;
+        set outletFaces;
+    }"""
+
         content = f"""/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
