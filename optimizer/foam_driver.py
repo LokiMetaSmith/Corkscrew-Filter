@@ -680,6 +680,7 @@ actions
         patchInfo
         {{
             type patch;
+            inGroups (corkscrew_bins);
         }}
         constructFrom set;
         set bin_{i+1}_faces;
@@ -693,6 +694,7 @@ actions
         patchInfo
         {
             type patch;
+            inGroups (inletGroup);
         }
         constructFrom set;
         set inletFaces;
@@ -702,6 +704,7 @@ actions
         patchInfo
         {
             type patch;
+            inGroups (outletGroup);
         }
         constructFrom set;
         set outletFaces;
@@ -728,7 +731,7 @@ pointSync false;
 patches
 (
 {io_patches}
-    {bin_patches}
+{bin_patches}
 );
 
 // ************************************************************************* //
@@ -925,27 +928,6 @@ subModels
 
 cloudFunctions
 {{
-    // particleCollector1
-    // {{
-    //     type            particleCollector;
-    //     mode            patch;
-    //     patches         ( {patch_list_str} );
-    //     removeCollected false;
-    //     resetOnWrite    false;
-    //     log             true;
-    //     negateParcelsOppositeNormal false;
-    //     surfaceFormat   vtk;
-    //     polygonData     off;
-    // }}
-
-    patchPostProcessing1
-    {{
-        type            patchPostProcessing;
-        patches         ( {patch_list_str} );
-        maxStoredParcels 1000000;
-        resetOnWrite    false;
-        log             true;
-    }}
 }}
 
 // ************************************************************************* //
