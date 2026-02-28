@@ -928,6 +928,14 @@ subModels
 
 cloudFunctions
 {{
+    // patchPostProcessing1
+    // {{
+    //     type            patchPostProcessing;
+    //     patches         ( {patch_list_str} );
+    //     maxStoredParcels 1000000;
+    //     resetOnWrite    false;
+    //     log             true;
+    // }}
 }}
 
 // ************************************************************************* //
