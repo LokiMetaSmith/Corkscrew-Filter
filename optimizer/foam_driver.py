@@ -680,6 +680,7 @@ actions
         patchInfo
         {{
             type patch;
+            inGroups (corkscrew_bins);
         }}
         constructFrom set;
         set bin_{i+1}_faces;
@@ -693,6 +694,7 @@ actions
         patchInfo
         {
             type patch;
+            inGroups (inletGroup);
         }
         constructFrom set;
         set inletFaces;
@@ -702,6 +704,7 @@ actions
         patchInfo
         {
             type patch;
+            inGroups (outletGroup);
         }
         constructFrom set;
         set outletFaces;
@@ -938,14 +941,14 @@ cloudFunctions
     //     polygonData     off;
     // }}
 
-    patchPostProcessing1
-    {{
-        type            patchPostProcessing;
-        patches         ( {patch_list_str} );
-        maxStoredParcels 1000000;
-        resetOnWrite    false;
-        log             true;
-    }}
+    //patchPostProcessing1
+    //{{
+    //    type            patchPostProcessing;
+    //    patches         ( {patch_list_str} );
+    //    maxStoredParcels 1000000;
+    //    resetOnWrite    false;
+    //    log             true;
+    //}}
 }}
 
 // ************************************************************************* //
