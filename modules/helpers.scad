@@ -52,6 +52,7 @@ module MultiHelixRamp(h, twist, dia, helices) {
     for (i = [0 : helices - 1]) {
         rotate([0, 0, i * (360 / helices)]) {
             linear_extrude(height = h, twist = twist, center = true, slices = h > 0 ? h * 2 : 1) {
+                translate([0.01, 0.01])
                 polygon(points = [
                     [0, 0],
                     [dia / 2, 0],

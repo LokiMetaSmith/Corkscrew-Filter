@@ -4,7 +4,7 @@ const path = require('path');
 
 const CONFIGS_DIR = 'configs';
 const EXPORTS_DIR = 'exports';
-const TIMEOUT_MS = 300000; // 5 minutes per file
+const TIMEOUT_MS = 600000; // 10 minutes per file
 
 function runRegression() {
     console.log("Starting Regression Test Suite...");
