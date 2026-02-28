@@ -876,6 +876,9 @@ solution
         rho             cell;
         U               cell;     // Use cell center values for robustness
         mu              cell;
+        k               cell;
+        epsilon         cell;
+        omega           cell;
     }}
 
     integrationSchemes
@@ -1298,30 +1301,34 @@ boundaryField
         zero_dir = os.path.join(self.case_dir, "0")
         source_dir = os.path.join(self.case_dir, str(source_time))
 
-        # 1. Clean 0 directory (but keep mesh files if present, though usually they are in constant/polyMesh)
-        # We overwrite 0 with new fields.
+        # 1. Clean 0 directory
         if os.path.exists(zero_dir):
             shutil.rmtree(zero_dir)
         os.makedirs(zero_dir)
 
-        # 2. Copy fields
-        fields_to_copy = ["U", "p", "phi", "k", "epsilon", "omega", "nut"]
-
-        # Check if phi exists, if not generate it
+        # 2. Check and generate missing phi
         phi_src = os.path.join(source_dir, "phi")
         if not os.path.exists(phi_src):
             print("Generating missing 'phi' field...")
             self.run_command(["postProcess", "-func", "writePhi", "-time", str(source_time)], description="Generating phi")
 
+        # 3. Check and generate missing epsilon (CRITICAL FOR DISPERSION)
+        eps_src = os.path.join(source_dir, "epsilon")
+        if not os.path.exists(eps_src):
+            print("Generating 'epsilon' field for turbulent dispersion...")
+            self.run_command(["postProcess", "-func", "epsilon", "-time", str(source_time)], description="Generating epsilon")
+
+        # 4. Copy fields
+        fields_to_copy = ["U", "p", "phi", "k", "epsilon", "omega", "nut"]
         for field in fields_to_copy:
             src = os.path.join(source_dir, field)
             dst = os.path.join(zero_dir, field)
             if os.path.exists(src):
                 shutil.copy2(src, dst)
             elif field == "phi":
-                 print("Warning: 'phi' field still missing after generation attempt. Solver might fail.")
+                 print("Warning: 'phi' field still missing after generation attempt.")
 
-        # 3. Generate rho and mu (in both 0 and source_time for robustness)
+        # 5. Generate rho and mu
         self._generate_particle_tracking_fields("0", fallback_dirs=[source_time])
 
     def _update_controlDict_for_particles(self):
