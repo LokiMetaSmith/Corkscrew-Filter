@@ -795,8 +795,8 @@ patches
             "(.*)"
             {
                 type rebound;
-                e    0.97;
-                mu   0.09;
+                e    0.80;  // Loses 20% of normal energy on bounce
+                mu   0.45;  // High friction for basalt dragging on plastic
             }"""
 
         patch_interactions = common_catch_all + """
