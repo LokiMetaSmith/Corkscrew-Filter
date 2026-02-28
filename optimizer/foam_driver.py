@@ -873,11 +873,11 @@ solution
     interpolationSchemes
     {{
         rho             cell;
-        U               cell;     // Use cell center values for robustness
+        U               cellPoint;
         mu              cell;
-        k               cell;
-        epsilon         cell;
-        omega           cell;
+        k               cellPoint;
+        epsilon         cellPoint;
+        omega           cellPoint;
     }}
 
     integrationSchemes
@@ -913,8 +913,7 @@ subModels
         {injections}
     }}
 
-    //dispersionModel stochasticDispersionRAS;
-    dispersionModel gradientDispersionRAS;
+    dispersionModel stochasticDispersionRAS;
 
     patchInteractionModel localInteraction;
 
@@ -1318,7 +1317,7 @@ boundaryField
             print("Generating 'epsilon' field for turbulent dispersion...")
             self.run_command(["postProcess", "-func", "epsilon", "-time", str(source_time)], description="Generating epsilon")
 
-        # 4. Copy fields
+        # 4. Copy fields from source_time to 0
         fields_to_copy = ["U", "p", "phi", "k", "epsilon", "omega", "nut"]
         for field in fields_to_copy:
             src = os.path.join(source_dir, field)
@@ -1326,26 +1325,28 @@ boundaryField
             if os.path.exists(src):
                 shutil.copy2(src, dst)
                 
+                # --- AGGRESSIVE LOWER BOUND & BOUNDARY FREEZE ---
                 if field in ["k", "epsilon", "omega"]:
-                    with open(dst, 'r') as f:
+                    with open(dst, 'r', encoding='utf-8', errors='ignore') as f:
                         file_content = f.read()
                     
                     # 1. Freeze wall functions so they don't recalculate to 0 at runtime
-                    file_content = re.sub(r'type\s+[a-zA-Z0-9]*WallFunction\s*;', 'type fixedValue;', file_content)
+                    file_content = re.sub(r'type\s+[a-zA-Z0-9]*WallFunction\s*;', 'type fixedValue;\n        value uniform 1e-8;', file_content)
                     file_content = re.sub(r'type\s+zeroGradient\s*;', 'type fixedValue;\n        value uniform 1e-8;', file_content)
                     file_content = re.sub(r'type\s+calculated\s*;', 'type fixedValue;\n        value uniform 1e-8;', file_content)
                     
-                    # 2. Replace zeroes with 1e-8
+                    # 2. Replace absolute zeroes with 1e-8
                     file_content = re.sub(r'uniform\s+0(\.0+)?\s*;', 'uniform 1e-8;', file_content)
                     file_content = re.sub(r'(?m)^\s*0(\.0+)?\s*$', '1e-8', file_content)
                     file_content = re.sub(r'(?m)^\s*0\.0+e[+-]\d+\s*$', '1e-8', file_content)
                     
-                    with open(dst, 'w') as f:
+                    with open(dst, 'w', encoding='utf-8') as f:
                         f.write(file_content)
+                # ------------------------------------------------
+
             elif field == "phi":
                  print("Warning: 'phi' field still missing after generation attempt.")
 
-        
         # 5. Generate rho and mu
         self._generate_particle_tracking_fields("0", fallback_dirs=[source_time])
 
