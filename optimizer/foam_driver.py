@@ -675,48 +675,45 @@ actions
             num_bins = int(bin_config["num_bins"])
             for i in range(num_bins):
                 bin_patches += f"""
+    name bin_{i+1};
+    dictionary
     {{
-        name bin_{i+1};
-        patchInfo
-        {{
-            type patch;
-            inGroups (corkscrew_bins);
-        }}
-        constructFrom set;
-        set bin_{i+1}_faces;
-    }}"""
+        type patch;
+        inGroups (corkscrew_bins);
+    }}
+    constructFrom set;
+    set bin_{i+1}_faces;
+"""
 
         io_patches = ""
         if not skip_io:
             io_patches = """
+    name inlet;
+    dictionary
     {
-        name inlet;
-        patchInfo
-        {{
-            type patch;
-            inGroups (inletGroup);
-        }}
-        constructFrom set;
-        set inletFaces;
+        type patch;
+        inGroups (inletGroup);
     }
-    {
-        name outlet;
-        patchInfo
-        {{
-            type patch;
-            inGroups (outletGroup);
-        }}
-        constructFrom set;
-        set outletFaces;
-    }"""
+    constructFrom set;
+    set inletFaces;
 
-        content = f"""/*--------------------------------*- C++ -*----------------------------------*\\
+    name outlet;
+    dictionary
+    {
+        type patch;
+        inGroups (outletGroup);
+    }
+    constructFrom set;
+    set outletFaces;
+"""
+
+        content = f"""/*--------------------------------*- C++ -*----------------------------------*\
 | =========                 |                                                 |
-| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   O peration     | Version:  v2512                                 |
-|   \\  /    A nd           | Website:  www.openfoam.com                      |
-|    \\/     M anipulation  |                                                 |
-\\*---------------------------------------------------------------------------*/
+| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \    /   O peration     | Version:  v2512                                 |
+|   \  /    A nd           | Website:  www.openfoam.com                      |
+|    \/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
 FoamFile
 {{
     version     2.0;
