@@ -131,7 +131,7 @@ module RampedKnifeShape(h, twist, radius, profile_radius) {
         translate([0, 0, chamfer_h])
         rotate([0, 0, chamfer_twist])
         linear_extrude(height = body_h, twist = body_twist, center = false)
-             polygon(points = [[radius, 0], [radius+w, -w], [radius+w, w]]);
+             polygon(points = [[radius, 0], [radius+w, -w], [radius+w+0.01, 0], [radius+w, w]]);
     }
 }
 
