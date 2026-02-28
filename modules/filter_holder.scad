@@ -153,6 +153,13 @@ module FilterHolder(
                              if (use_colors) color("Gold", 1.0) cylinder(d=plug_od, h=lip_height/2, anchor=BOTTOM, $fn=$fn);
                              else cylinder(d=plug_od, h=lip_height/2, anchor=BOTTOM, $fn=$fn);
                          }
+                    } else if (tube_thread_inner) {
+                        // Lip/Plug for the Cap (fits inside the tube to press down on the stack)
+                        // Using a slightly smaller lip height (lip_height/2 = 5mm) to catch the stack.
+                        translate([0,0,lip_height/2]) {
+                             if (use_colors) color("Gold", 1.0) cylinder(d=plug_od, h=lip_height/2, anchor=BOTTOM, $fn=$fn);
+                             else cylinder(d=plug_od, h=lip_height/2, anchor=BOTTOM, $fn=$fn);
+                        }
                     }
 
                     // B. Cap (Fits over Tube)
@@ -233,7 +240,7 @@ module FilterHolder(
 
                 // 5. Cleanup / Hollows
                 // If Plug exists, we want to hollow it out to create the annular space for the tube wall.
-                if (tube_thread_outer) {
+                if (tube_thread_outer || tube_thread_inner) {
                     plug_wall_id = tube_id - 4;
                     // Check if we need to clean up
                     if (plug_wall_id > cartridge_feature_od) {
@@ -243,12 +250,14 @@ module FilterHolder(
                         }
                     }
 
-                    // Distal Face Seal (Fix for "circled green part")
-                    distal_groove_dia = tube_id - 2.1;
-                    groove_depth = oring_cs * 0.8;
-                    // Cut at the bottom face (Local Z=0)
-                    translate([0,0, groove_depth/2])
-                        OringGroove_Face_Cutter(distal_groove_dia, oring_cs);
+                    if (tube_thread_outer) {
+                        // Distal Face Seal (Fix for "circled green part")
+                        distal_groove_dia = tube_id - 2.1;
+                        groove_depth = oring_cs * 0.8;
+                        // Cut at the bottom face (Local Z=0)
+                        translate([0,0, groove_depth/2])
+                            OringGroove_Face_Cutter(distal_groove_dia, oring_cs);
+                    }
                 }
             }
 
