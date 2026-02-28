@@ -1325,6 +1325,18 @@ boundaryField
             dst = os.path.join(zero_dir, field)
             if os.path.exists(src):
                 shutil.copy2(src, dst)
+                
+                if field in ["k", "epsilon", "omega"]:
+                    with open(dst, 'r') as f:
+                        file_content = f.read()
+                    
+                    # Replace absolute zeroes with a tiny number
+                    # This catches uniform 0; and lists of zeroes
+                    file_content = re.sub(r'\b0\s*;', '1e-8;', file_content)
+                    file_content = re.sub(r'\b0\n', '1e-8\n', file_content)
+                    
+                    with open(dst, 'w') as f:
+                        f.write(file_content)
             elif field == "phi":
                  print("Warning: 'phi' field still missing after generation attempt.")
 
