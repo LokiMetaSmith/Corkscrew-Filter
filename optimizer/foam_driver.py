@@ -677,7 +677,7 @@ actions
                 bin_patches += f"""
     {{
         name bin_{i+1};
-        dictionary
+        patchInfo
         {{
             type patch;
         }}
@@ -690,7 +690,7 @@ actions
             io_patches = """
     {
         name inlet;
-        dictionary
+        patchInfo
         {
             type patch;
         }
@@ -699,7 +699,7 @@ actions
     }
     {
         name outlet;
-        dictionary
+        patchInfo
         {
             type patch;
         }
@@ -727,7 +727,7 @@ pointSync false;
 
 patches
 (
-{io_patches}
+    {io_patches}
     {bin_patches}
 );
 
