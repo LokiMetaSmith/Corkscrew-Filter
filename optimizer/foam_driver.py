@@ -666,7 +666,7 @@ actions
         with open(os.path.join(self.case_dir, "system", "topoSetDict"), 'w') as f:
             f.write(content)
 
-    def _generate_createPatchDict(self, bin_config=None):
+    def _generate_createPatchDict(self, bin_config=None, skip_io=False):
         """
         Generates system/createPatchDict.
         """
@@ -727,24 +727,7 @@ pointSync false;
 
 patches
 (
-    {{
-        name inlet;
-        dictionary
-        {{
-            type patch;
-        }}
-        constructFrom set;
-        set inletFaces;
-    }}
-    {{
-        name outlet;
-        dictionary
-        {{
-            type patch;
-        }}
-        constructFrom set;
-        set outletFaces;
-    }}
+{io_patches}
     {bin_patches}
 );
 
