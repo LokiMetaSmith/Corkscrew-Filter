@@ -1340,8 +1340,25 @@ boundaryField
             elif field == "phi":
                  print("Warning: 'phi' field still missing after generation attempt.")
 
+        # 5. Use OpenFOAM's native utility to mathematically bound the turbulence fields
+        print("Bounding turbulence fields to prevent SIGFPE in dispersion model...")
+        bound_commands = [
+            "exprField -time 0 -field k -expression 'max(k, 1e-8)' -overwrite",
+            "exprField -time 0 -field epsilon -expression 'max(epsilon, 1e-8)' -overwrite",
+            "exprField -time 0 -field omega -expression 'max(omega, 1e-8)' -overwrite"
+        ]
+        
+        # We run this in a single podman call to save overhead
+        combined_command = " && ".join(bound_commands)
+        self.run_command(
+            ["/bin/bash", "-lc", f"cd /home/openfoam/run && {combined_command}"], 
+            description="Bounding turbulence fields"
+        )
+
         # 5. Generate rho and mu
         self._generate_particle_tracking_fields("0", fallback_dirs=[source_time])
+
+
 
     def _update_controlDict_for_particles(self):
         """
