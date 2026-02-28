@@ -1,6 +1,6 @@
-# Thirsty Corkscrew
+# Parametric Corkscrew Filter
 
-A 3D-printable inertial filter for separating particles from a fluid stream, based on Dr. John Graf's "Thirsty Corkscrew" design. This project includes the OpenSCAD models for generating the filter and instructions for running a CFD simulation to analyze its performance.
+A 3D-printable inertial filter for separating particles from a fluid stream. This project includes parametric OpenSCAD models for generating helical inertial separators and an automated framework for running CFD simulations to analyze performance.
 
 ## Theory of Operation
 
@@ -10,7 +10,7 @@ See the [TECHNICAL_REPORT.md](https://github.com/LokiMetaSmith/Corkscrew-Filter/
 
 ### Physics of Inertial Separation
 
-The core mechanism of the Thirsty Corkscrew is **inertial separation**. As fluid traverses the helical channel, it is subjected to rapid changes in direction. This induces specific forces that separate particles based on mass and density:
+The core mechanism of the corkscrew filter is **inertial separation**. As fluid traverses the helical channel, it is subjected to rapid changes in direction. This induces specific forces that separate particles based on mass and density:
 
 1.  **Centrifugal Force ($$F_c = m \frac{v^2}{r}$$)**: The helical geometry acts as a continuous centrifuge. The curvature forces the fluid to accelerate radially. Heavier particles (like dust or water droplets) possess greater inertia and are flung toward the outer wall of the channel with a force proportional to the square of the velocity ($$v^2$$) and inversely proportional to the radius ($$r$$).
 2.  **Dean Vortices**: In curved pipes, the velocity differential between the inner and outer walls creates secondary flows known as Dean Vortices. These counter-rotating vortices spiral down the channel, effectively sweeping the cross-section and transporting particles toward the trapping zones.
@@ -31,11 +31,11 @@ The 3D models for the filter are generated using OpenSCAD.
 1.  **Install Dependencies**:
     *   **Node.js**: Run `npm install` in the root directory to install geometry generation tools (`openscad-wasm`).
     *   **Python**: Run `pip install -r optimizer/requirements.txt` to install the optimization and testing framework.
-2.  **Open the Main File**: Open the `ThirstyCorkscrew.scad` file in OpenSCAD (or use the CLI tools provided).
-3.  **Configure Parameters**: Adjust the parameters in `config.scad` or the `configs/` directory.
+2.  **Open the Main File**: Open the `corkscrew.scad` file in OpenSCAD (or use the CLI tools provided).
+3.  **Configure Parameters**: Adjust the parameters in `config.scad` or the `parameters/` directory.
 4.  **Render and Export**: Render the model (F6) and export it as an STL file for 3D printing.
 
-### Key Parameters (`ThirstyCorkscrew.scad`)
+### Key Parameters (`corkscrew.scad`)
 
 *   `filter_height_mm`: The height of the filter.
 *   `number_of_complete_revolutions`: The number of turns in the corkscrew channels.

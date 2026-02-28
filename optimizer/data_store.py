@@ -103,7 +103,7 @@ class DataStore:
                             print(f"Warning: Failed to delete {img_path}: {e}")
 
             # 2. Delete Artifacts (STLs, VTK)
-            # Check for fluid_stl_path, solid_stl_path, artifact_vtk_path, and legacy artifact_stl_path
+            # Check for fluid_stl_path, solid_stl_path, artifact_vtk_path, and artifact_stl_path
             paths_to_delete = set()
 
             if "fluid_stl_path" in run and run["fluid_stl_path"]:

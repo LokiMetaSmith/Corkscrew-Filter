@@ -471,7 +471,6 @@ functions
             print(f"Using ray-traced locationInMesh: {location}")
 
         if location is None:
-            # Legacy fallback
             if bounds is None or bounds[0] is None:
                 return
 

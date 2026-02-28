@@ -1,6 +1,6 @@
 # Bill of Materials
 
-This document lists the required components to build the Thirsty Corkscrew filter.
+This document lists the required components to build the Corkscrew Filter filter.
 
 ## Off-the-Shelf Components
 

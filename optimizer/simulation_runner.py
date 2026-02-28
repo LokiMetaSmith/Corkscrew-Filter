@@ -261,7 +261,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                         except Exception as e:
                             print(f"Warning: Failed to calculate custom location: {e}")
 
-                # Update location (if custom_location is None, foam_driver defaults to bounds-based legacy logic)
+                # Update location (if custom_location is None, foam_driver defaults to bounds-based logic)
                 # Pass helix_path_radius_mm for foam_driver's robust fallback
                 helix_path_radius_mm = params.get("helix_path_radius_mm")
                 foam_driver.update_snappyHexMesh_location(bounds_arr, custom_location=custom_location, helix_path_radius_mm=helix_path_radius_mm)

@@ -1,6 +1,6 @@
 # Parameter Configurations
 
-This directory contains OpenSCAD parameter configuration files (`.scad`). These files define specific variable values that control the geometry of the Thirsty Corkscrew filter.
+This directory contains OpenSCAD parameter configuration files (`.scad`). These files define specific variable values that control the geometry of the Corkscrew Filter filter.
 
 ## How to Use
 
