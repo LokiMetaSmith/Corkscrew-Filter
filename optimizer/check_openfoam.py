@@ -8,16 +8,17 @@ def parse_openfoam_version(version_str):
     Parses OpenFOAM version string (e.g., 'v2512') into an integer (2512).
     Returns None if parsing fails.
     """
-    # Look for vYYMM format
-    match = re.search(r"v(\d{4})", version_str)
-    if match:
-        return int(match.group(1))
-
-    # Handle other potential formats (e.g., 'v2406')
-    match = re.search(r"Version:\s*v(\d{4})", version_str)
-    if match:
-        return int(match.group(1))
-
+    # Try multiple patterns to handle different OpenFOAM forks and outputs
+    patterns = [
+        r"Version:\s*v?(\d{4})",       # Version: v2512 or Version: 2206
+        r"OPENFOAM=v?(\d{4})",         # OPENFOAM=2206
+        r"WM_PROJECT_VERSION=v?(\d{4})", # WM_PROJECT_VERSION=v2512
+        r"v(\d{4})"                    # Fallback generic v2512
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, version_str)
+        if match:
+            return int(match.group(1))
     return None
 
 def main():
@@ -51,33 +52,46 @@ def main():
     # No, driver.run_command is high level.
     # Let's use driver._get_container_command if containerized, or just run subprocess if native.
 
-    cmd = ["simpleFoam", "-help"]
+    # We will try a few commands to extract the version, as `-help` often strips the header in newer versions.
+    cmds_to_try = [
+        ["simpleFoam", "-help"],
+        ["foamVersion"],
+        ["bash", "-c", "echo WM_PROJECT_VERSION=$WM_PROJECT_VERSION"]
+    ]
+
+    version_int = None
+    output = ""
+
+    import subprocess
+
+    for cmd in cmds_to_try:
+        try:
+            if driver.use_container:
+                # Construct container command
+                full_cmd = driver._get_container_command(cmd, driver.case_dir)
+            else:
+                full_cmd = cmd
+
+            # Run and capture output
+            result = subprocess.run(
+                full_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                check=False # Don't throw error on non-zero exit
+            )
+
+            current_output = result.stdout
+            output += current_output + "\n"
+            version_int = parse_openfoam_version(current_output)
+
+            if version_int:
+                break
+        except Exception as e:
+            output += f"Error running {' '.join(cmd)}: {e}\n"
+            continue
 
     try:
-        if driver.use_container:
-            # Construct container command
-            full_cmd = driver._get_container_command(cmd, driver.case_dir)
-        else:
-            full_cmd = cmd
-
-        # Run and capture output
-        import subprocess
-        result = subprocess.run(
-            full_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            check=False # Don't throw error on non-zero exit (help often exits 0 or 1)
-        )
-
-        output = result.stdout
-
-        # Parse version from output
-        # Expecting: "OpenFOAM: The Open Source CFD Toolbox           | Version:  v2512"
-        # or similar standard header
-
-        version_int = parse_openfoam_version(output)
-
         if version_int:
             print(f"Detected OpenFOAM version: v{version_int}")
             if version_int < 2512:
