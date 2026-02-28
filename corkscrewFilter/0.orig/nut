@@ -34,13 +34,17 @@ boundaryField
 
     walls
     {
-        type            nutkWallFunction;
+        type            nutkRoughWallFunction;
+        Ks              uniform 0.0002;  // 0.2mm layer height roughness!
+        Cs              uniform 0.5;     // Standard roughness constant
         value           uniform 0;
     }
 
     corkscrew
     {
-        type            nutkWallFunction;
+        type            nutkRoughWallFunction;
+        Ks              uniform 0.0002;  // 0.2mm layer height roughness!
+        Cs              uniform 0.5;
         value           uniform 0;
     }
 }
