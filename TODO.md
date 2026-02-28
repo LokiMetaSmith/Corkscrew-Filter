@@ -1,6 +1,6 @@
 # Project To-Do List
 
-This file tracks planned enhancements and future work for the Thirsty Corkscrew project.
+This file tracks planned enhancements and future work for the Corkscrew Filter project.
 
 - [x] Add the ability to make different parameter configurations based on included config files.
 - [x] Refine the `CorkscrewSlitKnife` geometry to have a chamfered or ramped leading edge to improve separation efficiency.
@@ -9,7 +9,7 @@ This file tracks planned enhancements and future work for the Thirsty Corkscrew 
 - [x] Document `optimizer/` and `parameters/` directories in the README. These are core functions for simulation and parameter evaluation.
 - [x] Complete refactor of barb generators into a unified, parameterized `Barb` module.
 - [x] Create `FilterHolder` part (barb fitting with dual O-rings and optional threading).
-- [x] Standardize legacy coupling configurations (Cartridge, Sandblaster) into `configs/` files.
+- [x] Standardize coupling configurations (Cartridge, Sandblaster) into `configs/` files.
 
 ## Distributed Optimization (Git-Based)
 - [x] **Data Schema:** Design a JSONL-based schema for the Job Queue/Result Log. This format should favor append-only operations to minimize merge conflicts when multiple users push results.

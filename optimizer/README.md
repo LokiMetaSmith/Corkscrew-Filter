@@ -1,6 +1,6 @@
 # AI-Driven Design Optimization
 
-This directory contains a suite of tools to automate the design optimization of the Thirsty Corkscrew filter using Generative AI. The system iterates through design parameters, generates 3D geometry, runs CFD simulations to evaluate performance, and uses a Large Language Model (LLM) to suggest improvements.
+This directory contains a suite of tools to automate the design optimization of the Corkscrew Filter filter using Generative AI. The system iterates through design parameters, generates 3D geometry, runs CFD simulations to evaluate performance, and uses a Large Language Model (LLM) to suggest improvements.
 
 ## Overview
 

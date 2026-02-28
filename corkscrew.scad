@@ -13,7 +13,7 @@ include <modules/cutters.scad>
 include <modules/helpers.scad>
 include <modules/inlets.scad>
 include <modules/assemblies.scad>
-include <modules/custom_couplings.scad> // Added for legacy support
+include <modules/custom_couplings.scad>
 include <modules/filter_holder.scad>
 include <modules/cfd_helpers.scad>
 

@@ -1,7 +1,7 @@
 // =============================================================================
 // --- Parameterized Barb Module ---
 // =============================================================================
-// This module replaces the legacy BarbGenerator and specific barb implementations.
+// This module generates parameterized barb geometries.
 // It is fully parameterized to support standard and custom barb geometries.
 
 /**
@@ -17,7 +17,7 @@
  * wall_thickness: (float) Thickness of the barb wall (determines internal bore).
  * bore: (bool) If true, creates the internal hole.
  * shell: (bool) If true, creates the solid barb geometry.
- * ezprint: (bool) Alternative print optimization (legacy support).
+ * ezprint: (bool) Alternative print optimization .
  */
 module Barb(
     hose_id = 5,
@@ -45,7 +45,7 @@ module Barb(
                      cylinder(d = hose_od, h = barb_length, $fn = $fn); // Simple tip
             }
 
-            // EZPrint Logic (Legacy)
+            // EZPrint Logic
             if (ezprint && !shell) {
                  difference() {
                     cylinder(d = hose_id + (swell * 3), h = (barb_length * (barb_count + 1)), $fn = $fn);

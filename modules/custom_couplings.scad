@@ -5,7 +5,7 @@ include <primitives.scad>
 // =============================================================================
 // --- Custom Coupling Generator ---
 // =============================================================================
-// This module generates the specific coupling geometries defined in the legacy files.
+// This module generates specific custom coupling geometries.
 // It relies on variables being set (likely from a config file).
 
 module CustomCoupling() {

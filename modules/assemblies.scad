@@ -29,7 +29,7 @@ module ModularFilterAssembly(tube_id, total_length) {
     // --- Parse Revolutions (Scalar or Array) ---
     // Calculate twist rates (degrees per mm) for each bin.
     // If array: Interpreted as revolutions PER BIN (e.g. 1 means 1 full turn in that bin).
-    // If scalar: Interpreted as revolutions OVER TOTAL LENGTH (legacy behavior).
+    // If scalar: Interpreted as revolutions OVER TOTAL LENGTH .
     _rates = is_list(number_of_complete_revolutions)
         ? [for (r = number_of_complete_revolutions) 360 * r / bin_length]
         : [for (i=[0:num_bins-1]) 360 * number_of_complete_revolutions / total_length];
@@ -362,7 +362,7 @@ module HoseAdapterEndCap(tube_od, hose_id, oring_cs, tube_wall = tube_wall_mm, a
             Barb(hose_id = hose_id, hose_od = hose_id + 1.5, barb_count = 4);
 
     } else {
-        // --- Legacy Radial Seal Geometry ---
+        // --- Radial Seal Geometry ---
 
         cap_inner_dia = tube_od - 2 * tube_wall + tolerance_tube_fit;
         cap_outer_dia = cap_inner_dia + 2 * cap_wall;

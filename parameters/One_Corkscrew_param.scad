@@ -1,4 +1,4 @@
-// Thirsty Corkscrew - One Corkscrew Configuration File
+// Corkscrew Filter - One Corkscrew Configuration File
 //
 // To create a new configuration, copy this file, rename it,
 // and change the `config_file` variable in `corkscrew filter.scad`
@@ -19,8 +19,7 @@ tube_wall_mm = 1;
 // Case 1
 insert_length_mm = (350/2)/6; // ~29.16mm
 
-// New Parameter Mappings (Replacing Legacy screw_OD/ID)
-// Legacy: screw_OD_mm = 6; screw_ID_mm = 5.0;
+
 // Assuming OD/2 = profile_radius = path_radius (so screw touches center)
 // And ID/2 = void_profile_radius
 helix_profile_radius_mm = 3.0;
@@ -37,7 +36,6 @@ inlet_type = "none";
 //screw_OD_mm = 5;
 //screw_ID_mm = 3.5;
 
-// num_hex = 0; // Legacy
 hex_spacing = 5;
 
 
@@ -64,13 +62,9 @@ tolerance_channel = 0.1;
 
 // Params (mm), degrees 
 number_of_complete_revolutions = 1*num_bins;
-// filter_height_mm = num_bins*40/3; // Legacy
 // WARNING! Trying to reduce this to one bin seemed to make the slit go away
 
-// filter_twist_degrees = 360*number_of_complete_revolutions; // Legacy
 
-// screw_OD_mm = 4.5; // Legacy
-// screw_ID_mm = 3.5; // Legacy
 cell_wall_mm = 1.1;
 barb_input_diameter = 2;
 barb_output_diameter = 5;
@@ -86,15 +80,10 @@ slit_axial_length_mm = cell_wall_mm + slit_axial_open_length_mm;
 // The wider the angle, the greater the slit. 180 would
 // be half the slit. I suggest this be limited to 45 degrees.
 slit_knife_angle = 45;
-// hex_cell_diam_mm = 10; // Legacy
 FN_RES = 60;
-// bin_height_z_mm = 10; // Legacy
-// num_screws = 1; // Legacy
 
 screw_center_separation_mm = 3;
-// bin_breadth_x_mm = (num_screws -1) * screw_center_separation_mm + screw_center_separation_mm*2; // Legacy
 
-// pitch_mm = filter_height_mm / number_of_complete_revolutions; // Legacy
 
 scale_ratio = 1.4; // This is used to acheive a more circular air path
 
