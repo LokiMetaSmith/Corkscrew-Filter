@@ -1330,13 +1330,14 @@ boundaryField
                     with open(dst, 'r') as f:
                         file_content = f.read()
                     
-                 # 1. Replace uniform 0; boundaries
-                    file_content = re.sub(r'uniform\s+0\s*;', 'uniform 1e-8;', file_content)
+                    # 1. Freeze wall functions so they don't recalculate to 0 at runtime
+                    file_content = re.sub(r'type\s+[a-zA-Z0-9]*WallFunction\s*;', 'type fixedValue;', file_content)
+                    file_content = re.sub(r'type\s+zeroGradient\s*;', 'type fixedValue;\n        value uniform 1e-8;', file_content)
+                    file_content = re.sub(r'type\s+calculated\s*;', 'type fixedValue;\n        value uniform 1e-8;', file_content)
                     
-                    # 2. Replace exact zeroes in nonuniform lists (standalone '0' on a line)
-                    file_content = re.sub(r'(?m)^\s*0\s*$', '1e-8', file_content)
-                    
-                    # 3. Replace scientific notation zeroes (e.g. 0.000000e+00)
+                    # 2. Replace zeroes with 1e-8
+                    file_content = re.sub(r'uniform\s+0(\.0+)?\s*;', 'uniform 1e-8;', file_content)
+                    file_content = re.sub(r'(?m)^\s*0(\.0+)?\s*$', '1e-8', file_content)
                     file_content = re.sub(r'(?m)^\s*0\.0+e[+-]\d+\s*$', '1e-8', file_content)
                     
                     with open(dst, 'w') as f:
