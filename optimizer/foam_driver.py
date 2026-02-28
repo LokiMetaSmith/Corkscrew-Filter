@@ -1331,13 +1331,13 @@ boundaryField
                         file_content = f.read()
                     
                  # 1. Replace uniform 0; boundaries
-                    content = re.sub(r'uniform\s+0\s*;', 'uniform 1e-8;', content)
+                    file_content = re.sub(r'uniform\s+0\s*;', 'uniform 1e-8;', file_content)
                     
                     # 2. Replace exact zeroes in nonuniform lists (standalone '0' on a line)
-                    content = re.sub(r'(?m)^\s*0\s*$', '1e-8', content)
+                    file_content = re.sub(r'(?m)^\s*0\s*$', '1e-8', file_content)
                     
                     # 3. Replace scientific notation zeroes (e.g. 0.000000e+00)
-                    content = re.sub(r'(?m)^\s*0\.0+e[+-]\d+\s*$', '1e-8', content)
+                    file_content = re.sub(r'(?m)^\s*0\.0+e[+-]\d+\s*$', '1e-8', file_content)
                     
                     with open(dst, 'w') as f:
                         f.write(file_content)
