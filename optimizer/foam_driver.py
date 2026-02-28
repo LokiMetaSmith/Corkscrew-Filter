@@ -1330,31 +1330,21 @@ boundaryField
                     with open(dst, 'r') as f:
                         file_content = f.read()
                     
-                    # Replace absolute zeroes with a tiny number
-                    # This catches uniform 0; and lists of zeroes
-                    file_content = re.sub(r'\b0\s*;', '1e-8;', file_content)
-                    file_content = re.sub(r'\b0\n', '1e-8\n', file_content)
+                 # 1. Replace uniform 0; boundaries
+                    content = re.sub(r'uniform\s+0\s*;', 'uniform 1e-8;', content)
+                    
+                    # 2. Replace exact zeroes in nonuniform lists (standalone '0' on a line)
+                    content = re.sub(r'(?m)^\s*0\s*$', '1e-8', content)
+                    
+                    # 3. Replace scientific notation zeroes (e.g. 0.000000e+00)
+                    content = re.sub(r'(?m)^\s*0\.0+e[+-]\d+\s*$', '1e-8', content)
                     
                     with open(dst, 'w') as f:
                         f.write(file_content)
             elif field == "phi":
                  print("Warning: 'phi' field still missing after generation attempt.")
 
-        # 5. Use OpenFOAM's native utility to mathematically bound the turbulence fields
-        print("Bounding turbulence fields to prevent SIGFPE in dispersion model...")
-        bound_commands = [
-            "exprField -time 0 -field k -expression 'max(k, 1e-8)' -overwrite",
-            "exprField -time 0 -field epsilon -expression 'max(epsilon, 1e-8)' -overwrite",
-            "exprField -time 0 -field omega -expression 'max(omega, 1e-8)' -overwrite"
-        ]
         
-        # We run this in a single podman call to save overhead
-        combined_command = " && ".join(bound_commands)
-        self.run_command(
-            ["/bin/bash", "-lc", f"cd /home/openfoam/run && {combined_command}"], 
-            description="Bounding turbulence fields"
-        )
-
         # 5. Generate rho and mu
         self._generate_particle_tracking_fields("0", fallback_dirs=[source_time])
 
