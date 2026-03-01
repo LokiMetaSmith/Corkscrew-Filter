@@ -1351,12 +1351,16 @@ boundaryField
                     with open(dst, 'r', encoding='utf-8', errors='ignore') as f:
                         file_content = f.read()
                     
-                    # 1. Freeze wall functions so they don't recalculate to 0 at runtime
-                    file_content = re.sub(r'type\s+[a-zA-Z0-9]*WallFunction\s*;', 'type fixedValue;\n        value uniform 1e-8;', file_content)
-                    file_content = re.sub(r'type\s+zeroGradient\s*;', 'type fixedValue;\n        value uniform 1e-8;', file_content)
-                    file_content = re.sub(r'type\s+calculated\s*;', 'type fixedValue;\n        value uniform 1e-8;', file_content)
-                    
-                    # 2. Replace absolute zeroes with 1e-8
+                    # Overwrite entire boundaryField with catch-all
+                    catch_all_boundary = """
+    ".*"
+    {
+        type            fixedValue;
+        value           uniform 1e-8;
+    }"""
+                    file_content = self._replace_block(file_content, "boundaryField", catch_all_boundary)
+
+                    # Replace absolute zeroes with 1e-8 in internalField or everywhere else
                     file_content = re.sub(r'uniform\s+0(\.0+)?\s*;', 'uniform 1e-8;', file_content)
                     file_content = re.sub(r'(?m)^\s*0(\.0+)?\s*$', '1e-8', file_content)
                     file_content = re.sub(r'(?m)^\s*0\.0+e[+-]\d+\s*$', '1e-8', file_content)
