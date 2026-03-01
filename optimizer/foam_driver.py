@@ -913,7 +913,7 @@ subModels
         {injections}
     }}
 
-    dispersionModel gradientDispersionRAS; //stochasticDispersionRAS;
+    dispersionModel stochasticDispersionRAS; //gradientDispersionRAS;
 
     patchInteractionModel localInteraction;
 
@@ -1326,7 +1326,7 @@ boundaryField
                 shutil.copy2(src, dst)
                 
                 # --- AGGRESSIVE LOWER BOUND & BOUNDARY FREEZE ---
-                if field in ["k", "epsilon", "omega"]:
+                if field in ["k", "epsilon", "omega", "nut"]:
                     with open(dst, 'r', encoding='utf-8', errors='ignore') as f:
                         file_content = f.read()
                     
