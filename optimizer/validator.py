@@ -44,8 +44,13 @@ class Validator:
 
         if check_watertight and not mesh.is_watertight:
             # Caps and Fluid volume should be watertight in this workflow
-            messages.append("Mesh is not watertight.")
+            messages.append("Mesh is not watertight (has holes or non-manifold edges).")
             valid = False
+
+        # Check for non-manifold geometry specifically (if it's watertight it might still be non-manifold)
+        if not mesh.is_volume and valid:
+             messages.append("Mesh does not enclose a valid volume (may have self-intersections or inverted normals).")
+             valid = False
 
         if check_volume and mesh.volume <= 0:
             messages.append(f"Mesh has non-positive volume: {mesh.volume:.6f}")

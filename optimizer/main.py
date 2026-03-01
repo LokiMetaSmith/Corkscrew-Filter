@@ -47,6 +47,7 @@ def main():
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output (e.g. error logs)")
     parser.add_argument("--parallel-workers", type=int, default=0, help="Number of parallel worker processes to spawn (0 = sequential)")
     parser.add_argument("--params-file", type=str, help="Path to a SCAD parameter file to use as the base configuration (overrides defaults)")
+    parser.add_argument("--turbulence", type=str, default="laminar", help="Turbulence model to use (default: laminar, can be kOmegaSST, RNGkEpsilon, etc.)")
     args = parser.parse_args()
 
     # Parse iterations argument
@@ -287,7 +288,8 @@ def main():
                 reuse_mesh=args.reuse_mesh,
                 output_prefix=output_prefix,
                 verbose=args.verbose,
-                params_file=args.params_file
+                params_file=args.params_file,
+                turbulence=args.turbulence
             )
 
             print(f"Result metrics: {metrics}")

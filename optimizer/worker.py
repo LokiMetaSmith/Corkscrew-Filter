@@ -53,6 +53,7 @@ def main():
     parser.add_argument("--case-dir", type=str, default="corkscrewFilter")
     parser.add_argument("--poll-interval", type=int, default=10, help="Seconds to wait between polls in loop mode")
     parser.add_argument("--local", action="store_true", help="Run in local mode (skip git sync)")
+    parser.add_argument("--turbulence", type=str, default="laminar", help="Turbulence model to use (default: laminar)")
     args = parser.parse_args()
 
     worker_id = args.id if args.id else get_default_worker_id()
@@ -129,7 +130,8 @@ def main():
                 output_stl_name="corkscrew_fluid.stl", # Standard name for Foam
                 dry_run=args.dry_run,
                 output_prefix=output_prefix,
-                params_file=params_file
+                params_file=params_file,
+                turbulence=args.turbulence
             )
 
             # Check for critical failures in metrics

@@ -34,9 +34,12 @@ module HelicalShape(h, twist, path_r, profile_r) {
  * void:  (boolean) If false, generates the solid screw. If true, generates the larger void for cutting.
  */
 module Corkscrew(h, twist, void = false) {
+    // Enforce safety margin mathematically to avoid center-axis singularity in CGAL
+    safe_profile_radius = min(helix_profile_radius_mm, helix_path_radius_mm - 0.5);
+
     profile_r = void
         ? helix_void_profile_radius_mm + tolerance_channel
-        : helix_profile_radius_mm;
+        : safe_profile_radius;
     HelicalShape(h, twist, helix_path_radius_mm, profile_r);
 }
 

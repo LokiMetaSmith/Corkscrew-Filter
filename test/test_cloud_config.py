@@ -31,6 +31,18 @@ class TestCloudConfig(unittest.TestCase):
         with open(config_path, 'r') as f:
             content = f.read()
 
+        # In current version of foam_driver.py, cloudFunctions are commented out due to a bug in OpenFOAM 2512.
+        # We'll just verify the model and turbulence parameterization here.
+        self.assertIn("dispersionModel none;", content)
+        self.assertNotIn("k               cellPoint;", content)
+
+        # Test turbulent mode
+        self.driver._generate_kinematicCloudProperties(turbulence="kOmegaSST")
+        with open(config_path, 'r') as f:
+            content2 = f.read()
+
+        self.assertIn("dispersionModel stochasticDispersionRAS;", content2)
+        self.assertIn("k               cellPoint;", content2)
         # Verify cloudFunctions block exists and is empty or has commented out functionality
         # as patchPostProcessing is buggy in OpenFOAM v2512.
         pattern = re.compile(r"cloudFunctions\s*\{([\s\S]*?)\}", re.DOTALL)
