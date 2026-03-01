@@ -82,21 +82,24 @@ module ModularFilterAssembly(tube_id, total_length) {
             translate([0, 0, z_center]) rotate([0, 0, rot_center]) {
                 if (is_bin) {
                     // --- Generate Bin ---
+                    // Enforce safety margin: profile radius must be strictly less than path radius
+                    safe_profile_radius = min(helix_profile_radius_mm, helix_path_radius_mm - 0.5);
+
                     difference() {
                         // Solid Screw Segment
                         HollowHelicalShape(
                             h + 0.02, // Add overlap for robust union
                             rate * (h + 0.02),
                             helix_path_radius_mm + 0.01, // Add tiny offset to prevent singularity at axis
-                            helix_profile_radius_mm,
+                            safe_profile_radius,
                             helix_void_profile_radius_mm + tolerance_channel
                         );
 
                         // Slits
                         if (slit_type == "simple") {
-                            SimpleSlitCutter(h + 0.02, rate * (h + 0.02), 2 * (helix_path_radius_mm + helix_profile_radius_mm), 1, offset_angle=0);
+                            SimpleSlitCutter(h + 0.02, rate * (h + 0.02), 2 * (helix_path_radius_mm + safe_profile_radius), 1, offset_angle=0);
                         } else if (slit_type == "ramped") {
-                            RampedSlitKnife(h + 0.02, rate * (h + 0.02), 2 * (helix_path_radius_mm + helix_profile_radius_mm), 1, offset_angle=0);
+                            RampedSlitKnife(h + 0.02, rate * (h + 0.02), 2 * (helix_path_radius_mm + safe_profile_radius), 1, offset_angle=0);
                         }
                     }
                 } else {
