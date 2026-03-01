@@ -277,13 +277,14 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
     vtk_zip_path = None
 
     if not dry_run and not skip_cfd:
-        foam_driver.prepare_case(keep_mesh=reuse_mesh)
-
         # Prepare Bin Configuration for Meshing/Tracking
         bin_config = {
             "num_bins": int(params.get("num_bins", 1)),
-            "insert_length_mm": float(params.get("insert_length_mm", 50.0))
+            "insert_length_mm": float(params.get("insert_length_mm", 50.0)),
+            "tube_od_mm": float(params.get("tube_od_mm", 32.0))
         }
+
+        foam_driver.prepare_case(keep_mesh=reuse_mesh, bin_config=bin_config)
 
         if not reuse_mesh:
             with Timer("Meshing"):

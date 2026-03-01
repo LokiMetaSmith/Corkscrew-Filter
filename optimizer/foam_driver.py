@@ -226,7 +226,7 @@ class FoamDriver:
             print(f"Error reading log: {e}")
         print("--------------------------------------------------\n")
 
-    def prepare_case(self, keep_mesh=False):
+    def prepare_case(self, keep_mesh=False, bin_config=None):
         """
         Prepares the case directory.
         """
@@ -234,6 +234,10 @@ class FoamDriver:
             if os.path.exists(self.case_dir):
                 shutil.rmtree(self.case_dir)
             shutil.copytree(self.template_dir, self.case_dir)
+
+        # Dynamically set inlet velocity in 0.orig/U
+        if bin_config:
+            self._update_inlet_velocity(bin_config)
 
         tri_surface = os.path.join(self.case_dir, "constant", "triSurface")
         os.makedirs(tri_surface, exist_ok=True)
@@ -750,24 +754,31 @@ patches
         with open(os.path.join(self.case_dir, "system", "createPatchDict"), 'w') as f:
             f.write(content)
 
-    def _generate_kinematicCloudProperties(self, bin_config=None):
+    def _generate_kinematicCloudProperties(self, bin_config=None, fluid_velocity_z=5.0):
         """
         Generates constant/kinematicCloudProperties with size binning and spatial binning.
+        fluid_velocity_z: The Z-velocity of the fluid at the inlet (m/s)
         """
-        # Sizes to simulate (in meters)
         sizes_um = [5, 10, 20, 50, 100]
         rho0_val = 3100  # Moon Dust density
+
+        # Calculate inlet area based on the current tube_od_mm from bin_config (default 32mm)
+        tube_od_m = float(bin_config.get("tube_od_mm", 32.0)) / 1000.0 if bin_config else 0.032
+        inlet_area_m2 = math.pi * ((tube_od_m / 2.0)**2)
+
+        # Scale parcels per second based on area (baseline: 5000 for a 32mm pipe)
+        baseline_area = math.pi * ((0.032 / 2.0)**2)
+        area_ratio = inlet_area_m2 / baseline_area
+        parcels_per_sec = int(5000 * area_ratio)
 
         injections = ""
         for d_um in sizes_um:
             d_m = d_um * 1e-6
-            # Use distinct model names for parsing
             model_name = f"model_{d_um}um"
 
-            # Calculate mass flow rate for 5000 particles/s
-            # Mass per particle = rho * Volume = rho * (4/3 * pi * (r)^3)
+            # Calculate mass flow rate
             volume = (4.0/3.0) * math.pi * ((d_m / 2.0)**3)
-            mass_flow_rate = rho0_val * volume * 5000
+            mass_flow_rate = rho0_val * volume * parcels_per_sec
 
             injections += f"""
         {model_name}
@@ -778,9 +789,9 @@ patches
             massTotal       {mass_flow_rate:.6e};
             duration        1;
             SOI             0;
-            parcelsPerSecond 5000;
+            parcelsPerSecond {parcels_per_sec};
             flowRateProfile constant 1;
-            U0              (0 0 5);
+            U0              (0 0 {fluid_velocity_z}); // <-- Dynamically matched to fluid!
             sizeDistribution
             {{
                 type        fixedValue;
@@ -1440,6 +1451,47 @@ boundaryField
         with open(control_dict, 'w') as f:
             f.write(content)
 
+    def _update_inlet_velocity(self, bin_config):
+        """
+        Updates the inlet velocity in 0.orig/U based on volumetric flow rate.
+        Assumes a baseline of 5 m/s at 32mm diameter.
+        """
+        # Baseline: 5 m/s at 32mm diameter
+        baseline_d = 0.032
+        baseline_u = 5.0
+        baseline_area = math.pi * ((baseline_d / 2.0)**2)
+        volumetric_flow = baseline_area * baseline_u # constant m^3/s
+
+        # Current
+        current_d = float(bin_config.get("tube_od_mm", 32.0)) / 1000.0
+        current_area = math.pi * ((current_d / 2.0)**2)
+
+        # New Velocity
+        new_u = volumetric_flow / current_area
+
+        # We need to save this for kinematicCloudProperties later
+        self.current_fluid_velocity_z = new_u
+
+        u_file = os.path.join(self.case_dir, "0.orig", "U")
+        if not os.path.exists(u_file):
+            return
+
+        with open(u_file, 'r') as f:
+            content = f.read()
+
+        # Replace the value inside the inlet block
+        # Look for inlet { ... value uniform (0 0 5); ... }
+        # Need a somewhat robust replacement since spacing could vary
+
+        # A simple regex for the inlet block's value
+        pattern = re.compile(r"(inlet\s*\{[^}]*?value\s+uniform\s*\(\s*0\s+0\s+)([\d\.\-]+)(\s*\)\s*;)", re.DOTALL)
+
+        if pattern.search(content):
+            content = pattern.sub(rf"\g<1>{new_u:.6f}\g<3>", content)
+
+        with open(u_file, 'w') as f:
+            f.write(content)
+
     def run_particle_tracking(self, log_file=None, bin_config=None):
         """
         Runs particle tracking (Lagrangian) using a robust transient strategy on frozen flow.
@@ -1461,7 +1513,8 @@ boundaryField
             print(f"Preparing particle tracking from steady state time {latest_time}...")
 
             # 1. Generate Cloud Config
-            self._generate_kinematicCloudProperties(bin_config)
+            fluid_velocity_z = getattr(self, "current_fluid_velocity_z", 5.0)
+            self._generate_kinematicCloudProperties(bin_config, fluid_velocity_z=fluid_velocity_z)
 
             # Debug: print generated cloud config
             c_path = os.path.join(self.case_dir, "constant", "kinematicCloudProperties")
