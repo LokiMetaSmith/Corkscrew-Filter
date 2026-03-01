@@ -1064,6 +1064,18 @@ cloudFunctions
 """
 
         template_path = os.path.join(self.case_dir, "system", "snappyHexMeshDict.template")
+        shm_path = os.path.join(self.case_dir, "system", "snappyHexMeshDict")
+
+        # We need to preserve the dynamically injected locationInMesh if it exists in the active dict
+        preserved_location = None
+        if os.path.exists(shm_path):
+            with open(shm_path, 'r') as f:
+                existing_content = f.read()
+                pattern = re.compile(r"locationInMesh\s*\((.*?)\);", re.DOTALL)
+                m = pattern.search(existing_content)
+                if m:
+                    preserved_location = m.group(1)
+
         if os.path.exists(template_path):
             with open(template_path, 'r') as f: content = f.read()
         else:
@@ -1076,7 +1088,13 @@ cloudFunctions
         content = self._replace_block(content, "geometry", geometry_str)
         content = self._replace_block(content, "refinementSurfaces", refinement_str)
 
-        with open(os.path.join(self.case_dir, "system", "snappyHexMeshDict"), 'w') as f:
+        # Restore preserved location
+        if preserved_location:
+            pattern = re.compile(r"locationInMesh\s*\(.*?\);", re.DOTALL)
+            if pattern.search(content):
+                content = pattern.sub(f"locationInMesh ({preserved_location});", content)
+
+        with open(shm_path, 'w') as f:
             f.write(content)
 
     def run_meshing(self, log_file=None, bin_config=None, stl_assets=None, add_layers=True):
@@ -1108,6 +1126,9 @@ cloudFunctions
             # Fallback Loop
             if add_layers:
                 print("Warning: Meshing failed with layers enabled. Retrying with layers disabled (Auto-Fallback)...")
+                # Need to re-run blockMesh to reset the corrupted polyMesh from the failed snappyHexMesh run
+                if not self.run_command(["blockMesh"], log_file=log_file, description="Meshing (blockMesh - Fallback)"): return False
+
                 # Regenerate config with layers=False
                 if using_assets:
                     self._generate_snappyHexMeshDict(stl_assets, add_layers=False)
