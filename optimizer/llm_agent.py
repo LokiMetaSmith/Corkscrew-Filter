@@ -280,47 +280,30 @@ class LLMAgent:
                 print(f"- {m}")
         print("----------------------------------------\n")
 
-    def _generate_random_parameters(self, current_params: Dict[str, Any], constraints_str: str) -> Dict[str, Any]:
+    def _generate_random_parameters(self, current_params: Dict[str, Any], parameters_def: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generates random parameters within valid ranges when LLM is unavailable.
-        This provides a basic random search strategy.
+        This provides a basic random search strategy using the YAML definitions.
         """
         print("Using random search strategy...")
         new_params = current_params.copy()
 
-        # Define ranges (based on config.scad and constraints.py)
+        for param_name, param_info in parameters_def.items():
+            if param_info.get('constant', False):
+                continue
 
-        # insert_length_mm: 40 - 60
-        new_params["insert_length_mm"] = round(random.uniform(40.0, 60.0), 2)
+            param_type = param_info.get('type', 'float')
+            p_min = param_info.get('min')
+            p_max = param_info.get('max')
+            default = param_info.get('default')
 
-        # number_of_complete_revolutions: 1 - 4
-        new_params["number_of_complete_revolutions"] = random.randint(1, 4)
-
-        # helix_void_profile_radius_mm: 0.5 - 2.0
-        void_radius = round(random.uniform(0.5, 2.0), 2)
-        new_params["helix_void_profile_radius_mm"] = void_radius
-
-        # helix_path_radius_mm: > void + 0.5
-        # Range 1.5 - 5.0, but must be > void
-        path_radius = round(random.uniform(max(1.5, void_radius + 0.5), 5.0), 2)
-        new_params["helix_path_radius_mm"] = path_radius
-
-        # helix_profile_radius_mm: > void + 0.5 AND <= path_radius
-        min_profile = max(1.5, void_radius + 0.5)
-        profile_radius = round(random.uniform(min_profile, path_radius), 2)
-        new_params["helix_profile_radius_mm"] = profile_radius
-
-        # helix_profile_scale_ratio: 1.0 - 2.0
-        new_params["helix_profile_scale_ratio"] = round(random.uniform(1.0, 2.0), 2)
-
-        # Slit parameters (explicitly adding them as they are optimization targets)
-        slit_axial = round(random.uniform(1.0, 3.0), 2)
-        new_params["slit_axial_length_mm"] = slit_axial
-        # slit_chamfer_height < slit_axial_length_mm
-        new_params["slit_chamfer_height"] = round(random.uniform(0.1, min(1.0, slit_axial - 0.1)), 2)
-
-        # num_bins: 1 - 3 (integer)
-        new_params["num_bins"] = random.randint(1, 3)
+            if p_min is not None and p_max is not None:
+                if param_type == 'int':
+                    new_params[param_name] = random.randint(int(p_min), int(p_max))
+                elif param_type == 'float':
+                    new_params[param_name] = round(random.uniform(float(p_min), float(p_max)), 2)
+            elif default is not None:
+                new_params[param_name] = default
 
         return new_params
 
@@ -370,7 +353,7 @@ class LLMAgent:
                 return self._generate_random_parameters(current_params, constraints)
             return current_params
 
-    def suggest_campaign(self, history: List[Dict], constraints: str, count: int = 5, image_paths: List[str] = None) -> List[Dict[str, Any]]:
+    def suggest_campaign(self, history: List[Dict], constraints: str, objective: str, target: str, description: str, parameters_def: Dict[str, Any], count: int = 5, image_paths: List[str] = None) -> List[Dict[str, Any]]:
         """
         Asks the LLM to generate a batch of parameter sets.
         """
@@ -379,6 +362,20 @@ class LLMAgent:
             return []
 
         history_str = json.dumps(history, indent=2)
+
+        # Build Parameter Definition String
+        param_def_str = "PARAMETERS (Your search space):\n"
+        for name, info in parameters_def.items():
+            if info.get('constant', False):
+                continue
+            param_def_str += f"- {name}: type {info.get('type')}"
+            if 'min' in info:
+                param_def_str += f", min {info['min']}"
+            if 'max' in info:
+                param_def_str += f", max {info['max']}"
+            if 'default' in info:
+                param_def_str += f", default {info['default']}"
+            param_def_str += "\n"
 
         # Check for errors in the last run
         error_instruction = ""
@@ -390,8 +387,6 @@ CRITICAL WARNING:
 The previous run FAILED with error: "{last_error}".
 Details: {details}
 YOU MUST ADJUST PARAMETERS TO FIX THIS ERROR.
-If the error was 'invalid_parameters', you violated a geometric constraint.
-If 'helix_void_profile_radius_mm' >= 'helix_profile_radius_mm', you MUST decrease void radius or increase profile radius significantly.
 """
 
         visual_instruction = ""
@@ -399,28 +394,22 @@ If 'helix_void_profile_radius_mm' >= 'helix_profile_radius_mm', you MUST decreas
             visual_instruction = """
 VISUAL INSPECTION:
 I have provided images of the solid model generated by the MOST RECENT run.
-Please visually inspect them for:
-1. Structural integrity (no disconnected parts).
-2. Proper geometry formation (e.g. helical continuity).
-3. "Christmas Tree" barb shape on the inlet/outlet (if visible).
-4. General printability (wall thickness, etc).
+Please visually inspect them for any defects.
 If you see any visual defects, adjust the parameters to fix them in the next batch.
 """
 
         prompt = f"""
-You are an expert engineer optimizing a 3D printed inertial filter (corkscrew shape) using OpenSCAD and OpenFOAM.
-The application is separating MOON DUST (Lunar Regolith, density ~3000 kg/m^3, particle size ~20 microns) from air.
-The mechanism is inertial separation via centrifugal force generated by the helical screw.
+You are an expert engineer optimizing a parametric model using OpenSCAD and OpenFOAM.
 
-GOAL: Optimize the design parameters to meet the following STRICT SUCCESS CRITERIA:
-1. Particle Collection Efficiency > 99.95%
-2. Pressure Drop < 0.7 PSI
+{description}
 
-Maximize efficiency first, then minimize pressure drop.
+GOAL: {target} the objective function:
+{objective}
+
+{param_def_str}
 
 CONSTRAINTS:
 {constraints}
-CONSTRAINT: `helix_profile_radius_mm` must be STRICTLY LESS than `helix_path_radius_mm` (e.g. at least 0.5mm less) to avoid center-axis singularities. Do not set them equal.
 
 {error_instruction}
 

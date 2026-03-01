@@ -8,3 +8,5 @@ Rtree
 psutil
 openai
 pytest
+PyYAML
+Jinja2

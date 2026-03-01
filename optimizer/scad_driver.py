@@ -117,12 +117,32 @@ class ScadDriver:
         try:
             if log_file:
                 run_command_with_spinner(cmd, log_file, description="Generating Geometry")
+                # When using log_file with run_command_with_spinner, the output goes to the file.
+                # To parse MESH_ANCHOR, we read the log file.
+                mesh_anchor = None
+                with open(log_file, 'r') as f:
+                    content = f.read()
+                    import re
+                    match = re.search(r"ECHO:\s*\"MESH_ANCHOR=\[([\d\.\-]+),\s*([\d\.\-]+),\s*([\d\.\-]+)\]\"", content)
+                    if match:
+                        mesh_anchor = [float(match.group(1)), float(match.group(2)), float(match.group(3))]
             else:
                 result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                mesh_anchor = None
+                import re
+                match = re.search(r"ECHO:\s*\"MESH_ANCHOR=\[([\d\.\-]+),\s*([\d\.\-]+),\s*([\d\.\-]+)\]\"", result.stderr)
+                if match:
+                    mesh_anchor = [float(match.group(1)), float(match.group(2)), float(match.group(3))]
+                elif "MESH_ANCHOR" in result.stdout:
+                    match = re.search(r"ECHO:\s*\"MESH_ANCHOR=\[([\d\.\-]+),\s*([\d\.\-]+),\s*([\d\.\-]+)\]\"", result.stdout)
+                    if match:
+                        mesh_anchor = [float(match.group(1)), float(match.group(2)), float(match.group(3))]
 
             if os.path.exists(output_path):
                 if not log_file:
                     print(f"STL generated successfully at {output_path}")
+                if mesh_anchor:
+                    return mesh_anchor
                 return True
             else:
                 print("Generation finished but output file missing.")
@@ -489,7 +509,8 @@ class ScadDriver:
             fluid_params["part_to_generate"] = "modular_filter_assembly"
 
         fluid_path = os.path.join(output_dir, "corkscrew_fluid.stl")
-        if not self.generate_stl(fluid_params, fluid_path, log_file, params_file):
+        mesh_anchor_result = self.generate_stl(fluid_params, fluid_path, log_file, params_file)
+        if not mesh_anchor_result:
             print("Failed to generate fluid volume.")
             return None
 
@@ -521,7 +542,8 @@ class ScadDriver:
             "fluid": fluid_path,
             "inlet": inlet_path,
             "outlet": outlet_path,
-            "wall": wall_path
+            "wall": wall_path,
+            "mesh_anchor": mesh_anchor_result if isinstance(mesh_anchor_result, list) else None
         }
 
 if __name__ == "__main__":

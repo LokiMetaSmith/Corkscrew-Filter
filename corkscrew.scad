@@ -21,6 +21,14 @@ include <modules/cfd_helpers.scad>
 // --- 2. Main Logic ---
 // =============================================================================
 
+// Echo MESH_ANCHOR for OpenFOAM snappyHexMesh locationInMesh
+if (GENERATE_CFD_VOLUME) {
+    anchor_x = helix_path_radius_mm;
+    anchor_y = 0;
+    anchor_z = 0;
+    echo(str("MESH_ANCHOR=[", anchor_x, ", ", anchor_y, ", ", anchor_z, "]"));
+}
+
 // This block acts as the main program, calling the correct top-level assembly module
 // based on the `part_to_generate` variable set in `config.scad`.
 

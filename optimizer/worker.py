@@ -46,15 +46,28 @@ def verify_claim_leadership(store, job_id, worker_id):
 
 def main():
     parser = argparse.ArgumentParser(description="Distributed Optimization Worker")
+    parser.add_argument("config_file", type=str, nargs='?', help="Path to the problem definition YAML file")
     parser.add_argument("--loop", action="store_true", help="Run continuously until queue is empty")
     parser.add_argument("--id", type=str, default=None, help="Worker ID")
     parser.add_argument("--dry-run", action="store_true", help="Skip actual simulation execution")
-    parser.add_argument("--scad-file", type=str, default="corkscrew.scad")
     parser.add_argument("--case-dir", type=str, default="corkscrewFilter")
     parser.add_argument("--poll-interval", type=int, default=10, help="Seconds to wait between polls in loop mode")
     parser.add_argument("--local", action="store_true", help="Run in local mode (skip git sync)")
     parser.add_argument("--turbulence", type=str, default="laminar", help="Turbulence model to use (default: laminar)")
     args = parser.parse_args()
+
+    # Load YAML config if provided
+    config = {}
+    if args.config_file:
+        try:
+            import yaml
+            with open(args.config_file, 'r') as f:
+                config = yaml.safe_load(f)
+        except Exception as e:
+            print(f"Error loading configuration file {args.config_file}: {e}")
+            sys.exit(1)
+
+    scad_file = config.get('geometry', {}).get('scad_file', 'corkscrew.scad')
 
     worker_id = args.id if args.id else get_default_worker_id()
     print(f"Worker started with ID: {worker_id}")
@@ -62,8 +75,8 @@ def main():
     # Initialize components
     store = DataStore()
     manager = JobManager(store)
-    scad = ScadDriver(args.scad_file)
-    foam = FoamDriver(args.case_dir)
+    scad = ScadDriver(scad_file)
+    foam = FoamDriver(args.case_dir, config=config)
 
     while True:
         # 1. Sync

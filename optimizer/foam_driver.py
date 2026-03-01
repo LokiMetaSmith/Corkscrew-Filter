@@ -8,11 +8,13 @@ import sys
 import contextlib
 import shlex
 import numpy as np
+import jinja2
 from utils import run_command_with_spinner
 
 class FoamDriver:
-    def __init__(self, case_dir, template_dir=None, container_engine="auto", num_processors=1, verbose=False):
+    def __init__(self, case_dir, config=None, template_dir=None, container_engine="auto", num_processors=1, verbose=False):
         self.case_dir = os.path.abspath(case_dir)
+        self.config = config or {}
         self.template_dir = os.path.abspath(template_dir) if template_dir else self.case_dir
         self.log_file = os.path.join(self.case_dir, "run_foam.log")
         self.docker_image = os.environ.get("OPENFOAM_IMAGE", "opencfd/openfoam-default:2512")
@@ -275,6 +277,8 @@ class FoamDriver:
             shutil.copytree(zero_orig, zero)
 
         # Setup Physics (Turbulence)
+        # kOmegaSST fields (omega, k, nut, epsilon) are in 0.orig
+        self._apply_boundary_conditions(zero)
         self._update_turbulence_properties(turbulence)
         self._update_fvSchemes(turbulence)
         self._update_fvSolution(turbulence)
@@ -282,6 +286,70 @@ class FoamDriver:
         # Add function objects to controlDict if not present
         self._inject_function_objects()
 
+    def _apply_boundary_conditions(self, zero_dir):
+        """
+        Applies dynamic boundary conditions from the YAML config to U and p files.
+        """
+        physics = self.config.get('physics', {})
+        boundaries = physics.get('boundaries', {})
+
+        if not boundaries:
+            return
+
+        for field in ['U', 'p']:
+            file_path = os.path.join(zero_dir, field)
+            if not os.path.exists(file_path):
+                continue
+
+            with open(file_path, 'r') as f:
+                content = f.read()
+
+            # Find the boundaryField block
+            match = re.search(r'boundaryField\s*\{', content)
+            if not match:
+                continue
+
+            start_idx = match.end()
+            end_idx = content.rfind('}')
+
+            if end_idx <= start_idx:
+                continue
+
+            # Build the new boundary field block based on config
+            new_boundary_field = ""
+            for patch_name, patch_config in boundaries.items():
+                new_boundary_field += f"\n    {patch_name}\n    {{\n"
+
+                # Check if specific field configuration is provided
+                if field in patch_config:
+                    field_val = patch_config[field]
+                    if isinstance(field_val, str) and " " in field_val:
+                        parts = field_val.split(maxsplit=1)
+                        if len(parts) == 2:
+                            new_boundary_field += f"        type            {parts[0]};\n"
+                            new_boundary_field += f"        value           {parts[1]};\n"
+                        else:
+                            new_boundary_field += f"        type            {field_val};\n"
+                    else:
+                        new_boundary_field += f"        type            {field_val};\n"
+                else:
+                    # Fallback defaults based on type
+                    patch_type = patch_config.get('type')
+                    if patch_type == 'wall':
+                        if field == 'U':
+                            new_boundary_field += "        type            noSlip;\n"
+                        elif field == 'p':
+                            new_boundary_field += "        type            zeroGradient;\n"
+                    else:
+                        new_boundary_field += "        type            zeroGradient;\n"
+
+                new_boundary_field += "    }\n"
+
+            # Reconstruct the file
+            new_content = content[:start_idx] + new_boundary_field + content[end_idx:]
+
+            with open(file_path, 'w') as f:
+                f.write(new_content)
     def _update_turbulence_properties(self, turbulence):
         tp_path = os.path.join(self.case_dir, "constant", "turbulenceProperties")
         if not os.path.exists(tp_path): return
@@ -338,9 +406,9 @@ class FoamDriver:
 
     def _generate_decomposeParDict(self):
         """
-        Generates system/decomposeParDict for parallel execution.
+        Generates system/decomposeParDict for parallel execution using Jinja2.
         """
-        content = f"""/*--------------------------------*- C++ -*----------------------------------*\\
+        template_str = """/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
 |  \\    /   O peration     | Version:  v2512                                 |
@@ -348,87 +416,60 @@ class FoamDriver:
 |    \\/     M anipulation  |                                                 |
 \\*---------------------------------------------------------------------------*/
 FoamFile
-{{
+{
     version     2.0;
     format      ascii;
     class       dictionary;
     object      decomposeParDict;
-}}
+}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-numberOfSubdomains {self.num_processors};
+numberOfSubdomains {{ num_processors }};
 
 method          scotch;
 
 // ************************************************************************* //
 """
+        template = jinja2.Template(template_str)
+        content = template.render(num_processors=self.num_processors)
+
         with open(os.path.join(self.case_dir, "system", "decomposeParDict"), 'w') as f:
             f.write(content)
 
     def _inject_function_objects(self):
         """
-        Injects surfaceFieldValue function objects to measure pressure drop.
-        Assumes 'inlet' and 'outlet' patches exist.
+        Injects surfaceFieldValue function objects from config using Jinja2 template.
         """
         control_dict = os.path.join(self.case_dir, "system", "controlDict")
         template_dict = os.path.join(self.case_dir, "system", "controlDict.template")
 
-        # Read from template if available (source of truth)
         if os.path.exists(template_dict):
             with open(template_dict, 'r') as f:
-                content = f.read()
-        elif os.path.exists(control_dict):
-            with open(control_dict, 'r') as f:
-                content = f.read()
-        else:
-            return
+                template_str = f.read()
 
-        need_write = not os.path.exists(control_dict)
+            extractors = self.config.get('optimization', {}).get('extractors', [])
 
-        if "inletPressure" not in content:
-            need_write = True
-            func_obj = """
-functions
-{
-    inletPressure
-    {
-        type            surfaceFieldValue;
-        libs            ("libfieldFunctionObjects.so");
-        writeControl    timeStep;
-        writeInterval   1;
-        log             true;
-        writeFields     false;
-        regionType      patch;
-        name            inlet;
-        operation       areaAverage;
-        fields          (p);
-    }
-    outletPressure
-    {
-        type            surfaceFieldValue;
-        libs            ("libfieldFunctionObjects.so");
-        writeControl    timeStep;
-        writeInterval   1;
-        log             true;
-        writeFields     false;
-        regionType      patch;
-        name            outlet;
-        operation       areaAverage;
-        fields          (p);
-    }
-}
-"""
-            # Insert before the last closing brace or append
-            # Naive append might fail if file structure is strict, but usually works if inside main dict.
-            # Better: replace "// *****************" with func_obj + end marker
-            if "// *" in content:
-                content = content.replace("// *********", func_obj + "\n// *********", 1)
-            else:
-                content += func_obj
+            # Post process extractors slightly if needed (e.g., figure out patch names)
+            for ext in extractors:
+                if 'patch_name' not in ext:
+                    # Try to infer patch name from metric_name or function_name
+                    if 'in' in ext.get('metric_name', '').lower() or 'in' in ext.get('function_name', '').lower():
+                        ext['patch_name'] = 'inlet'
+                    elif 'out' in ext.get('metric_name', '').lower() or 'out' in ext.get('function_name', '').lower():
+                        if '1' in ext.get('metric_name', ''):
+                             ext['patch_name'] = 'outlet_1'
+                        elif '2' in ext.get('metric_name', ''):
+                             ext['patch_name'] = 'outlet_2'
+                        else:
+                             ext['patch_name'] = 'outlet'
 
-        if need_write:
+            template = jinja2.Template(template_str)
+            content = template.render(extractors=extractors)
+
             with open(control_dict, 'w') as f:
                 f.write(content)
+        else:
+            print("Warning: controlDict.template not found. Skipping function object injection.")
 
     def update_blockMesh(self, bounds, margin=(1.2, 1.2, 0.9), target_cell_size=1.5):
         """
@@ -471,44 +512,41 @@ functions
         print(f"Calculated blockMesh resolution: ({nx} {ny} {nz})")
 
         vertices = [
-            f"({new_min[0]} {new_min[1]} {new_min[2]})",
-            f"({new_max[0]} {new_min[1]} {new_min[2]})",
-            f"({new_max[0]} {new_max[1]} {new_min[2]})",
-            f"({new_min[0]} {new_max[1]} {new_min[2]})",
-            f"({new_min[0]} {new_min[1]} {new_max[2]})",
-            f"({new_max[0]} {new_min[1]} {new_max[2]})",
-            f"({new_max[0]} {new_max[1]} {new_max[2]})",
-            f"({new_min[0]} {new_max[1]} {new_max[2]})"
+            (new_min[0], new_min[1], new_min[2]),
+            (new_max[0], new_min[1], new_min[2]),
+            (new_max[0], new_max[1], new_min[2]),
+            (new_min[0], new_max[1], new_min[2]),
+            (new_min[0], new_min[1], new_max[2]),
+            (new_max[0], new_min[1], new_max[2]),
+            (new_max[0], new_max[1], new_max[2]),
+            (new_min[0], new_max[1], new_max[2])
         ]
 
         bm_path = os.path.join(self.case_dir, "system", "blockMeshDict")
         template_path = os.path.join(self.case_dir, "system", "blockMeshDict.template")
 
-        # Use template if available, else use existing blockMeshDict
         if os.path.exists(template_path):
             with open(template_path, 'r') as f:
-                content = f.read()
-        elif os.path.exists(bm_path):
-            with open(bm_path, 'r') as f:
-                content = f.read()
+                template_str = f.read()
+            template = jinja2.Template(template_str)
+            content = template.render(vertices=vertices, nx=nx, ny=ny, nz=nz)
+            with open(bm_path, 'w') as f:
+                f.write(content)
         else:
-            print("Error: blockMeshDict template not found.")
-            return
-
-        new_vertices_str = "\n    ".join(vertices)
-        pattern = re.compile(r"vertices\s*\((.*?)\);", re.DOTALL)
-
-        if pattern.search(content):
-            content = pattern.sub(f"vertices\n(\n    {new_vertices_str}\n);", content)
-
-        # Update blocks with calculated resolution
-        # Matches: hex (0 1 2 3 4 5 6 7) (20 20 20)
-        pattern_blocks = re.compile(r"hex\s*\([^\)]+\)\s*\(\s*\d+\s+\d+\s+\d+\s*\)", re.DOTALL)
-        if pattern_blocks.search(content):
-             content = pattern_blocks.sub(f"hex (0 1 2 3 4 5 6 7) ({nx} {ny} {nz})", content)
-
-        with open(bm_path, 'w') as f:
-            f.write(content)
+            print("Error: blockMeshDict template not found. Using fallback regex.")
+            # Fallback for old templates without jinja variables
+            if os.path.exists(bm_path):
+                with open(bm_path, 'r') as f:
+                    content = f.read()
+                new_vertices_str = "\n    ".join([f"({v[0]} {v[1]} {v[2]})" for v in vertices])
+                pattern = re.compile(r"vertices\s*\((.*?)\);", re.DOTALL)
+                if pattern.search(content):
+                    content = pattern.sub(f"vertices\n(\n    {new_vertices_str}\n);", content)
+                pattern_blocks = re.compile(r"hex\s*\([^\)]+\)\s*\(\s*\d+\s+\d+\s+\d+\s*\)", re.DOTALL)
+                if pattern_blocks.search(content):
+                     content = pattern_blocks.sub(f"hex (0 1 2 3 4 5 6 7) ({nx} {ny} {nz})", content)
+                with open(bm_path, 'w') as f:
+                    f.write(content)
 
     def update_snappyHexMesh_location(self, bounds, custom_location=None, helix_path_radius_mm=None):
         """
@@ -608,62 +646,36 @@ functions
 
     def _generate_topoSetDict(self, bin_config=None, skip_io=False):
         """
-        Generates system/topoSetDict.
-        skip_io: if True, skips generation of inlet/outlet face sets (assumes snappy did it).
+        Generates system/topoSetDict using Jinja2.
+        skip_io: if True, skips generation of inlet/outlet face sets.
         """
-        bin_actions = ""
-        if bin_config and bin_config.get("num_bins", 1) > 1:
-            num_bins = int(bin_config["num_bins"])
-            length = float(bin_config.get("insert_length_mm", 50.0))
-            scale = 0.001
+        template_str = """/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \    /   O peration     | Version:  v2512                                 |
+|   \  /    A nd           | Website:  www.openfoam.com                      |
+|    \/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      topoSetDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-            # Geometry is centered at Z=0.
-            # Range: [-L/2, L/2]
-            z_start = -(length * scale) / 2.0
-            bin_h = (length * scale) / num_bins
-
-            for i in range(num_bins):
-                z_min = z_start + i * bin_h
-                z_max = z_start + (i + 1) * bin_h
-
-                bin_actions += f"""
-    // Bin {i+1}
-    {{
-        name    bin_{i+1}_faces;
+actions
+(
+    // 1. Select all faces in 'corkscrew' patch
+    {
+        name    corkscrewFaces;
         type    faceSet;
         action  new;
-        source  boxToFace;
-        box     (-100 -100 {z_min:.5f}) (100 100 {z_max:.5f}); // Large box in X/Y
-    }}
-    {{
-        name    bin_{i+1}_faces;
-        type    faceSet;
-        action  subset;
-        source  faceToFace;
-        set     corkscrewFaces;
-    }}"""
-                # CRITICAL FIX: Subtract IO faces to prevent overlapping duplicate faces
-                if not skip_io:
-                    bin_actions += f"""
-    {{
-        name    bin_{i+1}_faces;
-        type    faceSet;
-        action  subtract;
-        source  faceToFace;
-        set     inletFaces;
-    }}
-    {{
-        name    bin_{i+1}_faces;
-        type    faceSet;
-        action  subtract;
-        source  faceToFace;
-        set     outletFaces;
-    }}
-"""
-
-        io_actions = ""
-        if not skip_io:
-            io_actions = """
+        source  patchToFace;
+        patch   corkscrew;
+    }
+    {% if not skip_io %}
     // 2. Select Inlet Faces (Bottom, Normal 0 0 -1)
     {
         name    inletFaces;
@@ -671,9 +683,8 @@ functions
         action  new;
         source  normalToFace;
         normal  (0 0 -1);
-        cos     0.8; // Tolerance (allow some deviation)
+        cos     0.8; // Tolerance
     }
-    // Intersect with corkscrew boundary faces
     {
         name    inletFaces;
         type    faceSet;
@@ -698,9 +709,72 @@ functions
         source  faceToFace;
         set     corkscrewFaces;
     }
-"""
+    {% endif %}
 
-        content = f"""/*--------------------------------*- C++ -*----------------------------------*\\
+    {% if bins %}
+    // 4. Bin Split Actions
+    {% for bin in bins %}
+    // Bin {{ bin.index }}
+    {
+        name    bin_{{ bin.index }}_faces;
+        type    faceSet;
+        action  new;
+        source  boxToFace;
+        box     (-100 -100 {{ "%.5f"|format(bin.z_min) }}) (100 100 {{ "%.5f"|format(bin.z_max) }});
+    }
+    {
+        name    bin_{{ bin.index }}_faces;
+        type    faceSet;
+        action  subset;
+        source  faceToFace;
+        set     corkscrewFaces;
+    }
+    {% if not skip_io %}
+    {
+        name    bin_{{ bin.index }}_faces;
+        type    faceSet;
+        action  subtract;
+        source  faceToFace;
+        set     inletFaces;
+    }
+    {
+        name    bin_{{ bin.index }}_faces;
+        type    faceSet;
+        action  subtract;
+        source  faceToFace;
+        set     outletFaces;
+    }
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+);
+
+// ************************************************************************* //
+"""
+        bins = []
+        if bin_config and bin_config.get("num_bins", 1) > 1:
+            num_bins = int(bin_config["num_bins"])
+            length = float(bin_config.get("insert_length_mm", 50.0))
+            scale = 0.001
+            z_start = -(length * scale) / 2.0
+            bin_h = (length * scale) / num_bins
+
+            for i in range(num_bins):
+                z_min = z_start + i * bin_h
+                z_max = z_start + (i + 1) * bin_h
+                bins.append({"index": i+1, "z_min": z_min, "z_max": z_max})
+
+        template = jinja2.Template(template_str)
+        content = template.render(skip_io=skip_io, bins=bins)
+
+        with open(os.path.join(self.case_dir, "system", "topoSetDict"), 'w') as f:
+            f.write(content)
+
+    def _generate_createPatchDict(self, bin_config=None, skip_io=False):
+        """
+        Generates system/createPatchDict using Jinja2.
+        """
+        template_str = """/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
 |  \\    /   O peration     | Version:  v2512                                 |
@@ -708,58 +782,19 @@ functions
 |    \\/     M anipulation  |                                                 |
 \\*---------------------------------------------------------------------------*/
 FoamFile
-{{
+{
     version     2.0;
     format      ascii;
     class       dictionary;
-    object      topoSetDict;
-}}
+    object      createPatchDict;
+}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-actions
+pointSync false;
+
+patches
 (
-    // 1. Select all faces in 'corkscrew' patch (if it exists) or all boundary faces
-    // Since snappyHexMesh puts everything in 'corkscrew' (from STL name), start with that.
-    {{
-        name    corkscrewFaces;
-        type    faceSet;
-        action  new;
-        source  patchToFace;
-        patch   corkscrew;
-    }}
-    {io_actions}
-    // 4. Bin Split Actions
-    {bin_actions}
-);
-
-// ************************************************************************* //
-"""
-        with open(os.path.join(self.case_dir, "system", "topoSetDict"), 'w') as f:
-            f.write(content)
-
-    def _generate_createPatchDict(self, bin_config=None, skip_io=False):
-        """
-        Generates system/createPatchDict.
-        """
-        bin_patches = ""
-        if bin_config and bin_config.get("num_bins", 1) > 1:
-            num_bins = int(bin_config["num_bins"])
-            for i in range(num_bins):
-                bin_patches += f"""
-    {{
-        name bin_{i+1};
-        patchInfo
-        {{
-            type patch;
-            inGroups (corkscrew_bins);
-        }}
-        constructFrom set;
-        set bin_{i+1}_faces;
-    }}"""
-
-        io_patches = ""
-        if not skip_io:
-            io_patches = """
+    {% if not skip_io %}
     {
         name inlet;
         patchInfo
@@ -779,39 +814,43 @@ actions
         }
         constructFrom set;
         set outletFaces;
-    }"""
-
-        content = f"""/*--------------------------------*- C++ -*----------------------------------*\\
-| =========                 |                                                 |
-| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   O peration     | Version:  v2512                                 |
-|   \\  /    A nd           | Website:  www.openfoam.com                      |
-|    \\/     M anipulation  |                                                 |
-\\*---------------------------------------------------------------------------*/
-FoamFile
-{{
-    version     2.0;
-    format      ascii;
-    class       dictionary;
-    object      createPatchDict;
-}}
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-pointSync false;
-
-patches
-(
-    {io_patches}
-    {bin_patches}
+    }
+    {% endif %}
+    {% if bins %}
+    {% for bin in bins %}
+    {
+        name bin_{{ bin.index }};
+        patchInfo
+        {
+            type patch;
+            inGroups (corkscrew_bins);
+        }
+        constructFrom set;
+        set bin_{{ bin.index }}_faces;
+    }
+    {% endfor %}
+    {% endif %}
 );
 
 // ************************************************************************* //
 """
+        bins = []
+        if bin_config and bin_config.get("num_bins", 1) > 1:
+            num_bins = int(bin_config["num_bins"])
+            for i in range(num_bins):
+                bins.append({"index": i+1})
+
+        template = jinja2.Template(template_str)
+        content = template.render(skip_io=skip_io, bins=bins)
+
         with open(os.path.join(self.case_dir, "system", "createPatchDict"), 'w') as f:
             f.write(content)
 
     def _generate_kinematicCloudProperties(self, bin_config=None, turbulence="laminar"):
         """
+        Generates constant/kinematicCloudProperties with size binning and spatial binning using Jinja2.
+        """
+        template_str = """/*--------------------------------*- C++ -*----------------------------------*\\
         Generates constant/kinematicCloudProperties with dynamic size binning and spatial binning.
         """
         # Default fallback values
@@ -934,7 +973,7 @@ patches
                 type escape;
             }"""
 
-        content = f"""/*--------------------------------*- C++ -*----------------------------------*\\
+        template_str = """/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
 |  \\    /   O peration     | Version:  v2512                                 |
@@ -942,17 +981,17 @@ patches
 |    \\/     M anipulation  |                                                 |
 \\*---------------------------------------------------------------------------*/
 FoamFile
-{{
+{
     version     2.0;
     format      ascii;
     class       dictionary;
     location    "constant";
     object      kinematicCloudProperties;
-}}
+}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 solution
-{{
+{
     active          true;
     coupled         false; // One-way coupling
     transient       yes;
@@ -961,7 +1000,7 @@ solution
     cellValueSourceCorrection off;
 
     interpolationSchemes
-    {{
+    {
         rho             cell;
         U               cellPoint;
         mu              cell;
@@ -971,27 +1010,27 @@ solution
     }}
 
     integrationSchemes
-    {{
+    {
         U               analytical;
-    }}
-}}
+    }
+}
 
 constantVolume      false;
 
 // Moon Dust Properties (Basaltic Regolith)
-rho0            {rho0_val}; // kg/m^3 (approx. 3.1 g/cm^3)
+rho0            {{ rho0 }}; // kg/m^3 (approx. 3.1 g/cm^3)
 
 // Young's Modulus: ~70 GPa (Basalt)
 // Poisson's Ratio: 0.25 (Basalt)
 // Restitution Coefficient: ~0.8-0.9
 
 subModels
-{{
+{
     particleForces
-    {{
+    {
         sphereDrag;
         gravity;
-    }}
+    }
 
     collisionModel none;
     // For dilute flows, stochastic collisions are negligible.
@@ -999,52 +1038,150 @@ subModels
     stochasticCollisionModel none;
 
     injectionModels
-    {{
-        {injections}
-    }}
+    {
+        {% for injection in injections %}
+        model_{{ injection.size_um }}um
+        {
+            type            patchInjection;
+            patch           inlet;
+            parcelBasisType mass;
+            massTotal       {{ "%.6e"|format(injection.mass_flow_rate) }};
+            duration        1;
+            SOI             0;
+            parcelsPerSecond 5000;
+            flowRateProfile constant 1;
+            U0              (0 0 5);
+            sizeDistribution
+            {
+                type        fixedValue;
+                fixedValueDistribution
+                {
+                    value   {{ injection.size_m }};
+                }
+            }
+        }
+        {% endfor %}
+    }
 
-    dispersionModel {"stochasticDispersionRAS" if turbulence != "laminar" else "none"};
+    dispersionModel {"stochasticDispersionRAS" if turbulence != "laminar" else "none"};//gradientDispersionRAS;
 
     patchInteractionModel localInteraction;
 
     localInteractionCoeffs
-    {{
+    {
         patches
         (
-            {patch_interactions}
+            "(.*)"
+            {
+                type rebound;
+                e    0.97;
+                mu   0.09;
+            }
+            corkscrew
+            {
+                type stick;
+            }
+            {% if bins %}
+            {% for bin in bins %}
+            bin_{{ bin.index }}
+            {
+                type stick;
+            }
+            {% endfor %}
+            {% endif %}
+            outlet
+            {
+                type escape;
+            }
+            inlet
+            {
+                type escape;
+            }
         );
-    }}
+    }
 
     surfaceFilmModel none;
-}}
+}
 
 cloudFunctions
-{{
+{
     // particleCollector1
-    // {{
+    // {
     //     type            particleCollector;
     //     mode            patch;
-    //     patches         ( {patch_list_str} );
+    //     patches         ( corkscrew inlet outlet {% if bins %}{% for bin in bins %} bin_{{ bin.index }}{% endfor %}{% endif %} );
     //     removeCollected false;
     //     resetOnWrite    false;
     //     log             true;
     //     negateParcelsOppositeNormal false;
     //     surfaceFormat   vtk;
     //     polygonData     off;
-    // }}
+    // }
 
     //patchPostProcessing1
-    //{{
+    //{
     //    type            patchPostProcessing;
-    //    patches         ( {patch_list_str} );
+    //    patches         ( corkscrew inlet outlet {% if bins %}{% for bin in bins %} bin_{{ bin.index }}{% endfor %}{% endif %} );
     //    maxStoredParcels 1000000;
     //    resetOnWrite    false;
     //    log             true;
-    //}}
-}}
+    //}
+}
 
 // ************************************************************************* //
 """
+        physics_config = self.config.get('physics', {})
+        particles_config = physics_config.get('particles', {})
+
+        # Default fallback values
+        sizes_um = particles_config.get('sizes_um', [5, 10, 20, 50, 100])
+        rho0_val = particles_config.get('rho0', 3100)  # Moon Dust density
+        tube_od_m = 0.032
+        fluid_velocity_z = 5.0
+
+        # Extract dynamic values from config if provided
+        if bin_config:
+            sizes_um = bin_config.get("dust_sizes_um", sizes_um)
+            if isinstance(sizes_um, str): # Handle comma-separated string from LLM if needed
+                sizes_um = [float(x.strip()) for x in sizes_um.split(',')]
+
+            rho0_val = float(bin_config.get("dust_density", rho0_val))
+            tube_od_m = float(bin_config.get("tube_od_mm", 32.0)) / 1000.0
+            fluid_velocity_z = float(bin_config.get("fluid_velocity", 5.0))
+
+        # 1. Scale parcels per second based on cross-sectional area
+        # Baseline: 5000 parcels/sec for a 32mm pipe
+        inlet_area_m2 = math.pi * ((tube_od_m / 2.0)**2)
+        baseline_area = math.pi * ((0.032 / 2.0)**2)
+        area_ratio = inlet_area_m2 / baseline_area
+        parcels_per_sec = int(5000 * area_ratio)
+
+        injections = []
+        for d_um in sizes_um:
+            d_m = d_um * 1e-6
+            volume = (4.0/3.0) * math.pi * ((d_m / 2.0)**3)
+            mass_flow_rate = rho0_val * volume * parcels_per_sec
+            injections.append({
+                "size_um": d_um,
+                "size_m": d_m,
+                "mass_flow_rate": mass_flow_rate
+            })
+
+        bins = []
+        if bin_config and bin_config.get("num_bins", 1) > 1:
+            num_bins = int(bin_config["num_bins"])
+            for i in range(num_bins):
+                bins.append({"index": i+1})
+
+        template = jinja2.Template(template_str)
+        content = template.render(
+            rho0=rho0_val,
+            injections=injections,
+            bins=bins,
+            parcels_per_sec=parcels_per_sec,
+            fluid_velocity_z=fluid_velocity_z
+        )
+
         with open(os.path.join(self.case_dir, "constant", "kinematicCloudProperties"), 'w') as f:
             f.write(content)
 
@@ -1083,75 +1220,26 @@ cloudFunctions
                     f.write(f"\nError renaming scaled mesh: {e}\n")
             return False
 
-    def _replace_block(self, content, block_name, new_inner_content):
-        """Helper to replace a block like geometry { ... } in a dictionary string."""
-        start_idx = content.find(block_name)
-        if start_idx == -1: return content
-
-        open_brace = content.find("{", start_idx)
-        if open_brace == -1: return content
-
-        cnt = 1
-        pos = open_brace + 1
-        while cnt > 0 and pos < len(content):
-            if content[pos] == '{': cnt += 1
-            elif content[pos] == '}': cnt -= 1
-            pos += 1
-
-        if cnt == 0:
-            before = content[:open_brace+1]
-            after = content[pos-1:]
-            return before + "\n" + new_inner_content + "\n    " + after
-        return content
-
     def _generate_snappyHexMeshDict(self, stl_assets, add_layers=True):
         """
-        Updates system/snappyHexMeshDict to include all assets as geometry/patches.
-        stl_assets: {'fluid': 'f.stl', 'inlet': 'i.stl', ...}
+        Updates system/snappyHexMeshDict to include all assets as geometry/patches using Jinja2.
         """
-        geometry_str = ""
-        refinement_str = ""
-
-        # Ensure we have at least fluid
         if not stl_assets: return
 
+        geometries = []
         for key, filename in stl_assets.items():
-            # Determine snappy patch name
-            # fluid -> corkscrew
-            # wall -> corkscrew (merge)
-            # inlet -> inlet
-            # outlet -> outlet
-
             patch_name = "corkscrew"
             if key == "inlet": patch_name = "inlet"
             elif key == "outlet": patch_name = "outlet"
             elif key == "wall": patch_name = "corkscrew"
 
-            geometry_str += f"""
-    {filename}
-    {{
-        type triSurfaceMesh;
-        name {patch_name};
-    }}
-"""
-            # Refinement Surface
-            level = "(1 1)"
-
-            patch_info = ""
-            if key in ["inlet", "outlet"]:
-                patch_info = f"""
-            patchInfo
-            {{
-                type patch;
-                inGroups ({patch_name}Group);
-            }}"""
-
-            refinement_str += f"""
-        {patch_name}
-        {{
-            level {level};{patch_info}
-        }}
-"""
+            geom = {
+                "filename": filename,
+                "name": patch_name,
+                "level": "(1 1)",
+                "patch_info": key in ["inlet", "outlet"]
+            }
+            geometries.append(geom)
 
         template_path = os.path.join(self.case_dir, "system", "snappyHexMeshDict.template")
         shm_path = os.path.join(self.case_dir, "system", "snappyHexMeshDict")
@@ -1172,11 +1260,25 @@ cloudFunctions
             print("Error: snappyHexMeshDict.template missing")
             return
 
-        # Replace addLayers flag
-        content = content.replace("_ADD_LAYERS_FLAG_", "true" if add_layers else "false")
+        with open(template_path, 'r') as f:
+            template_str = f.read()
 
-        content = self._replace_block(content, "geometry", geometry_str)
-        content = self._replace_block(content, "refinementSurfaces", refinement_str)
+        # Extract existing locationInMesh to preserve it if it was updated earlier
+        shm_path = os.path.join(self.case_dir, "system", "snappyHexMeshDict")
+        location_in_mesh = "(-0.007 -0.007 -0.012)" # Default fallback
+        if os.path.exists(shm_path):
+            with open(shm_path, 'r') as f:
+                content = f.read()
+            match = re.search(r"locationInMesh\s*(\(.*?\));", content, re.DOTALL)
+            if match:
+                location_in_mesh = match.group(1)
+
+        template = jinja2.Template(template_str)
+        content = template.render(
+            add_layers=add_layers,
+            geometries=geometries,
+            location_in_mesh=location_in_mesh
+        )
 
         # Restore preserved location
         if preserved_location:
@@ -1463,6 +1565,7 @@ boundaryField
                     with open(dst, 'w', encoding='utf-8') as f:
                         f.write(file_content)
                 # ------------------------------------------------
+
             elif field == "phi":
                  print("Warning: 'phi' field still missing after generation attempt.")
 
@@ -1631,6 +1734,19 @@ boundaryField
         }
 
         target_log = log_file if log_file else self.log_file
+
+        # 0. Check custom metrics defined in config
+        if self.config and 'optimization' in self.config:
+            extractors = self.config['optimization'].get('extractors', [])
+            for ext in extractors:
+                if ext.get('type') == 'surfaceFieldValue':
+                    func_name = ext.get('function_name')
+                    metric_name = ext.get('metric_name')
+                    if func_name and metric_name:
+                        val = self._read_latest_postProcessing(func_name)
+                        if val is not None:
+                            metrics[metric_name] = val
+                # Implement other extractors as needed (e.g. log parsing regex)
 
         # 1. Parse Residuals from log
         if os.path.exists(target_log):

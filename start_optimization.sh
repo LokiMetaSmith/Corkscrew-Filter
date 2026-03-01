@@ -14,11 +14,13 @@ usage() {
     print_header "Start Optimization - Usage"
     echo "This script initializes the environment and starts the optimization loop."
     echo ""
-    echo "Usage: ./start_optimization.sh [options]"
+    echo "Usage: ./start_optimization.sh <config.yaml> [options]"
+    echo ""
+    echo "Arguments:"
+    echo "  <config.yaml>          Path to the problem definition YAML file (e.g., configs/corkscrew_config.yaml)"
     echo ""
     echo "Options:"
     echo "  --iterations <N>       Number of iterations to run (default: 5)"
-    echo "  --scad-file <path>     Path to the SCAD file (default: corkscrew.scad)"
     echo "  --case-dir <path>      Path to OpenFOAM case directory (default: corkscrewFilter)"
     echo "  --output-stl <name>    Output STL filename (default: corkscrew_fluid.stl)"
     echo "  --dry-run              Skip actual OpenFOAM execution (mocks everything)"
@@ -34,13 +36,27 @@ usage() {
     echo "  -h, --help             Show this help message and exit"
     echo ""
     echo "Example:"
-    echo "  ./start_optimization.sh --iterations 10 --cpus 4 --verbose"
+    echo "  ./start_optimization.sh configs/corkscrew_config.yaml --iterations 10 --cpus 4 --verbose"
 }
 
 # Check for Help Flag
 check_help "$1"
 
+CONFIG_FILE=$1
+if [[ -z "$CONFIG_FILE" || "$CONFIG_FILE" == -* ]]; then
+    print_error "You must provide a path to a configuration YAML file as the first argument."
+    usage
+    exit 1
+fi
+shift # Remove the first argument so remaining args can be passed to python script
+
+if [ ! -f "$CONFIG_FILE" ]; then
+    print_error "Configuration file not found: $CONFIG_FILE"
+    exit 1
+fi
+
 print_header "Corkscrew Filter Optimization Startup"
+echo "Using Configuration File: $CONFIG_FILE"
 
 # 1. Check Dependencies (OpenSCAD, Node, Python)
 if check_openscad; then
@@ -94,4 +110,4 @@ fi
 
 # 5. Run Optimizer
 print_header "Starting Optimization Loop"
-python optimizer/main.py "$@"
+python optimizer/main.py "$CONFIG_FILE" "$@"
