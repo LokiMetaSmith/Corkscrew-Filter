@@ -7,7 +7,7 @@ from utils import Timer, get_container_memory_gb
 from parameter_validator import validate_parameters
 from validator import Validator
 
-def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False, skip_cfd=False, iteration=0, reuse_mesh=False, output_prefix=None, verbose=False, params_file=None):
+def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False, skip_cfd=False, iteration=0, reuse_mesh=False, output_prefix=None, verbose=False, params_file=None, turbulence="laminar"):
     """
     Executes the full simulation pipeline:
     1. Generate Fluid Geometry (STL)
@@ -288,6 +288,8 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
     vtk_zip_path = None
 
     if not dry_run and not skip_cfd:
+        foam_driver.prepare_case(keep_mesh=reuse_mesh, turbulence=turbulence)
+
         # Prepare Bin Configuration for Meshing/Tracking
         bin_config = {
             "num_bins": int(params.get("num_bins", 1)),
@@ -324,7 +326,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                 # Attempt particle tracking
                 with Timer("Particle Tracking"):
                     # Pass bin config for injection/interaction setup
-                    foam_driver.run_particle_tracking(log_file=solver_log, bin_config=bin_config)
+                    foam_driver.run_particle_tracking(log_file=solver_log, bin_config=bin_config, turbulence=turbulence)
 
                 # Fetch foam metrics and preserve any existing custom metrics (like cell size)
                 foam_metrics = foam_driver.get_metrics(log_file=solver_log)
