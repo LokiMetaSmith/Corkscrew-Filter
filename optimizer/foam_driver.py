@@ -649,13 +649,13 @@ method          scotch;
         Generates system/topoSetDict using Jinja2.
         skip_io: if True, skips generation of inlet/outlet face sets.
         """
-        template_str = """/*--------------------------------*- C++ -*----------------------------------*\\
+        template_str = """/*--------------------------------*- C++ -*----------------------------------*\
 | =========                 |                                                 |
-| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   O peration     | Version:  v2512                                 |
-|   \\  /    A nd           | Website:  www.openfoam.com                      |
-|    \\/     M anipulation  |                                                 |
-\\*---------------------------------------------------------------------------*/
+| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \    /   O peration     | Version:  v2512                                 |
+|   \  /    A nd           | Website:  www.openfoam.com                      |
+|    \/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
 FoamFile
 {
     version     2.0;
@@ -664,20 +664,6 @@ FoamFile
     object      topoSetDict;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-        bin_actions = ""
-        if bin_config and bin_config.get("num_bins", 1) > 1:
-            num_bins = int(bin_config["num_bins"])
-            length = float(bin_config.get("insert_length_mm", 50.0))
-            scale = 0.001
-
-            # Geometry is centered at Z=0.
-            # Range: [-L/2, L/2]
-            z_start = -(length * scale) / 2.0
-            bin_h = (length * scale) / num_bins
-
-            for i in range(num_bins):
-                z_min = z_start + i * bin_h
-                z_max = z_start + (i + 1) * bin_h
 
 actions
 (
@@ -690,38 +676,6 @@ actions
         patch   corkscrew;
     }
     {% if not skip_io %}
-        source  boxToFace;
-        box     (-100 -100 {z_min:.5f}) (100 100 {z_max:.5f}); // Large box in X/Y
-    }}
-    {{
-        name    bin_{i+1}_faces;
-        type    faceSet;
-        action  subset;
-        source  faceToFace;
-        set     corkscrewFaces;
-    }}"""
-                # CRITICAL FIX: Subtract IO faces to prevent overlapping duplicate faces
-                if not skip_io:
-                    bin_actions += f"""
-    {{
-        name    bin_{i+1}_faces;
-        type    faceSet;
-        action  subtract;
-        source  faceToFace;
-        set     inletFaces;
-    }}
-    {{
-        name    bin_{i+1}_faces;
-        type    faceSet;
-        action  subtract;
-        source  faceToFace;
-        set     outletFaces;
-    }}
-"""
-
-        io_actions = ""
-        if not skip_io:
-            io_actions = """
     // 2. Select Inlet Faces (Bottom, Normal 0 0 -1)
     {
         name    inletFaces;
@@ -775,6 +729,22 @@ actions
         source  faceToFace;
         set     corkscrewFaces;
     }
+    {% if not skip_io %}
+    {
+        name    bin_{{ bin.index }}_faces;
+        type    faceSet;
+        action  subtract;
+        source  faceToFace;
+        set     inletFaces;
+    }
+    {
+        name    bin_{{ bin.index }}_faces;
+        type    faceSet;
+        action  subtract;
+        source  faceToFace;
+        set     outletFaces;
+    }
+    {% endif %}
     {% endfor %}
     {% endif %}
 );
@@ -1003,7 +973,7 @@ patches
                 type escape;
             }"""
 
-        content = f"""/*--------------------------------*- C++ -*----------------------------------*\\
+        template_str = """/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
 |  \\    /   O peration     | Version:  v2512                                 |
