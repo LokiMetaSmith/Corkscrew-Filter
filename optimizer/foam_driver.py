@@ -226,7 +226,7 @@ class FoamDriver:
             print(f"Error reading log: {e}")
         print("--------------------------------------------------\n")
 
-    def prepare_case(self, keep_mesh=False, turbulence="laminar"):
+    def prepare_case(self, keep_mesh=False, bin_config=None, turbulence="laminar"):
         """
         Prepares the case directory.
         """
@@ -234,6 +234,10 @@ class FoamDriver:
             if os.path.exists(self.case_dir):
                 shutil.rmtree(self.case_dir)
             shutil.copytree(self.template_dir, self.case_dir)
+
+        # Dynamically set inlet velocity in 0.orig/U
+        if bin_config:
+            self._update_inlet_velocity(bin_config)
 
         tri_surface = os.path.join(self.case_dir, "constant", "triSurface")
         os.makedirs(tri_surface, exist_ok=True)
@@ -808,22 +812,40 @@ patches
 
     def _generate_kinematicCloudProperties(self, bin_config=None, turbulence="laminar"):
         """
-        Generates constant/kinematicCloudProperties with size binning and spatial binning.
+        Generates constant/kinematicCloudProperties with dynamic size binning and spatial binning.
         """
-        # Sizes to simulate (in meters)
+        # Default fallback values
         sizes_um = [5, 10, 20, 50, 100]
         rho0_val = 3100  # Moon Dust density
+        tube_od_m = 0.032
+        fluid_velocity_z = 5.0
 
+        # Extract dynamic values from config if provided
+        if bin_config:
+            sizes_um = bin_config.get("dust_sizes_um", sizes_um)
+            if isinstance(sizes_um, str): # Handle comma-separated string from LLM if needed
+                sizes_um = [float(x.strip()) for x in sizes_um.split(',')]
+
+            rho0_val = float(bin_config.get("dust_density", rho0_val))
+            tube_od_m = float(bin_config.get("tube_od_mm", 32.0)) / 1000.0
+            fluid_velocity_z = float(bin_config.get("fluid_velocity", 5.0))
+
+        # 1. Scale parcels per second based on cross-sectional area
+        # Baseline: 5000 parcels/sec for a 32mm pipe
+        inlet_area_m2 = math.pi * ((tube_od_m / 2.0)**2)
+        baseline_area = math.pi * ((0.032 / 2.0)**2)
+        area_ratio = inlet_area_m2 / baseline_area
+        parcels_per_sec = int(5000 * area_ratio)
+
+        # 2. Generate dynamic injection models for however many sizes are requested
         injections = ""
         for d_um in sizes_um:
-            d_m = d_um * 1e-6
-            # Use distinct model names for parsing
-            model_name = f"model_{d_um}um"
+            d_m = float(d_um) * 1e-6
+            model_name = f"model_{str(d_um).replace('.', '_')}um"
 
-            # Calculate mass flow rate for 5000 particles/s
-            # Mass per particle = rho * Volume = rho * (4/3 * pi * (r)^3)
+            # Calculate precise mass flow rate for this specific dust density and volume
             volume = (4.0/3.0) * math.pi * ((d_m / 2.0)**3)
-            mass_flow_rate = rho0_val * volume * 5000
+            mass_flow_rate = rho0_val * volume * parcels_per_sec
 
             injections += f"""
         {model_name}
@@ -834,9 +856,9 @@ patches
             massTotal       {mass_flow_rate:.6e};
             duration        1;
             SOI             0;
-            parcelsPerSecond 5000;
+            parcelsPerSecond {parcels_per_sec};
             flowRateProfile constant 1;
-            U0              (0 0 5);
+            U0              (0 0 {fluid_velocity_z});
             sizeDistribution
             {{
                 type        fixedValue;
@@ -1498,6 +1520,33 @@ boundaryField
              content = re.sub(r"(^|\n)functions(\s*\{)", r"\1functions_disabled\2", content)
 
         with open(control_dict, 'w') as f:
+            f.write(content)
+
+    def _update_inlet_velocity(self, bin_config):
+        """
+        Updates the inlet velocity in 0.orig/U.
+        Directly uses fluid_velocity if provided.
+        """
+        new_u = float(bin_config.get("fluid_velocity", 5.0))
+
+        u_file = os.path.join(self.case_dir, "0.orig", "U")
+        if not os.path.exists(u_file):
+            return
+
+        with open(u_file, 'r') as f:
+            content = f.read()
+
+        # Replace the value inside the inlet block
+        # Look for inlet { ... value uniform (0 0 5); ... }
+        # Need a somewhat robust replacement since spacing could vary
+
+        # A simple regex for the inlet block's value
+        pattern = re.compile(r"(inlet\s*\{[^}]*?value\s+uniform\s*\(\s*0\s+0\s+)([\d\.\-]+)(\s*\)\s*;)", re.DOTALL)
+
+        if pattern.search(content):
+            content = pattern.sub(rf"\g<1>{new_u:.6f}\g<3>", content)
+
+        with open(u_file, 'w') as f:
             f.write(content)
 
     def run_particle_tracking(self, log_file=None, bin_config=None, turbulence="laminar"):
