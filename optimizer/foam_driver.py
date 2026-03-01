@@ -228,7 +228,7 @@ class FoamDriver:
             print(f"Error reading log: {e}")
         print("--------------------------------------------------\n")
 
-    def prepare_case(self, keep_mesh=False, bin_config=None):
+    def prepare_case(self, keep_mesh=False, bin_config=None, turbulence="laminar"):
         """
         Prepares the case directory.
         """
@@ -279,6 +279,9 @@ class FoamDriver:
         # Setup Physics (Turbulence)
         # kOmegaSST fields (omega, k, nut, epsilon) are in 0.orig
         self._apply_boundary_conditions(zero)
+        self._update_turbulence_properties(turbulence)
+        self._update_fvSchemes(turbulence)
+        self._update_fvSolution(turbulence)
 
         # Add function objects to controlDict if not present
         self._inject_function_objects()
@@ -347,6 +350,59 @@ class FoamDriver:
 
             with open(file_path, 'w') as f:
                 f.write(new_content)
+    def _update_turbulence_properties(self, turbulence):
+        tp_path = os.path.join(self.case_dir, "constant", "turbulenceProperties")
+        if not os.path.exists(tp_path): return
+
+        with open(tp_path, 'r') as f:
+            content = f.read()
+
+        if turbulence == "laminar":
+            content = re.sub(r"model\s+.*?;", "model           laminar;", content)
+            content = re.sub(r"turbulence\s+.*?;", "turbulence      off;", content)
+        else:
+            content = re.sub(r"model\s+.*?;", f"model           {turbulence};", content)
+            content = re.sub(r"turbulence\s+.*?;", "turbulence      on;", content)
+
+        with open(tp_path, 'w') as f:
+            f.write(content)
+
+    def _update_fvSchemes(self, turbulence):
+        fvSchemes = os.path.join(self.case_dir, "system", "fvSchemes")
+        if not os.path.exists(fvSchemes): return
+
+        with open(fvSchemes, 'r') as f:
+            content = f.read()
+
+        if turbulence == "laminar":
+            content = re.sub(r"div\(phi,k\).*?;", "", content)
+            content = re.sub(r"div\(phi,epsilon\).*?;", "", content)
+            content = re.sub(r"div\(phi,omega\).*?;", "", content)
+            content = re.sub(r"div\(phi,R\).*?;", "", content)
+
+            with open(fvSchemes, 'w') as f:
+                # Clean up empty lines created by regex sub
+                cleaned = os.linesep.join([s for s in content.splitlines() if s.strip()])
+                f.write(cleaned + "\n")
+
+    def _update_fvSolution(self, turbulence):
+        fvSolution = os.path.join(self.case_dir, "system", "fvSolution")
+        if not os.path.exists(fvSolution): return
+
+        with open(fvSolution, 'r') as f:
+            content = f.read()
+
+        if turbulence == "laminar":
+            content = content.replace('"(U|k|epsilon|omega)"', '"U"')
+            content = content.replace('"(k|epsilon|omega)" 1e-4;', '')
+            # Remove relaxation factors for k, epsilon, omega
+            content = re.sub(r"k\s+[\d\.]+;", "", content)
+            content = re.sub(r"epsilon\s+[\d\.]+;", "", content)
+            content = re.sub(r"omega\s+[\d\.]+;", "", content)
+            content = re.sub(r"R\s+[\d\.]+;", "", content)
+
+            with open(fvSolution, 'w') as f:
+                f.write(content)
 
     def _generate_decomposeParDict(self):
         """
@@ -608,6 +664,20 @@ FoamFile
     object      topoSetDict;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+        bin_actions = ""
+        if bin_config and bin_config.get("num_bins", 1) > 1:
+            num_bins = int(bin_config["num_bins"])
+            length = float(bin_config.get("insert_length_mm", 50.0))
+            scale = 0.001
+
+            # Geometry is centered at Z=0.
+            # Range: [-L/2, L/2]
+            z_start = -(length * scale) / 2.0
+            bin_h = (length * scale) / num_bins
+
+            for i in range(num_bins):
+                z_min = z_start + i * bin_h
+                z_max = z_start + (i + 1) * bin_h
 
 actions
 (
@@ -620,6 +690,38 @@ actions
         patch   corkscrew;
     }
     {% if not skip_io %}
+        source  boxToFace;
+        box     (-100 -100 {z_min:.5f}) (100 100 {z_max:.5f}); // Large box in X/Y
+    }}
+    {{
+        name    bin_{i+1}_faces;
+        type    faceSet;
+        action  subset;
+        source  faceToFace;
+        set     corkscrewFaces;
+    }}"""
+                # CRITICAL FIX: Subtract IO faces to prevent overlapping duplicate faces
+                if not skip_io:
+                    bin_actions += f"""
+    {{
+        name    bin_{i+1}_faces;
+        type    faceSet;
+        action  subtract;
+        source  faceToFace;
+        set     inletFaces;
+    }}
+    {{
+        name    bin_{i+1}_faces;
+        type    faceSet;
+        action  subtract;
+        source  faceToFace;
+        set     outletFaces;
+    }}
+"""
+
+        io_actions = ""
+        if not skip_io:
+            io_actions = """
     // 2. Select Inlet Faces (Bottom, Normal 0 0 -1)
     {
         name    inletFaces;
@@ -774,11 +876,134 @@ patches
         with open(os.path.join(self.case_dir, "system", "createPatchDict"), 'w') as f:
             f.write(content)
 
-    def _generate_kinematicCloudProperties(self, bin_config=None):
+    def _generate_kinematicCloudProperties(self, bin_config=None, turbulence="laminar"):
         """
         Generates constant/kinematicCloudProperties with size binning and spatial binning using Jinja2.
         """
         template_str = """/*--------------------------------*- C++ -*----------------------------------*\\
+        Generates constant/kinematicCloudProperties with dynamic size binning and spatial binning.
+        """
+        # Default fallback values
+        sizes_um = [5, 10, 20, 50, 100]
+        rho0_val = 3100  # Moon Dust density
+        tube_od_m = 0.032
+        fluid_velocity_z = 5.0
+
+        # Extract dynamic values from config if provided
+        if bin_config:
+            sizes_um = bin_config.get("dust_sizes_um", sizes_um)
+            if isinstance(sizes_um, str): # Handle comma-separated string from LLM if needed
+                sizes_um = [float(x.strip()) for x in sizes_um.split(',')]
+
+            rho0_val = float(bin_config.get("dust_density", rho0_val))
+            tube_od_m = float(bin_config.get("tube_od_mm", 32.0)) / 1000.0
+            fluid_velocity_z = float(bin_config.get("fluid_velocity", 5.0))
+
+        # 1. Scale parcels per second based on cross-sectional area
+        # Baseline: 5000 parcels/sec for a 32mm pipe
+        inlet_area_m2 = math.pi * ((tube_od_m / 2.0)**2)
+        baseline_area = math.pi * ((0.032 / 2.0)**2)
+        area_ratio = inlet_area_m2 / baseline_area
+        parcels_per_sec = int(5000 * area_ratio)
+
+        # 2. Generate dynamic injection models for however many sizes are requested
+        injections = ""
+        for d_um in sizes_um:
+            d_m = float(d_um) * 1e-6
+            model_name = f"model_{str(d_um).replace('.', '_')}um"
+
+            # Calculate precise mass flow rate for this specific dust density and volume
+            volume = (4.0/3.0) * math.pi * ((d_m / 2.0)**3)
+            mass_flow_rate = rho0_val * volume * parcels_per_sec
+
+            injections += f"""
+        {model_name}
+        {{
+            type            patchInjection;
+            patch           inlet;
+            parcelBasisType mass;
+            massTotal       {mass_flow_rate:.6e};
+            duration        1;
+            SOI             0;
+            parcelsPerSecond {parcels_per_sec};
+            flowRateProfile constant 1;
+            U0              (0 0 {fluid_velocity_z});
+            sizeDistribution
+            {{
+                type        fixedValue;
+                fixedValueDistribution
+                {{
+                    value   {d_m};
+                }}
+            }}
+        }}"""
+
+        # Patch Interaction
+        # Note: OpenFOAM usually processes patches in order or prioritizes specific matches.
+        # However, regex patches like "(.*)" can be tricky.
+        # If we put "(.*)" at the start, it acts as a default for anything NOT matched later?
+        # Actually, in standard OpenFOAM dictionary reading, later entries overwrite earlier ones
+        # IF they match the same key. But here keys are patch names.
+        # The PatchInteractionModel iterates over the *patches in the mesh*.
+        # For each mesh patch, it looks for a matching entry in the dictionary.
+        # If multiple entries match (e.g. "wall" matches "(.*)"), behavior depends on implementation.
+        # Standard wildcard matching usually prioritizes specific over wildcard, or first match.
+        # To be safe against "last match wins" or "wildcard overrides", we put the catch-all first.
+
+        common_catch_all = """
+            "(.*)"
+            {
+                type rebound;
+                e    0.80;  // Loses 20% of normal energy on bounce
+                mu   0.45;  // High friction for basalt dragging on plastic
+            }"""
+
+        patch_interactions = common_catch_all + """
+            corkscrew
+            {
+                type stick;
+            }
+            outlet
+            {
+                type escape;
+            }
+            inlet
+            {
+                type escape;
+            }"""
+
+        patch_list_str = "corkscrew inlet outlet"
+
+        if bin_config and bin_config.get("num_bins", 1) > 1:
+            num_bins = int(bin_config["num_bins"])
+
+            patch_interactions = common_catch_all + """
+            corkscrew
+            {
+                type stick;
+            }""" # Keep main wall just in case parts remain
+
+            patch_list_str = "corkscrew inlet outlet"
+
+            for i in range(num_bins):
+                patch_interactions += f"""
+            bin_{i+1}
+            {{
+                type stick;
+            }}"""
+                patch_list_str += f" bin_{i+1}"
+
+            patch_interactions += """
+            outlet
+            {
+                type escape;
+            }
+            inlet
+            {
+                type escape;
+            }"""
+
+        content = f"""/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
 |  \\    /   O peration     | Version:  v2512                                 |
@@ -809,10 +1034,10 @@ solution
         rho             cell;
         U               cellPoint;
         mu              cell;
-        k               cellPoint;
-        epsilon         cellPoint;
-        omega           cellPoint;
-    }
+{f"        k               cellPoint;" if turbulence != "laminar" else ""}
+{f"        epsilon         cellPoint;" if turbulence != "laminar" else ""}
+{f"        omega           cellPoint;" if turbulence != "laminar" else ""}
+    }}
 
     integrationSchemes
     {
@@ -868,7 +1093,7 @@ subModels
         {% endfor %}
     }
 
-    dispersionModel stochasticDispersionRAS; //gradientDispersionRAS;
+    dispersionModel {"stochasticDispersionRAS" if turbulence != "laminar" else "none"};//gradientDispersionRAS;
 
     patchInteractionModel localInteraction;
 
@@ -1047,7 +1272,21 @@ cloudFunctions
             geometries.append(geom)
 
         template_path = os.path.join(self.case_dir, "system", "snappyHexMeshDict.template")
-        if not os.path.exists(template_path):
+        shm_path = os.path.join(self.case_dir, "system", "snappyHexMeshDict")
+
+        # We need to preserve the dynamically injected locationInMesh if it exists in the active dict
+        preserved_location = None
+        if os.path.exists(shm_path):
+            with open(shm_path, 'r') as f:
+                existing_content = f.read()
+                pattern = re.compile(r"locationInMesh\s*\((.*?)\);", re.DOTALL)
+                m = pattern.search(existing_content)
+                if m:
+                    preserved_location = m.group(1)
+
+        if os.path.exists(template_path):
+            with open(template_path, 'r') as f: content = f.read()
+        else:
             print("Error: snappyHexMeshDict.template missing")
             return
 
@@ -1070,6 +1309,12 @@ cloudFunctions
             geometries=geometries,
             location_in_mesh=location_in_mesh
         )
+
+        # Restore preserved location
+        if preserved_location:
+            pattern = re.compile(r"locationInMesh\s*\(.*?\);", re.DOTALL)
+            if pattern.search(content):
+                content = pattern.sub(f"locationInMesh ({preserved_location});", content)
 
         with open(shm_path, 'w') as f:
             f.write(content)
@@ -1291,7 +1536,7 @@ boundaryField
         with open(fvSchemes, 'w') as f:
             f.write(content)
 
-    def _prepare_transient_run(self, source_time):
+    def _prepare_transient_run(self, source_time, turbulence="laminar"):
         """
         Resets the simulation to time 0, copies fields from source_time, and generates rho/mu.
         """
@@ -1309,14 +1554,19 @@ boundaryField
             print("Generating missing 'phi' field...")
             self.run_command(["postProcess", "-func", "writePhi", "-time", str(source_time)], description="Generating phi")
 
-        # 3. Check and generate missing epsilon (CRITICAL FOR DISPERSION)
-        eps_src = os.path.join(source_dir, "epsilon")
-        if not os.path.exists(eps_src):
-            print("Generating 'epsilon' field for turbulent dispersion...")
-            self.run_command(["postProcess", "-func", "epsilon", "-time", str(source_time)], description="Generating epsilon")
+        if turbulence != "laminar":
+            # 3. Check and generate missing epsilon (CRITICAL FOR DISPERSION)
+            eps_src = os.path.join(source_dir, "epsilon")
+            if not os.path.exists(eps_src):
+                print("Generating 'epsilon' field for turbulent dispersion...")
+                self.run_command(["postProcess", "-func", "epsilon", "-time", str(source_time)], description="Generating epsilon")
 
         # 4. Copy fields from source_time to 0
-        fields_to_copy = ["U", "p", "phi", "k", "epsilon", "omega", "nut"]
+        if turbulence == "laminar":
+            fields_to_copy = ["U", "p", "phi"]
+        else:
+            fields_to_copy = ["U", "p", "phi", "k", "epsilon", "omega", "nut"]
+
         for field in fields_to_copy:
             src = os.path.join(source_dir, field)
             dst = os.path.join(zero_dir, field)
@@ -1324,7 +1574,7 @@ boundaryField
                 shutil.copy2(src, dst)
                 
                 # --- AGGRESSIVE LOWER BOUND & BOUNDARY FREEZE ---
-                if field in ["k", "epsilon", "omega", "nut"]:
+                if field in ["k", "epsilon", "omega", "nut"] and turbulence != "laminar":
                     with open(dst, 'r', encoding='utf-8', errors='ignore') as f:
                         file_content = f.read()
                     
@@ -1432,7 +1682,7 @@ boundaryField
         with open(u_file, 'w') as f:
             f.write(content)
 
-    def run_particle_tracking(self, log_file=None, bin_config=None):
+    def run_particle_tracking(self, log_file=None, bin_config=None, turbulence="laminar"):
         """
         Runs particle tracking (Lagrangian) using a robust transient strategy on frozen flow.
         """
@@ -1453,7 +1703,7 @@ boundaryField
             print(f"Preparing particle tracking from steady state time {latest_time}...")
 
             # 1. Generate Cloud Config
-            self._generate_kinematicCloudProperties(bin_config)
+            self._generate_kinematicCloudProperties(bin_config, turbulence=turbulence)
 
             # Debug: print generated cloud config
             c_path = os.path.join(self.case_dir, "constant", "kinematicCloudProperties")
@@ -1462,7 +1712,7 @@ boundaryField
                      print(f"--- Generated kinematicCloudProperties ---\n{f.read()}\n----------------------------------------")
 
             # 2. Reset Time & Prepare Fields
-            self._prepare_transient_run(latest_time)
+            self._prepare_transient_run(latest_time, turbulence=turbulence)
 
             # 3. Update Configurations
             self._update_controlDict_for_particles()
