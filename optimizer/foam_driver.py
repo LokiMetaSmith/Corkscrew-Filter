@@ -226,7 +226,7 @@ class FoamDriver:
             print(f"Error reading log: {e}")
         print("--------------------------------------------------\n")
 
-    def prepare_case(self, keep_mesh=False):
+    def prepare_case(self, keep_mesh=False, turbulence="laminar"):
         """
         Prepares the case directory.
         """
@@ -271,10 +271,66 @@ class FoamDriver:
             shutil.copytree(zero_orig, zero)
 
         # Setup Physics (Turbulence)
-        # kOmegaSST fields (omega, k, nut, epsilon) are in 0.orig
+        self._update_turbulence_properties(turbulence)
+        self._update_fvSchemes(turbulence)
+        self._update_fvSolution(turbulence)
 
         # Add function objects to controlDict if not present
         self._inject_function_objects()
+
+    def _update_turbulence_properties(self, turbulence):
+        tp_path = os.path.join(self.case_dir, "constant", "turbulenceProperties")
+        if not os.path.exists(tp_path): return
+
+        with open(tp_path, 'r') as f:
+            content = f.read()
+
+        if turbulence == "laminar":
+            content = re.sub(r"model\s+.*?;", "model           laminar;", content)
+            content = re.sub(r"turbulence\s+.*?;", "turbulence      off;", content)
+        else:
+            content = re.sub(r"model\s+.*?;", f"model           {turbulence};", content)
+            content = re.sub(r"turbulence\s+.*?;", "turbulence      on;", content)
+
+        with open(tp_path, 'w') as f:
+            f.write(content)
+
+    def _update_fvSchemes(self, turbulence):
+        fvSchemes = os.path.join(self.case_dir, "system", "fvSchemes")
+        if not os.path.exists(fvSchemes): return
+
+        with open(fvSchemes, 'r') as f:
+            content = f.read()
+
+        if turbulence == "laminar":
+            content = re.sub(r"div\(phi,k\).*?;", "", content)
+            content = re.sub(r"div\(phi,epsilon\).*?;", "", content)
+            content = re.sub(r"div\(phi,omega\).*?;", "", content)
+            content = re.sub(r"div\(phi,R\).*?;", "", content)
+
+            with open(fvSchemes, 'w') as f:
+                # Clean up empty lines created by regex sub
+                cleaned = os.linesep.join([s for s in content.splitlines() if s.strip()])
+                f.write(cleaned + "\n")
+
+    def _update_fvSolution(self, turbulence):
+        fvSolution = os.path.join(self.case_dir, "system", "fvSolution")
+        if not os.path.exists(fvSolution): return
+
+        with open(fvSolution, 'r') as f:
+            content = f.read()
+
+        if turbulence == "laminar":
+            content = content.replace('"(U|k|epsilon|omega)"', '"U"')
+            content = content.replace('"(k|epsilon|omega)" 1e-4;', '')
+            # Remove relaxation factors for k, epsilon, omega
+            content = re.sub(r"k\s+[\d\.]+;", "", content)
+            content = re.sub(r"epsilon\s+[\d\.]+;", "", content)
+            content = re.sub(r"omega\s+[\d\.]+;", "", content)
+            content = re.sub(r"R\s+[\d\.]+;", "", content)
+
+            with open(fvSolution, 'w') as f:
+                f.write(content)
 
     def _generate_decomposeParDict(self):
         """
@@ -750,7 +806,7 @@ patches
         with open(os.path.join(self.case_dir, "system", "createPatchDict"), 'w') as f:
             f.write(content)
 
-    def _generate_kinematicCloudProperties(self, bin_config=None):
+    def _generate_kinematicCloudProperties(self, bin_config=None, turbulence="laminar"):
         """
         Generates constant/kinematicCloudProperties with size binning and spatial binning.
         """
@@ -887,9 +943,9 @@ solution
         rho             cell;
         U               cellPoint;
         mu              cell;
-        k               cellPoint;
-        epsilon         cellPoint;
-        omega           cellPoint;
+{f"        k               cellPoint;" if turbulence != "laminar" else ""}
+{f"        epsilon         cellPoint;" if turbulence != "laminar" else ""}
+{f"        omega           cellPoint;" if turbulence != "laminar" else ""}
     }}
 
     integrationSchemes
@@ -925,7 +981,7 @@ subModels
         {injections}
     }}
 
-    dispersionModel stochasticDispersionRAS; //gradientDispersionRAS;
+    dispersionModel {"stochasticDispersionRAS" if turbulence != "laminar" else "none"};
 
     patchInteractionModel localInteraction;
 
@@ -1326,7 +1382,7 @@ boundaryField
         with open(fvSchemes, 'w') as f:
             f.write(content)
 
-    def _prepare_transient_run(self, source_time):
+    def _prepare_transient_run(self, source_time, turbulence="laminar"):
         """
         Resets the simulation to time 0, copies fields from source_time, and generates rho/mu.
         """
@@ -1344,14 +1400,19 @@ boundaryField
             print("Generating missing 'phi' field...")
             self.run_command(["postProcess", "-func", "writePhi", "-time", str(source_time)], description="Generating phi")
 
-        # 3. Check and generate missing epsilon (CRITICAL FOR DISPERSION)
-        eps_src = os.path.join(source_dir, "epsilon")
-        if not os.path.exists(eps_src):
-            print("Generating 'epsilon' field for turbulent dispersion...")
-            self.run_command(["postProcess", "-func", "epsilon", "-time", str(source_time)], description="Generating epsilon")
+        if turbulence != "laminar":
+            # 3. Check and generate missing epsilon (CRITICAL FOR DISPERSION)
+            eps_src = os.path.join(source_dir, "epsilon")
+            if not os.path.exists(eps_src):
+                print("Generating 'epsilon' field for turbulent dispersion...")
+                self.run_command(["postProcess", "-func", "epsilon", "-time", str(source_time)], description="Generating epsilon")
 
         # 4. Copy fields from source_time to 0
-        fields_to_copy = ["U", "p", "phi", "k", "epsilon", "omega", "nut"]
+        if turbulence == "laminar":
+            fields_to_copy = ["U", "p", "phi"]
+        else:
+            fields_to_copy = ["U", "p", "phi", "k", "epsilon", "omega", "nut"]
+
         for field in fields_to_copy:
             src = os.path.join(source_dir, field)
             dst = os.path.join(zero_dir, field)
@@ -1359,7 +1420,7 @@ boundaryField
                 shutil.copy2(src, dst)
                 
                 # --- AGGRESSIVE LOWER BOUND & BOUNDARY FREEZE ---
-                if field in ["k", "epsilon", "omega", "nut"]:
+                if field in ["k", "epsilon", "omega", "nut"] and turbulence != "laminar":
                     with open(dst, 'r', encoding='utf-8', errors='ignore') as f:
                         file_content = f.read()
                     
@@ -1380,7 +1441,6 @@ boundaryField
                     with open(dst, 'w', encoding='utf-8') as f:
                         f.write(file_content)
                 # ------------------------------------------------
-
             elif field == "phi":
                  print("Warning: 'phi' field still missing after generation attempt.")
 
@@ -1440,7 +1500,7 @@ boundaryField
         with open(control_dict, 'w') as f:
             f.write(content)
 
-    def run_particle_tracking(self, log_file=None, bin_config=None):
+    def run_particle_tracking(self, log_file=None, bin_config=None, turbulence="laminar"):
         """
         Runs particle tracking (Lagrangian) using a robust transient strategy on frozen flow.
         """
@@ -1461,7 +1521,7 @@ boundaryField
             print(f"Preparing particle tracking from steady state time {latest_time}...")
 
             # 1. Generate Cloud Config
-            self._generate_kinematicCloudProperties(bin_config)
+            self._generate_kinematicCloudProperties(bin_config, turbulence=turbulence)
 
             # Debug: print generated cloud config
             c_path = os.path.join(self.case_dir, "constant", "kinematicCloudProperties")
@@ -1470,7 +1530,7 @@ boundaryField
                      print(f"--- Generated kinematicCloudProperties ---\n{f.read()}\n----------------------------------------")
 
             # 2. Reset Time & Prepare Fields
-            self._prepare_transient_run(latest_time)
+            self._prepare_transient_run(latest_time, turbulence=turbulence)
 
             # 3. Update Configurations
             self._update_controlDict_for_particles()
