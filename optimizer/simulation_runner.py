@@ -274,6 +274,11 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
 
     # 3. Run Simulation
     metrics = {}
+
+    # Store the calculated cell size for reproducibility in the logs
+    if not reuse_mesh and 'target_cell_size' in locals():
+        metrics['target_cell_size_m'] = target_cell_size
+
     vtk_zip_path = None
 
     if not dry_run and not skip_cfd:
@@ -281,7 +286,12 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         bin_config = {
             "num_bins": int(params.get("num_bins", 1)),
             "insert_length_mm": float(params.get("insert_length_mm", 50.0)),
-            "tube_od_mm": float(params.get("tube_od_mm", 32.0))
+
+            # --- NEW: Dynamic Physics & Dust Parameters ---
+            "tube_od_mm": float(params.get("tube_od_mm", 32.0)),
+            "fluid_velocity": float(params.get("fluid_velocity", 5.0)),
+            "dust_density": float(params.get("dust_density", 3100)), # Default: Moon dust
+            "dust_sizes_um": params.get("dust_sizes_um", [5, 10, 20, 50, 100])
         }
 
         foam_driver.prepare_case(keep_mesh=reuse_mesh, bin_config=bin_config)
@@ -310,7 +320,9 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                     # Pass bin config for injection/interaction setup
                     foam_driver.run_particle_tracking(log_file=solver_log, bin_config=bin_config)
 
-                metrics = foam_driver.get_metrics(log_file=solver_log)
+                # Fetch foam metrics and preserve any existing custom metrics (like cell size)
+                foam_metrics = foam_driver.get_metrics(log_file=solver_log)
+                metrics.update(foam_metrics)
 
                 # Generate VTK
                 vtk_dir = foam_driver.generate_vtk()

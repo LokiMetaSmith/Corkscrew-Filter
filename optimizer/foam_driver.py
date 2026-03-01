@@ -754,29 +754,40 @@ patches
         with open(os.path.join(self.case_dir, "system", "createPatchDict"), 'w') as f:
             f.write(content)
 
-    def _generate_kinematicCloudProperties(self, bin_config=None, fluid_velocity_z=5.0):
+    def _generate_kinematicCloudProperties(self, bin_config=None):
         """
-        Generates constant/kinematicCloudProperties with size binning and spatial binning.
-        fluid_velocity_z: The Z-velocity of the fluid at the inlet (m/s)
+        Generates constant/kinematicCloudProperties with dynamic size binning and spatial binning.
         """
+        # Default fallback values
         sizes_um = [5, 10, 20, 50, 100]
         rho0_val = 3100  # Moon Dust density
+        tube_od_m = 0.032
+        fluid_velocity_z = 5.0
 
-        # Calculate inlet area based on the current tube_od_mm from bin_config (default 32mm)
-        tube_od_m = float(bin_config.get("tube_od_mm", 32.0)) / 1000.0 if bin_config else 0.032
+        # Extract dynamic values from config if provided
+        if bin_config:
+            sizes_um = bin_config.get("dust_sizes_um", sizes_um)
+            if isinstance(sizes_um, str): # Handle comma-separated string from LLM if needed
+                sizes_um = [float(x.strip()) for x in sizes_um.split(',')]
+
+            rho0_val = float(bin_config.get("dust_density", rho0_val))
+            tube_od_m = float(bin_config.get("tube_od_mm", 32.0)) / 1000.0
+            fluid_velocity_z = float(bin_config.get("fluid_velocity", 5.0))
+
+        # 1. Scale parcels per second based on cross-sectional area
+        # Baseline: 5000 parcels/sec for a 32mm pipe
         inlet_area_m2 = math.pi * ((tube_od_m / 2.0)**2)
-
-        # Scale parcels per second based on area (baseline: 5000 for a 32mm pipe)
         baseline_area = math.pi * ((0.032 / 2.0)**2)
         area_ratio = inlet_area_m2 / baseline_area
         parcels_per_sec = int(5000 * area_ratio)
 
+        # 2. Generate dynamic injection models for however many sizes are requested
         injections = ""
         for d_um in sizes_um:
-            d_m = d_um * 1e-6
-            model_name = f"model_{d_um}um"
+            d_m = float(d_um) * 1e-6
+            model_name = f"model_{str(d_um).replace('.', '_')}um"
 
-            # Calculate mass flow rate
+            # Calculate precise mass flow rate for this specific dust density and volume
             volume = (4.0/3.0) * math.pi * ((d_m / 2.0)**3)
             mass_flow_rate = rho0_val * volume * parcels_per_sec
 
@@ -791,7 +802,7 @@ patches
             SOI             0;
             parcelsPerSecond {parcels_per_sec};
             flowRateProfile constant 1;
-            U0              (0 0 {fluid_velocity_z}); // <-- Dynamically matched to fluid!
+            U0              (0 0 {fluid_velocity_z});
             sizeDistribution
             {{
                 type        fixedValue;
@@ -1453,24 +1464,10 @@ boundaryField
 
     def _update_inlet_velocity(self, bin_config):
         """
-        Updates the inlet velocity in 0.orig/U based on volumetric flow rate.
-        Assumes a baseline of 5 m/s at 32mm diameter.
+        Updates the inlet velocity in 0.orig/U.
+        Directly uses fluid_velocity if provided.
         """
-        # Baseline: 5 m/s at 32mm diameter
-        baseline_d = 0.032
-        baseline_u = 5.0
-        baseline_area = math.pi * ((baseline_d / 2.0)**2)
-        volumetric_flow = baseline_area * baseline_u # constant m^3/s
-
-        # Current
-        current_d = float(bin_config.get("tube_od_mm", 32.0)) / 1000.0
-        current_area = math.pi * ((current_d / 2.0)**2)
-
-        # New Velocity
-        new_u = volumetric_flow / current_area
-
-        # We need to save this for kinematicCloudProperties later
-        self.current_fluid_velocity_z = new_u
+        new_u = float(bin_config.get("fluid_velocity", 5.0))
 
         u_file = os.path.join(self.case_dir, "0.orig", "U")
         if not os.path.exists(u_file):
@@ -1513,8 +1510,7 @@ boundaryField
             print(f"Preparing particle tracking from steady state time {latest_time}...")
 
             # 1. Generate Cloud Config
-            fluid_velocity_z = getattr(self, "current_fluid_velocity_z", 5.0)
-            self._generate_kinematicCloudProperties(bin_config, fluid_velocity_z=fluid_velocity_z)
+            self._generate_kinematicCloudProperties(bin_config)
 
             # Debug: print generated cloud config
             c_path = os.path.join(self.case_dir, "constant", "kinematicCloudProperties")
