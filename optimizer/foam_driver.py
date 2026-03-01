@@ -586,6 +586,22 @@ functions
         action  subset;
         source  faceToFace;
         set     corkscrewFaces;
+    }}"""
+                if not skip_io:
+                    bin_actions += f"""
+    {{
+        name    bin_{i+1}_faces;
+        type    faceSet;
+        action  subtract;
+        source  faceToFace;
+        set     inletFaces;
+    }}
+    {{
+        name    bin_{i+1}_faces;
+        type    faceSet;
+        action  subtract;
+        source  faceToFace;
+        set     outletFaces;
     }}
 """
 
