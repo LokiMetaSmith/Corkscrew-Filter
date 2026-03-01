@@ -555,11 +555,6 @@ functions
         if bin_config and bin_config.get("num_bins", 1) > 1:
             num_bins = int(bin_config["num_bins"])
             length = float(bin_config.get("insert_length_mm", 50.0))
-            # Convert to meters if needed? Usually snappyHexMesh works in scaled units if scaled.
-            # BUT the mesh is scaled to meters (x0.001) in simulation_runner logic before foam is run?
-            # Wait, simulation_runner scales the STL. `snappyHexMesh` uses the STL dimensions.
-            # So the mesh inside OpenFOAM is in Meters.
-            # `length` passed here is likely in mm (from params). We must scale it.
             scale = 0.001
 
             # Geometry is centered at Z=0.
@@ -586,6 +581,23 @@ functions
         action  subset;
         source  faceToFace;
         set     corkscrewFaces;
+    }}"""
+                # CRITICAL FIX: Subtract IO faces to prevent overlapping duplicate faces
+                if not skip_io:
+                    bin_actions += f"""
+    {{
+        name    bin_{i+1}_faces;
+        type    faceSet;
+        action  subtract;
+        source  faceToFace;
+        set     inletFaces;
+    }}
+    {{
+        name    bin_{i+1}_faces;
+        type    faceSet;
+        action  subtract;
+        source  faceToFace;
+        set     outletFaces;
     }}
 """
 
