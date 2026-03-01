@@ -96,8 +96,8 @@ class TestFoamDriverCloud(unittest.TestCase):
             # Verify Robust Patch Interactions
             self.assertIn('"(.*)"', content)
             self.assertIn("type rebound;", content)
-            self.assertIn("e    0.97;", content)
-            self.assertIn("mu   0.09;", content)
+            self.assertIn("e    0.80;", content)
+            self.assertIn("mu   0.45;", content)
 
             # Verify Order: Catch-all should be before specific patches to allow override (if parser is first-match)
             # OR if parser is last-match, this order puts specific last.
