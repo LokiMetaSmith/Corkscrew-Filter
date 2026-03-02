@@ -359,6 +359,12 @@ class FoamDriver:
 
         if turbulence == "laminar":
             content = re.sub(r"simulationType\s+.*?;", "simulationType  laminar;", content)
+            content = re.sub(r"model\s+.*?;", "model           laminar;", content)
+            content = re.sub(r"turbulence\s+.*?;", "turbulence      off;", content)
+        elif turbulence == "kOmegaSST_disabled":
+            content = re.sub(r"simulationType\s+.*?;", "simulationType  RAS;", content)
+            content = re.sub(r"model\s+.*?;", "model           kOmegaSST;", content)
+            content = re.sub(r"turbulence\s+.*?;", "turbulence      off;", content)
 
             # Robustly remove the RAS block even if it contains nested braces
             ras_match = re.search(r"RAS\s*\{", content)
@@ -397,11 +403,16 @@ class FoamDriver:
             content = re.sub(r"div\(phi,epsilon\).*?;", "", content)
             content = re.sub(r"div\(phi,omega\).*?;", "", content)
             content = re.sub(r"div\(phi,R\).*?;", "", content)
+        elif turbulence == "RNGkEpsilon":
+            content = re.sub(r"div\(phi,omega\).*?;", "", content)
+            content = re.sub(r"div\(phi,R\).*?;", "", content)
+        elif turbulence == "kOmegaSST" or turbulence == "kOmegaSST_disabled":
+            content = re.sub(r"div\(phi,R\).*?;", "", content)
 
-            with open(fvSchemes, 'w') as f:
-                # Clean up empty lines created by regex sub
-                cleaned = os.linesep.join([s for s in content.splitlines() if s.strip()])
-                f.write(cleaned + "\n")
+        with open(fvSchemes, 'w') as f:
+            # Clean up empty lines created by regex sub
+            cleaned = os.linesep.join([s for s in content.splitlines() if s.strip()])
+            f.write(cleaned + "\n")
 
     def _update_fvSolution(self, turbulence):
         fvSolution = os.path.join(self.case_dir, "system", "fvSolution")
@@ -418,9 +429,16 @@ class FoamDriver:
             content = re.sub(r"epsilon\s+[\d\.]+;", "", content)
             content = re.sub(r"omega\s+[\d\.]+;", "", content)
             content = re.sub(r"R\s+[\d\.]+;", "", content)
+        elif turbulence == "RNGkEpsilon":
+            content = content.replace('"(U|k|epsilon|omega)"', '"(U|k|epsilon)"')
+            content = content.replace('"(k|epsilon|omega)" 1e-4;', '"(k|epsilon)" 1e-4;')
+            content = re.sub(r"omega\s+[\d\.]+;", "", content)
+            content = re.sub(r"R\s+[\d\.]+;", "", content)
+        elif turbulence == "kOmegaSST" or turbulence == "kOmegaSST_disabled":
+            content = re.sub(r"R\s+[\d\.]+;", "", content)
 
-            with open(fvSolution, 'w') as f:
-                f.write(content)
+        with open(fvSolution, 'w') as f:
+            f.write(content)
 
     def _generate_decomposeParDict(self):
         """
@@ -1022,9 +1040,9 @@ solution
         rho             cell;
         U               cellPoint;
         mu              cell;
-{f"        k               cellPoint;" if turbulence != "laminar" else ""}
-{f"        epsilon         cellPoint;" if turbulence != "laminar" else ""}
-{f"        omega           cellPoint;" if turbulence != "laminar" else ""}
+{f"        k               cellPoint;" if turbulence != "laminar" and turbulence != "kOmegaSST_disabled" else ""}
+{f"        epsilon         cellPoint;" if turbulence != "laminar" and turbulence != "kOmegaSST_disabled" else ""}
+{f"        omega           cellPoint;" if turbulence == "kOmegaSST" else ""}
     }}
 
     integrationSchemes
@@ -1081,7 +1099,7 @@ subModels
         {% endfor %}
     }
 
-    dispersionModel {"stochasticDispersionRAS" if turbulence != "laminar" else "none"};//gradientDispersionRAS;
+    dispersionModel {"stochasticDispersionRAS" if turbulence != "laminar" and turbulence != "kOmegaSST_disabled" else "none"};//gradientDispersionRAS;
 
     patchInteractionModel localInteraction;
 
@@ -1529,7 +1547,7 @@ boundaryField
             print("Generating missing 'phi' field...")
             self.run_command(["postProcess", "-func", "writePhi", "-time", str(source_time)], description="Generating phi")
 
-        if turbulence != "laminar":
+        if turbulence != "laminar" and turbulence != "kOmegaSST_disabled":
             # 3. Check and generate missing epsilon (CRITICAL FOR DISPERSION)
             eps_src = os.path.join(source_dir, "epsilon")
             if not os.path.exists(eps_src):
@@ -1539,6 +1557,10 @@ boundaryField
         # 4. Copy fields from source_time to 0
         if turbulence == "laminar":
             fields_to_copy = ["U", "p", "phi"]
+        elif turbulence == "kOmegaSST_disabled":
+            fields_to_copy = ["U", "p", "phi", "k", "epsilon", "omega", "nut"]
+        elif turbulence == "RNGkEpsilon":
+            fields_to_copy = ["U", "p", "phi", "k", "epsilon", "nut"]
         else:
             fields_to_copy = ["U", "p", "phi", "k", "epsilon", "omega", "nut"]
 
@@ -1547,29 +1569,6 @@ boundaryField
             dst = os.path.join(zero_dir, field)
             if os.path.exists(src):
                 shutil.copy2(src, dst)
-                
-                # --- AGGRESSIVE LOWER BOUND & BOUNDARY FREEZE ---
-                if field in ["k", "epsilon", "omega", "nut"] and turbulence != "laminar":
-                    with open(dst, 'r', encoding='utf-8', errors='ignore') as f:
-                        file_content = f.read()
-                    
-                    # Overwrite entire boundaryField with catch-all
-                    catch_all_boundary = """
-    ".*"
-    {
-        type            fixedValue;
-        value           uniform 1e-8;
-    }"""
-                    file_content = self._replace_block(file_content, "boundaryField", catch_all_boundary)
-
-                    # Replace absolute zeroes with 1e-8 in internalField or everywhere else
-                    file_content = re.sub(r'uniform\s+0(\.0+)?\s*;', 'uniform 1e-8;', file_content)
-                    file_content = re.sub(r'(?m)^\s*0(\.0+)?\s*$', '1e-8', file_content)
-                    file_content = re.sub(r'(?m)^\s*0\.0+e[+-]\d+\s*$', '1e-8', file_content)
-                    
-                    with open(dst, 'w', encoding='utf-8') as f:
-                        f.write(file_content)
-                # ------------------------------------------------
 
             elif field == "phi":
                  print("Warning: 'phi' field still missing after generation attempt.")
