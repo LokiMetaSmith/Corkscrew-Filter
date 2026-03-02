@@ -75,9 +75,10 @@ def main():
         sys.exit(1)
 
     scad_file = config.get('geometry', {}).get('scad_file', 'corkscrew.scad')
+    fluid_volume_module = config.get('geometry', {}).get('fluid_volume_module', 'modular_filter_assembly')
 
     # Initialize components
-    scad = ScadDriver(scad_file)
+    scad = ScadDriver(scad_file, fluid_volume_module=fluid_volume_module)
     foam = FoamDriver(args.case_dir, config=config, container_engine=args.container_engine, num_processors=args.cpus, verbose=args.verbose)
 
     # Handle --no-llm logic
