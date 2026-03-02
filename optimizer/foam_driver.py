@@ -359,8 +359,24 @@ class FoamDriver:
 
         if turbulence == "laminar":
             content = re.sub(r"simulationType\s+.*?;", "simulationType  laminar;", content)
-            content = re.sub(r"model\s+.*?;", "model           laminar;", content)
-            content = re.sub(r"turbulence\s+.*?;", "turbulence      off;", content)
+
+            # Robustly remove the RAS block even if it contains nested braces
+            ras_match = re.search(r"RAS\s*\{", content)
+            if ras_match:
+                start_idx = ras_match.start()
+                brace_start = content.find('{', start_idx)
+                if brace_start != -1:
+                    brace_count = 1
+                    end_idx = brace_start + 1
+                    while brace_count > 0 and end_idx < len(content):
+                        if content[end_idx] == '{':
+                            brace_count += 1
+                        elif content[end_idx] == '}':
+                            brace_count -= 1
+                        end_idx += 1
+
+                    if brace_count == 0:
+                        content = content[:start_idx] + content[end_idx:]
         else:
             content = re.sub(r"simulationType\s+.*?;", "simulationType  RAS;", content)
             content = re.sub(r"model\s+.*?;", f"model           {turbulence};", content)
