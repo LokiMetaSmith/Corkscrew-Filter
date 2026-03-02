@@ -358,9 +358,11 @@ class FoamDriver:
             content = f.read()
 
         if turbulence == "laminar":
+            content = re.sub(r"simulationType\s+.*?;", "simulationType  laminar;", content)
             content = re.sub(r"model\s+.*?;", "model           laminar;", content)
             content = re.sub(r"turbulence\s+.*?;", "turbulence      off;", content)
         else:
+            content = re.sub(r"simulationType\s+.*?;", "simulationType  RAS;", content)
             content = re.sub(r"model\s+.*?;", f"model           {turbulence};", content)
             content = re.sub(r"turbulence\s+.*?;", "turbulence      on;", content)
 
