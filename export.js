@@ -204,6 +204,11 @@ async function main() {
     }
 
     async function renderFile(inputFile, outputFile, params = [], customParamsFile = null) {
+        if (!fs.existsSync(inputFile)) {
+            console.error(`Error: Input file not found: ${inputFile}`);
+            return false;
+        }
+
         console.log(`Rendering ${inputFile} -> ${outputFile}...`);
         if (params.length > 0) {
              console.log(`  Params: ${params.join(' ')}`);
@@ -296,6 +301,8 @@ async function main() {
             vfsInputPath = '/configs/' + path.basename(inputFile);
         } else if (path.dirname(inputFile) === '.') {
             vfsInputPath = '/' + path.basename(inputFile);
+            // Explicitly write the input file to VFS in case it wasn't captured by rootFiles
+            instance.FS.writeFile('/' + path.basename(inputFile), fs.readFileSync(inputFile));
         } else {
             // Arbitrary path, copy specifically
             const base = path.basename(inputFile);
