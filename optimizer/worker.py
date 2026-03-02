@@ -68,6 +68,7 @@ def main():
             sys.exit(1)
 
     scad_file = config.get('geometry', {}).get('scad_file', 'corkscrew.scad')
+    fluid_volume_module = config.get('geometry', {}).get('fluid_volume_module', 'modular_filter_assembly')
 
     worker_id = args.id if args.id else get_default_worker_id()
     print(f"Worker started with ID: {worker_id}")
@@ -75,7 +76,7 @@ def main():
     # Initialize components
     store = DataStore()
     manager = JobManager(store)
-    scad = ScadDriver(scad_file)
+    scad = ScadDriver(scad_file, fluid_volume_module=fluid_volume_module)
     foam = FoamDriver(args.case_dir, config=config)
 
     while True:

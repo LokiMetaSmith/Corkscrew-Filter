@@ -8,8 +8,9 @@ import tempfile
 from utils import run_command_with_spinner
 
 class ScadDriver:
-    def __init__(self, scad_file_path, force_native=False):
+    def __init__(self, scad_file_path, force_native=False, fluid_volume_module="modular_filter_assembly"):
         self.scad_file_path = scad_file_path
+        self.fluid_volume_module = fluid_volume_module
 
         has_native = shutil.which("openscad") is not None
         has_node = shutil.which("node") is not None
@@ -285,7 +286,7 @@ class ScadDriver:
         vis_params["GENERATE_SLICE"] = False
         # Ensure we are generating the main assembly if not specified
         if "part_to_generate" not in vis_params:
-            vis_params["part_to_generate"] = "modular_filter_assembly"
+            vis_params["part_to_generate"] = self.fluid_volume_module
 
         # Build command (Force use of export.js for --png support)
         param_args = []
@@ -506,7 +507,7 @@ class ScadDriver:
         fluid_params["GENERATE_CFD_VOLUME"] = "true"
         # Ensure correct part is selected (default to modular if not set)
         if "part_to_generate" not in fluid_params:
-            fluid_params["part_to_generate"] = "modular_filter_assembly"
+            fluid_params["part_to_generate"] = self.fluid_volume_module
 
         fluid_path = os.path.join(output_dir, "corkscrew_fluid.stl")
         mesh_anchor_result = self.generate_stl(fluid_params, fluid_path, log_file, params_file)
@@ -516,7 +517,7 @@ class ScadDriver:
 
         # 2. Inlet Cap
         inlet_params = fluid_params.copy()
-        inlet_params["part_to_generate"] = "inlet_cap"
+        inlet_params["part_to_generate"] = "inlet" if self.fluid_volume_module != "modular_filter_assembly" else "inlet_cap"
         inlet_path = os.path.join(output_dir, "inlet.stl")
         if not self.generate_stl(inlet_params, inlet_path, log_file, params_file):
             print("Failed to generate inlet cap.")
@@ -524,7 +525,7 @@ class ScadDriver:
 
         # 3. Outlet Cap
         outlet_params = fluid_params.copy()
-        outlet_params["part_to_generate"] = "outlet_cap"
+        outlet_params["part_to_generate"] = "outlet" if self.fluid_volume_module != "modular_filter_assembly" else "outlet_cap"
         outlet_path = os.path.join(output_dir, "outlet.stl")
         if not self.generate_stl(outlet_params, outlet_path, log_file, params_file):
             print("Failed to generate outlet cap.")

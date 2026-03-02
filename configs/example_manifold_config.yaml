@@ -1,6 +1,7 @@
 project_name: "Parametric_Cyclone_Filter"
 geometry:
   scad_file: "cyclone_filter_manifold.scad"
+  fluid_volume_module: "fluid_volume"
   parameters:
     cyclone_diameter: { type: "float", min: 50.0, max: 200.0, default: 100.0 }
     cylinder_height: { type: "float", min: 50.0, max: 200.0, default: 100.0 }

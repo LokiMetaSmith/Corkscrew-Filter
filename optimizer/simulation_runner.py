@@ -239,7 +239,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                         print("Warning: Could not find internal point using ray tracing. Attempting fallback calculation.")
 
                         # 3. Fallback to analytic calculation
-                        part = params.get("part_to_generate", "modular_filter_assembly")
+                        part = params.get("part_to_generate", scad_driver.fluid_volume_module)
                         if part == "modular_filter_assembly":
                             try:
                                 L = float(params.get("insert_length_mm", 50))
