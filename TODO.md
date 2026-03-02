@@ -1,6 +1,6 @@
 # Project To-Do List
 
-This file tracks planned enhancements and future work for the Corkscrew Filter project.
+This file tracks planned enhancements and future work for the OpenAuto-CFD framework and the Corkscrew Filter validation study.
 
 - [x] Add the ability to make different parameter configurations based on included config files.
 - [x] Refine the `CorkscrewSlitKnife` geometry to have a chamfered or ramped leading edge to improve separation efficiency.

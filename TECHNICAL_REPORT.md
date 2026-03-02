@@ -1,7 +1,7 @@
-# NASA Technical Memorandum: Analysis of Corkscrew Filter Autonomous Design Framework
+# NASA Technical Memorandum: Analysis of OpenAuto-CFD via Corkscrew Filter Validation Study
 
 **Date:** February 25, 2026
-**Subject:** Technical Evaluation of the Parametric Corkscrew Filter Repository
+**Subject:** Technical Evaluation of the OpenAuto-CFD Framework and Parametric Corkscrew Filter Case Study
 **Target Audience:** Technical Review Board, Open Source Community
 **Author:** Lawrence Kincheloe
 
@@ -9,13 +9,13 @@
 
 ## Abstract
 
-This report provides a comprehensive technical analysis of the "Corkscrew Filter" repository, a software-defined engineering project capable of autonomously designing, simulating, and optimizing inertial filtration devices. The system integrates three distinct technical domains: parametric Computer-Aided Design (CAD) using OpenSCAD (via WebAssembly), Computational Fluid Dynamics (CFD) using OpenFOAM, and Generative Artificial Intelligence (AI) using Large Language Models (LLMs). This evaluation focuses on the software architecture, physics simulation fidelity, and the efficacy of the agentic control loop. The analysis confirms the existence of a functional "Hardware-in-the-Loop" simulation pipeline where an AI agent iteratively modifies geometry based on physics feedback.
+This report provides a comprehensive technical analysis of the "OpenAuto-CFD" (Universal Configuration-Driven CFD Optimizer) repository, a software-defined engineering framework capable of autonomously designing, simulating, and optimizing complex fluid dynamics devices. To validate the system, this analysis evaluates the optimization of a "Corkscrew Filter", a parametric inertial filtration device. The system integrates three distinct technical domains: parametric Computer-Aided Design (CAD) using OpenSCAD (via WebAssembly), Computational Fluid Dynamics (CFD) using OpenFOAM, and Generative Artificial Intelligence (AI) using Large Language Models (LLMs). This evaluation focuses on the software architecture, physics simulation fidelity, and the efficacy of the agentic control loop. The analysis confirms the existence of a functional "Hardware-in-the-Loop" simulation pipeline where an AI agent iteratively modifies geometry based on physics feedback.
 
 ## 1. Introduction
 
-The objective of the Corkscrew Filter project is to develop a modular, high-efficiency inertial filter system using a helical (corkscrew) geometry. The primary engineering challenge in inertial filtration is balancing **separation efficiency** (maximizing the removal of particulates) against **energy consumption** (minimizing pressure drop, $$\Delta P$$).
+The objective of the OpenAuto-CFD framework is to provide an accessible, universal architecture for configuration-driven CFD optimization. To demonstrate its capability, this report focuses on its application to the Corkscrew Filter project—developing a modular, high-efficiency inertial filter system using a helical (corkscrew) geometry. The primary engineering challenge in inertial filtration is balancing **separation efficiency** (maximizing the removal of particulates) against **energy consumption** (minimizing pressure drop, $$\Delta P$$).
 
-Traditional design methodologies rely on manual iteration and empirical testing. This project implements an **Inverse Design** methodology, where a central software controller generates geometry, validates it through virtual wind tunnel testing (CFD), and employs an AI agent to determine the optimal parameters for the subsequent iteration. Additionally, the integration of WebAssembly-based compilation enhances portability, allowing the system to operate in diverse computing environments.
+Traditional design methodologies rely on manual iteration and empirical testing. This framework implements an **Inverse Design** methodology, where a central software controller generates geometry based on universal YAML configurations, validates it through virtual wind tunnel testing (CFD), and employs an AI agent to determine the optimal parameters for the subsequent iteration. Additionally, the integration of WebAssembly-based compilation enhances portability, allowing the system to operate in diverse computing environments.
 
 ## 2. Governing Physics and Theoretical Basis
 
@@ -284,7 +284,7 @@ By using three chambers in series, the system can achieve the same "clean" outpu
 
 ## 8. Conclusion and Recommendations
 
-The Corkscrew Filter repository demonstrates a high Technology Readiness Level (TRL) for an automated design framework. It successfully bridges the gap between parametric CAD and high-fidelity CFD using modern AI orchestration.
+The OpenAuto-CFD framework, as demonstrated by the Corkscrew Filter case study, exhibits a high Technology Readiness Level (TRL) for an automated design framework. It successfully bridges the gap between parametric CAD and high-fidelity CFD using modern AI orchestration.
 
 ### 8.1. Technical Recommendations for Improvement
 1.  **Convergence Criteria:** The `FoamDriver` currently runs for a fixed number of iterations. Implementing a residual-based stopping criterion (e.g., stop when residuals < $$10^{-4}$$) would optimize computational resource usage.

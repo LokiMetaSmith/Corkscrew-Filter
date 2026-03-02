@@ -15,12 +15,14 @@
 \maketitle
 
 \begin{abstract}
-As humanity prepares for sustained lunar presence, the mitigation of abrasive, electrostatic lunar regolith poses a critical challenge to Environmental Control and Life Support Systems (ECLSS). Traditional barrier filtration methods are prone to rapid clogging in such environments. This paper presents a novel "Software-Defined Engineering" framework for the autonomous design and optimization of helical inertial separators ("corkscrew filters"). By integrating parametric Computer-Aided Design (OpenSCAD), Computational Fluid Dynamics (OpenFOAM), and Generative Artificial Intelligence (LLM), the system performs an automated search of the high-dimensional design space. We demonstrate that this inverse design methodology can effectively navigate the complex fluid dynamic regime defined by Reynolds ($Re$), Dean ($De$), and Stokes ($Stk$) numbers. Experimental validation confirms the theoretical predictions, highlighting the critical dependence of separation efficiency on inlet velocity and the generation of stable Dean vortices.
+As humanity prepares for sustained lunar presence, the mitigation of abrasive, electrostatic lunar regolith poses a critical challenge to Environmental Control and Life Support Systems (ECLSS). Traditional barrier filtration methods are prone to rapid clogging in such environments. This paper presents the OpenAuto-CFD "Software-Defined Engineering" framework for the autonomous design and optimization of fluid dynamics components, and applies it to helical inertial separators ("corkscrew filters"). By integrating parametric Computer-Aided Design (OpenSCAD), Computational Fluid Dynamics (OpenFOAM), and Generative Artificial Intelligence (LLM), the OpenAuto-CFD system performs an automated search of the high-dimensional design space. We demonstrate that this inverse design methodology can effectively navigate the complex fluid dynamic regime defined by Reynolds ($Re$), Dean ($De$), and Stokes ($Stk$) numbers. Experimental validation confirms the theoretical predictions, highlighting the critical dependence of separation efficiency on inlet velocity and the generation of stable Dean vortices.
 \end{abstract}
 
 \section{Introduction}
 
 The Artemis program and the push for a permanent lunar outpost necessitate robust life support technologies capable of operating indefinitely with minimal maintenance. A primary failure mode for current ECLSS hardware is particulate loading. Lunar regolith, characterized by its jagged morphology and electrostatic adhesion, rapidly saturates standard High-Efficiency Particulate Air (HEPA) filters \cite{ref1}.
+
+The OpenAuto-CFD framework is a Universal Configuration-Driven CFD Optimizer introduced to accelerate the development of complex fluidic systems. By providing an accessible architecture for automated design exploration, it allows engineers to offload the iterative CAD/CFD loop to AI agents. In this paper, we leverage OpenAuto-CFD to optimize a parametric corkscrew filter.
 
 Inertial filtration offers a regenerative alternative. By utilizing centrifugal forces to separate particulates from the gas stream, these devices can theoretically operate without clogging. However, the design of such systems—specifically helical channel separators—involves complex trade-offs between separation efficiency and pressure drop ($\Delta P$). The fluid dynamics are governed by secondary flows (Dean vortices) that are highly sensitive to geometric parameters such as helix pitch, radius of curvature, and cross-sectional profile.
 
@@ -112,7 +114,7 @@ The LLM-based agent, however, demonstrates the capacity to "jump" across the sea
 
 \section{Conclusion}
 
-The Corkscrew Filter project demonstrates that Software-Defined Engineering can accelerate the development of complex space hardware. By coupling parametric design with physics-based reasoning, we can explore the fluid dynamic state space more effectively than manual iteration. The theoretical analysis confirms that helical inertial filtration is a viable solution for lunar dust mitigation, provided the system is designed to operate above the critical Reynolds and Dean number thresholds identified in this study.
+The application of the OpenAuto-CFD framework to the Corkscrew Filter project demonstrates that Software-Defined Engineering can accelerate the development of complex space hardware. By coupling parametric design with physics-based reasoning, we can explore the fluid dynamic state space more effectively than manual iteration. The theoretical analysis confirms that helical inertial filtration is a viable solution for lunar dust mitigation, provided the system is designed to operate above the critical Reynolds and Dean number thresholds identified in this study.
 
 \begin{thebibliography}{9}
 \bibitem{ref1}
