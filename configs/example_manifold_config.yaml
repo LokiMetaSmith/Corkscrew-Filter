@@ -1,37 +1,41 @@
-# example_manifold_config.yaml
-project_name: "Parametric_Exhaust_Manifold"
+project_name: "Parametric_Cyclone_Filter"
 geometry:
-  scad_file: "manifold.scad"
-  fluid_volume_module: "generate_cfd_domain"
+  scad_file: "cyclone_filter_manifold.scad"
   parameters:
-    inlet_diameter: { type: "float", min: 10.0, max: 50.0, default: 25.0 }
-    branch_angle: { type: "float", min: 15.0, max: 90.0, default: 45.0 }
+    cyclone_diameter: { type: "float", min: 50.0, max: 200.0, default: 100.0 }
+    cylinder_height: { type: "float", min: 50.0, max: 200.0, default: 100.0 }
+    cone_height: { type: "float", min: 100.0, max: 300.0, default: 150.0 }
+    inlet_width: { type: "float", min: 10.0, max: 50.0, default: 25.0 }
+    inlet_height: { type: "float", min: 20.0, max: 100.0, default: 50.0 }
+    vortex_finder_diameter: { type: "float", min: 20.0, max: 80.0, default: 50.0 }
+    vortex_finder_length: { type: "float", min: 20.0, max: 150.0, default: 75.0 }
+    dust_outlet_diameter: { type: "float", min: 10.0, max: 50.0, default: 25.0 }
 
 physics:
-  solver: "simpleFoam"
-  fluid: "air" # Maps to a library of transportProperties
+  solver: "icoUncoupledKinematicParcelFoam" # For particle tracking
+  fluid: "air"
+  particle_velocity: "5.0" # Maps to the injected particle speed and inlet air speed
   boundaries:
     inlet:
       type: "patch"
-      U: "fixedValue uniform (10 0 0)"
-    outlet_1:
+      U: "fixedValue uniform (-5 0 0)" # Velocity towards inside of the cyclone tangentially
+    clean_outlet:
       type: "patch"
       p: "fixedValue uniform 0"
-    outlet_2:
+    dust_outlet:
       type: "patch"
       p: "fixedValue uniform 0"
 
 optimization:
-  target: "minimize"
-  objective_function: "delta_p_total + 10 * variance(mass_flux_outlets)"
-  description: "Minimize flow separation in the exhaust branches and ensure equal mass flux distribution across outlets."
+  target: "maximize"
+  objective_function: "separation_efficiency - (0.001 * required_pressure)" # maximize efficiency while minimizing pressure drop
+  description: "Maximize particle capture efficiency at the dust outlet while minimizing the pressure drop between the inlet and clean outlet."
+  constraints:
+    - "required_pressure < 500" # Max allowed pressure drop
   extractors:
     - type: "surfaceFieldValue"
       function_name: "inletPressure"
       metric_name: "p_in"
     - type: "surfaceFieldValue"
-      function_name: "outletPressure1"
-      metric_name: "p_out1"
-    - type: "surfaceFieldValue"
-      function_name: "outletPressure2"
-      metric_name: "p_out2"
+      function_name: "outletPressure"
+      metric_name: "p_out"
