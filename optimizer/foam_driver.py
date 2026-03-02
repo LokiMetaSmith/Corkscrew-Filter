@@ -1315,21 +1315,8 @@ cloudFunctions
         if not self.run_command(["surfaceFeatureExtract"], log_file=log_file, description="Meshing (surfaceFeatureExtract)"): return False
 
         if not self.run_command(["snappyHexMesh", "-overwrite"], log_file=log_file, description="Meshing (snappyHexMesh)"):
-            # Fallback Loop
-            if add_layers:
-                print("Warning: Meshing failed with layers enabled. Retrying with layers disabled (Auto-Fallback)...")
-                # Need to re-run blockMesh to reset the corrupted polyMesh from the failed snappyHexMesh run
-                if not self.run_command(["blockMesh"], log_file=log_file, description="Meshing (blockMesh - Fallback)"): return False
-
-                # Regenerate config with layers=False
-                if using_assets:
-                    self._generate_snappyHexMeshDict(stl_assets, add_layers=False)
-                    if not self.run_command(["snappyHexMesh", "-overwrite"], log_file=log_file, description="Meshing (snappyHexMesh - Fallback)"):
-                        return False
-                else:
-                    return False # Cannot regenerate without assets
-            else:
-                return False
+            print("Error: Meshing failed. Boundary layers are critical, design rejected.")
+            return False
 
         # Step 2: Create Patches (Bin faces only if using_assets)
         if not self.run_command(["topoSet"], log_file=log_file, description="Meshing (topoSet)"): return False
