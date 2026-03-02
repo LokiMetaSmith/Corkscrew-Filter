@@ -1,6 +1,6 @@
 # Bill of Materials
 
-This document lists the required components to build the Corkscrew Filter filter.
+This document lists the required components to build the Corkscrew Filter used in the OpenAuto-CFD validation study.
 
 ## Off-the-Shelf Components
 

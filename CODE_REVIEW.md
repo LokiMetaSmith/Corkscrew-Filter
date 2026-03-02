@@ -1,6 +1,6 @@
 # Code Review & Optimization Plan
 
-This document summarizes the findings from a comprehensive review of the Corkscrew Filter project, focusing specifically on OpenFOAM CFD stability, OpenSCAD geometry generation, and the AI-driven optimization loop. It also outlines a detailed execution plan to address the identified issues.
+This document summarizes the findings from a comprehensive review of the OpenAuto-CFD Framework (specifically focusing on the Corkscrew Filter validation study). It addresses OpenFOAM CFD stability, OpenSCAD geometry generation, and the AI-driven optimization loop. It also outlines a detailed execution plan to resolve the identified issues.
 
 ## 1. Code Review Summary
 
