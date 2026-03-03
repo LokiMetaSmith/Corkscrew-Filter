@@ -91,13 +91,20 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                 # 1.1 Validation (in mm, before scaling)
                 print("Validating Geometry...")
                 validator = Validator(verbose=verbose)
+                boundaries_config = foam_driver.config.get("physics", {}).get("boundaries", {})
                 val_res = validator.validate_assembly(
                     cfd_assets["fluid"],
                     cfd_assets["inlet"],
                     cfd_assets["outlet"],
                     cfd_assets["wall"],
-                    tolerance=1.0 # 1mm tolerance
+                    tolerance=1.0, # 1mm tolerance
+                    boundaries_config=boundaries_config
                 )
+
+                # Print any warnings from validation
+                for msg in val_res.get('messages', []):
+                    if msg.startswith("Warning:"):
+                        print(msg)
 
                 if not val_res["valid"]:
                     print(f"Geometry Validation Failed: {val_res['messages']}")
