@@ -1039,11 +1039,8 @@ solution
     {
         rho             cell;
         U               cellPoint;
-        mu              cell;
-{f"        k               cellPoint;" if turbulence != "laminar" and turbulence != "kOmegaSST_disabled" else ""}
-{f"        epsilon         cellPoint;" if turbulence != "laminar" and turbulence != "kOmegaSST_disabled" else ""}
-{f"        omega           cellPoint;" if turbulence == "kOmegaSST" else ""}
-    }}
+        mu              cell;{{ turb_interpolation }}
+    }
 
     integrationSchemes
     {
@@ -1099,7 +1096,7 @@ subModels
         {% endfor %}
     }
 
-    dispersionModel {"stochasticDispersionRAS" if turbulence != "laminar" and turbulence != "kOmegaSST_disabled" else "none"};//gradientDispersionRAS;
+    dispersionModel {{ disp_model }};//gradientDispersionRAS;
 
     patchInteractionModel localInteraction;
 
@@ -1209,13 +1206,37 @@ cloudFunctions
             for i in range(num_bins):
                 bins.append({"index": i+1})
 
+        # --- NEW: Dynamic Turbulence Detection ---
+        # Read turbulenceProperties to see if we are running laminar or turbulent
+        is_laminar = False
+        turb_path = os.path.join(self.case_dir, "constant", "turbulenceProperties")
+        if os.path.exists(turb_path):
+            with open(turb_path, 'r') as f:
+                content = f.read()
+                if "simulationType laminar;" in content or "simulationType  laminar;" in content:
+                    is_laminar = True
+
+        # Build the conditional strings
+        if is_laminar:
+            turb_interpolation = ""
+            disp_model = "none"
+        else:
+            turb_interpolation = """
+        k               cellPoint;
+        epsilon         cellPoint;
+        omega           cellPoint;"""
+            disp_model = "stochasticDispersionRAS"
+        # -----------------------------------------
+
         template = jinja2.Template(template_str)
         content = template.render(
             rho0=rho0_val,
             injections=injections,
             bins=bins,
             parcels_per_sec=parcels_per_sec,
-            fluid_velocity_z=fluid_velocity_z
+            fluid_velocity_z=fluid_velocity_z,
+            turb_interpolation=turb_interpolation,
+            disp_model=disp_model
         )
 
         with open(os.path.join(self.case_dir, "constant", "kinematicCloudProperties"), 'w') as f:
