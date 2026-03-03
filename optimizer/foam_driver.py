@@ -647,7 +647,7 @@ method          scotch;
 
     def _check_boundary_patches(self):
         """
-        Checks if inlet and outlet patches exist and have faces.
+        Checks if the required patches exist and have faces.
         Returns True if valid, False otherwise.
         """
         boundary_file = os.path.join(self.case_dir, "constant", "polyMesh", "boundary")
@@ -658,7 +658,16 @@ method          scotch;
         with open(boundary_file, 'r') as f:
             content = f.read()
 
-        for patch in ["corkscrew", "inlet", "outlet"]:
+        patches_to_check = ["corkscrew"]
+        physics_boundaries = self.config.get('physics', {}).get('boundaries', {})
+        if physics_boundaries:
+            for name, opts in physics_boundaries.items():
+                if opts.get("type") == "patch":
+                    patches_to_check.append(name)
+        else:
+            patches_to_check.extend(["inlet", "outlet"])
+
+        for patch in patches_to_check:
             # Match: patch_name { ... nFaces X; ... }
             # Use DOTALL to match across lines
             # Pattern: patch \s* \{ .*? nFaces \s+ (\d+) ;
@@ -685,7 +694,7 @@ method          scotch;
         Generates system/topoSetDict using Jinja2.
         skip_io: if True, skips generation of inlet/outlet face sets.
         """
-        template_str = """/*--------------------------------*- C++ -*----------------------------------*\
+        template_str = """/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
 | \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
 |  \    /   O peration     | Version:  v2512                                 |
@@ -712,39 +721,24 @@ actions
         patch   corkscrew;
     }
     {% if not skip_io %}
-    // 2. Select Inlet Faces (Bottom, Normal 0 0 -1)
+    {% for b in dynamic_boundaries %}
+    // Select {{ b.name }} Faces
     {
-        name    inletFaces;
+        name    {{ b.name }}Faces;
         type    faceSet;
         action  new;
         source  normalToFace;
-        normal  (0 0 -1);
+        normal  {{ b.normal }};
         cos     0.8; // Tolerance
     }
     {
-        name    inletFaces;
+        name    {{ b.name }}Faces;
         type    faceSet;
         action  subset;
         source  faceToFace;
         set     corkscrewFaces;
     }
-
-    // 3. Select Outlet Faces (Top, Normal 0 0 1)
-    {
-        name    outletFaces;
-        type    faceSet;
-        action  new;
-        source  normalToFace;
-        normal  (0 0 1);
-        cos     0.8;
-    }
-    {
-        name    outletFaces;
-        type    faceSet;
-        action  subset;
-        source  faceToFace;
-        set     corkscrewFaces;
-    }
+    {% endfor %}
     {% endif %}
 
     {% if bins %}
@@ -766,20 +760,15 @@ actions
         set     corkscrewFaces;
     }
     {% if not skip_io %}
+    {% for b in dynamic_boundaries %}
     {
         name    bin_{{ bin.index }}_faces;
         type    faceSet;
         action  subtract;
         source  faceToFace;
-        set     inletFaces;
+        set     {{ b.name }}Faces;
     }
-    {
-        name    bin_{{ bin.index }}_faces;
-        type    faceSet;
-        action  subtract;
-        source  faceToFace;
-        set     outletFaces;
-    }
+    {% endfor %}
     {% endif %}
     {% endfor %}
     {% endif %}
@@ -800,8 +789,31 @@ actions
                 z_max = z_start + (i + 1) * bin_h
                 bins.append({"index": i+1, "z_min": z_min, "z_max": z_max})
 
+        dynamic_boundaries = []
+        physics_boundaries = self.config.get('physics', {}).get('boundaries', {})
+        for name, opts in physics_boundaries.items():
+            if opts.get("type") == "patch":
+                align = opts.get("alignment")
+                # Infer normal from alignment or name
+                if align == "vertical" and "in" in name.lower():
+                    normal = "(0 0 -1)"
+                elif align == "horizontal":
+                    normal = "(0 0 1)"
+                elif "out" in name.lower():
+                    normal = "(0 0 1)"
+                else:
+                    normal = "(0 0 -1)" # Default fallback
+                dynamic_boundaries.append({"name": name, "normal": normal})
+
+        # Fallback if config is missing
+        if not dynamic_boundaries:
+            dynamic_boundaries = [
+                {"name": "inlet", "normal": "(0 0 -1)"},
+                {"name": "outlet", "normal": "(0 0 1)"}
+            ]
+
         template = jinja2.Template(template_str)
-        content = template.render(skip_io=skip_io, bins=bins)
+        content = template.render(skip_io=skip_io, bins=bins, dynamic_boundaries=dynamic_boundaries)
 
         with open(os.path.join(self.case_dir, "system", "topoSetDict"), 'w') as f:
             f.write(content)
@@ -831,26 +843,18 @@ pointSync false;
 patches
 (
     {% if not skip_io %}
+    {% for b in dynamic_boundaries %}
     {
-        name inlet;
+        name {{ b.name }};
         patchInfo
         {
             type patch;
-            inGroups (inletGroup);
+            inGroups ({{ b.name }}Group);
         }
         constructFrom set;
-        set inletFaces;
+        set {{ b.name }}Faces;
     }
-    {
-        name outlet;
-        patchInfo
-        {
-            type patch;
-            inGroups (outletGroup);
-        }
-        constructFrom set;
-        set outletFaces;
-    }
+    {% endfor %}
     {% endif %}
     {% if bins %}
     {% for bin in bins %}
@@ -876,8 +880,21 @@ patches
             for i in range(num_bins):
                 bins.append({"index": i+1})
 
+        dynamic_boundaries = []
+        physics_boundaries = self.config.get('physics', {}).get('boundaries', {})
+        for name, opts in physics_boundaries.items():
+            if opts.get("type") == "patch":
+                dynamic_boundaries.append({"name": name})
+
+        # Fallback if config is missing
+        if not dynamic_boundaries:
+            dynamic_boundaries = [
+                {"name": "inlet"},
+                {"name": "outlet"}
+            ]
+
         template = jinja2.Template(template_str)
-        content = template.render(skip_io=skip_io, bins=bins)
+        content = template.render(skip_io=skip_io, bins=bins, dynamic_boundaries=dynamic_boundaries)
 
         with open(os.path.join(self.case_dir, "system", "createPatchDict"), 'w') as f:
             f.write(content)
@@ -1283,18 +1300,25 @@ cloudFunctions
         """
         if not stl_assets: return
 
+        physics_boundaries = self.config.get('physics', {}).get('boundaries', {})
+
         geometries = []
         for key, filename in stl_assets.items():
             patch_name = "corkscrew"
-            if key == "inlet": patch_name = "inlet"
-            elif key == "outlet": patch_name = "outlet"
-            elif key == "wall": patch_name = "corkscrew"
+            if key in physics_boundaries:
+                patch_name = key
+            elif key == "wall":
+                patch_name = "corkscrew"
+            elif key == "inlet":
+                patch_name = "inlet"
+            elif key == "outlet":
+                patch_name = "outlet"
 
             geom = {
                 "filename": filename,
                 "name": patch_name,
                 "level": "(1 1)",
-                "patch_info": key in ["inlet", "outlet"]
+                "patch_info": key in physics_boundaries or key in ["inlet", "outlet"]
             }
             geometries.append(geom)
 
@@ -1713,13 +1737,6 @@ boundaryField
             self._update_controlDict_for_particles()
             self._switch_fvSchemes_to_transient()
             # Turbulence is KEPT ON for stochasticDispersionRAS
-
-            # Generate wallDist for turbulence models (prevents yWall crash)
-            self.run_command(["postProcess", "-func", "wallDist"], log_file=log_file, description="Generating wallDist")
-
-            # Verify carrier field (U) - helps debug SIGFPE if U is zero/NaN
-            print("Verifying carrier field (U) before particle tracking...")
-            self.run_command(["postProcess", "-func", "minMax(U)"], log_file=log_file, description="Verifying Field U")
 
             # 4. Run Solver
             return self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking")
