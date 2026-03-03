@@ -20,12 +20,15 @@ physics:
     inlet:
       type: "patch"
       U: "fixedValue uniform (-5 0 0)" # Velocity towards inside of the cyclone tangentially
+      alignment: "vertical"
     clean_outlet:
       type: "patch"
       p: "fixedValue uniform 0"
+      alignment: "horizontal"
     dust_outlet:
       type: "patch"
       p: "fixedValue uniform 0"
+      alignment: "vertical"
 
 optimization:
   target: "maximize"

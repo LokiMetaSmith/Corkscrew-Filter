@@ -62,13 +62,17 @@ class Validator:
 
         return valid, messages
 
-    def validate_assembly(self, fluid_path, inlet_path, outlet_path, wall_path, tolerance=1.0):
+    def validate_assembly(self, fluid_path, inlet_path, outlet_path, wall_path, tolerance=1.0, boundaries_config=None):
         """
         Validates the assembly of CFD components.
         Checks for existence, validity, and basic alignment.
         tolerance: max deviation in mesh units (default 1.0)
+        boundaries_config: dictionary with alignment definitions from yaml config.
         """
         results = {"valid": True, "messages": []}
+
+        if boundaries_config is None:
+            boundaries_config = {}
 
         # 1. Validate individual components
         # Note: Inlet/Outlet caps are small, might have tiny volume, but should be watertight cylinders.
@@ -110,23 +114,52 @@ class Validator:
 
             tol = tolerance
 
-            # Check A: Inlet near Fluid Min Z
-            # Inlet cap (center) should be close to Fluid min Z
-            i_center_z = (i_min[2] + i_max[2]) / 2
-            if abs(i_center_z - f_min[2]) > tol and abs(i_center_z - f_max[2]) > tol:
-                # Note: Inlet might be at Max Z if coordinate system is flipped, but usually Min Z.
-                # Actually, in ModularFilterAssembly, Z=0 is center. Min Z is bottom.
-                if not (i_max[2] >= f_min[2] - tol and i_min[2] <= f_max[2] + tol):
-                     results["valid"] = False
-                     results["messages"].append(f"Inlet is not vertically aligned with Fluid. Inlet Z: {i_min[2]:.2f}-{i_max[2]:.2f}, Fluid Z: {f_min[2]:.2f}-{f_max[2]:.2f}")
+            def check_alignment(component_name, c_min, c_max, f_min, f_max, config_key):
+                boundary_conf = boundaries_config.get(config_key, {})
+                alignment = boundary_conf.get("alignment")
 
-            # Check B: Outlet near Fluid Max Z (or Min Z if swapped)
-            o_center_z = (o_min[2] + o_max[2]) / 2
-            # Verify outlet is at opposite end of inlet?
-            # Or just check if it touches the bounding box.
-            if not (o_max[2] >= f_min[2] - tol and o_min[2] <= f_max[2] + tol):
-                 results["valid"] = False
-                 results["messages"].append(f"Outlet is not vertically aligned with Fluid. Outlet Z: {o_min[2]:.2f}-{o_max[2]:.2f}")
+                if not alignment:
+                    results["messages"].append(f"Warning: Alignment not defined in config for {config_key}. Defaulting to 'vertical'.")
+                    alignment = "vertical"
+
+                if alignment == "any":
+                    return True, ""
+
+                if alignment == "vertical":
+                    if not (c_max[2] >= f_min[2] - tol and c_min[2] <= f_max[2] + tol):
+                        return False, f"{component_name} is not vertically aligned with Fluid. {component_name} Z: {c_min[2]:.2f}-{c_max[2]:.2f}, Fluid Z: {f_min[2]:.2f}-{f_max[2]:.2f}"
+                elif alignment == "horizontal":
+                    # For horizontal alignment, check if it intersects with fluid in X or Y bounds
+                    # At least one of X or Y should overlap
+                    x_overlap = (c_max[0] >= f_min[0] - tol and c_min[0] <= f_max[0] + tol)
+                    y_overlap = (c_max[1] >= f_min[1] - tol and c_min[1] <= f_max[1] + tol)
+                    if not (x_overlap or y_overlap):
+                        return False, f"{component_name} is not horizontally aligned with Fluid. {component_name} X: {c_min[0]:.2f}-{c_max[0]:.2f}, Y: {c_min[1]:.2f}-{c_max[1]:.2f}"
+                else:
+                    results["messages"].append(f"Warning: Unknown alignment type '{alignment}' for {config_key}. Defaulting to 'vertical'.")
+                    if not (c_max[2] >= f_min[2] - tol and c_min[2] <= f_max[2] + tol):
+                        return False, f"{component_name} is not vertically aligned with Fluid."
+
+                return True, ""
+
+            # Check A: Inlet Alignment
+            inlet_config_key = "inlet"
+            is_aligned, msg = check_alignment("Inlet", i_min, i_max, f_min, f_max, inlet_config_key)
+            if not is_aligned:
+                results["valid"] = False
+                results["messages"].append(msg)
+
+            # Check B: Outlet Alignment
+            # Note: The outlet STL might represent the clean outlet or dust outlet depending on the setup.
+            # Assuming it is the clean_outlet for now, but in reality we might have multiple.
+            # Usually 'outlet.stl' corresponds to 'clean_outlet' in manifold config.
+            # Or if it's the corkscrew filter, it corresponds to 'outlet'
+            # Let's check 'clean_outlet' first, fallback to 'outlet'
+            outlet_config_key = "clean_outlet" if "clean_outlet" in boundaries_config else "outlet"
+            is_aligned, msg = check_alignment("Outlet", o_min, o_max, f_min, f_max, outlet_config_key)
+            if not is_aligned:
+                results["valid"] = False
+                results["messages"].append(msg)
 
             # Check C: Wall encloses Fluid (XY)
             # Wall bounds should be >= Fluid bounds in XY
