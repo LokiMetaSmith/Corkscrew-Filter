@@ -60,3 +60,18 @@ optimization:
     - type: "surfaceFieldValue"
       function_name: "outletPressure"
       metric_name: "p_out"
+
+cfd_settings:
+  turbulence_model: "RNGkEpsilon"
+  initial_fields:
+    k:
+      internalField: "uniform 0.375"
+      wallFunction: "kqRWallFunction"
+    epsilon:
+      internalField: "uniform 14.855"
+      wallFunction: "epsilonWallFunction"
+  relaxation_factors:
+    p: 0.2
+    U: 0.5
+    k: 0.5
+    epsilon: 0.5
