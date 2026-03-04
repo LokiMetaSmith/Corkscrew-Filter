@@ -35,7 +35,7 @@ boundaryField
     walls
     {
         type            nutkRoughWallFunction;
-        Ks              uniform 0.0002;  // 0.2mm layer height roughness!
+        Ks              uniform 0.00002;  // 0.02mm layer height roughness (reduced for coarse mesh stability)
         Cs              uniform 0.5;     // Standard roughness constant
         value           uniform 0;
     }
@@ -43,7 +43,7 @@ boundaryField
     corkscrew
     {
         type            nutkRoughWallFunction;
-        Ks              uniform 0.0002;  // 0.2mm layer height roughness!
+        Ks              uniform 0.00002;  // 0.02mm layer height roughness (reduced for coarse mesh stability)
         Cs              uniform 0.5;
         value           uniform 0;
     }
