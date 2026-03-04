@@ -310,42 +310,88 @@ class FoamDriver:
                 continue
 
             start_idx = match.end()
-            end_idx = content.rfind('}')
+
+            # Find the matching closing brace for boundaryField
+            brace_level = 1
+            end_idx = start_idx
+            while brace_level > 0 and end_idx < len(content):
+                if content[end_idx] == '{':
+                    brace_level += 1
+                elif content[end_idx] == '}':
+                    brace_level -= 1
+                end_idx += 1
+
+            end_idx -= 1 # adjust to point to the closing brace
 
             if end_idx <= start_idx:
                 continue
 
-            # Build the new boundary field block based on config
-            new_boundary_field = ""
-            for patch_name, patch_config in boundaries.items():
-                new_boundary_field += f"\n    {patch_name}\n    {{\n"
+            inner_text = content[start_idx:end_idx]
 
+            # Parse existing blocks
+            blocks = {}
+            tokens = re.finditer(r'([a-zA-Z0-9_"\.\*\-]+)|\{|\}', inner_text)
+            brace_level = 0
+            last_word = None
+            current_name = None
+            start = 0
+
+            for m in tokens:
+                val = m.group(0)
+                if val == '{':
+                    if brace_level == 0 and last_word:
+                        current_name = last_word.strip('"')
+                        start = m.end()
+                    brace_level += 1
+                elif val == '}':
+                    brace_level -= 1
+                    if brace_level == 0 and current_name:
+                        blocks[current_name] = inner_text[start:m.start()].strip()
+                        current_name = None
+                else:
+                    if brace_level == 0:
+                        last_word = val
+
+            # Modify/Add configured blocks
+            for patch_name, patch_config in boundaries.items():
+                new_block = ""
                 # Check if specific field configuration is provided
                 if field in patch_config:
                     field_val = patch_config[field]
                     if isinstance(field_val, str) and " " in field_val:
                         parts = field_val.split(maxsplit=1)
                         if len(parts) == 2:
-                            new_boundary_field += f"        type            {parts[0]};\n"
-                            new_boundary_field += f"        value           {parts[1]};\n"
+                            new_block += f"type            {parts[0]};\n"
+                            new_block += f"value           {parts[1]};\n"
                         else:
-                            new_boundary_field += f"        type            {field_val};\n"
+                            new_block += f"type            {field_val};\n"
                     else:
-                        new_boundary_field += f"        type            {field_val};\n"
+                        new_block += f"type            {field_val};\n"
                 else:
                     # Fallback defaults based on type
                     patch_type = patch_config.get('type')
                     if patch_type == 'wall':
                         if field == 'U':
-                            new_boundary_field += "        type            noSlip;\n"
+                            new_block += "type            noSlip;\n"
                         elif field == 'p':
-                            new_boundary_field += "        type            zeroGradient;\n"
+                            new_block += "type            zeroGradient;\n"
                     else:
-                        new_boundary_field += "        type            zeroGradient;\n"
+                        new_block += "type            zeroGradient;\n"
 
-                new_boundary_field += "    }\n"
+                blocks[patch_name] = new_block.strip()
 
-            # Reconstruct the file
+            # Reconstruct the inner boundary field block
+            new_boundary_field = "\n"
+            for patch_name, block_content in blocks.items():
+                # Handle quotes for catch-all
+                display_name = f'"{patch_name}"' if patch_name in ['.*', '.*'] else patch_name
+                new_boundary_field += f"    {display_name}\n    {{\n"
+                # preserve indentation
+                for line in block_content.split('\n'):
+                    if line.strip():
+                        new_boundary_field += f"        {line.strip()}\n"
+                new_boundary_field += "    }\n\n"
+
             new_content = content[:start_idx] + new_boundary_field + content[end_idx:]
 
             with open(file_path, 'w') as f:
