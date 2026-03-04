@@ -47,6 +47,19 @@ boundaryField
         Cs              uniform 0.5;
         value           uniform 0;
     }
+
+    clean_outlet
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+
+    dust_outlet
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+
 }
 
 // ************************************************************************* //

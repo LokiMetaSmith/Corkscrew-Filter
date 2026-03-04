@@ -23,7 +23,7 @@ boundaryField
     inlet
     {
         type            fixedValue;
-        value           uniform (0 0 5); // 5 m/s inlet velocity
+        value           uniform (-5 0 0);
     }
 
     outlet
@@ -40,6 +40,17 @@ boundaryField
     {
         type            noSlip;
     }
+
+    clean_outlet
+    {
+        type            zeroGradient;
+    }
+
+    dust_outlet
+    {
+        type            zeroGradient;
+    }
+
 }
 
 // ************************************************************************* //
