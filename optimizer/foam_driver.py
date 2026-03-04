@@ -278,13 +278,98 @@ class FoamDriver:
 
         # Setup Physics (Turbulence)
         # kOmegaSST fields (omega, k, nut, epsilon) are in 0.orig
+        cfd_settings = self.config.get('cfd_settings', {})
+        if cfd_settings and 'turbulence_model' in cfd_settings:
+            turbulence = cfd_settings['turbulence_model']
+
         self._apply_boundary_conditions(zero)
+        self._generate_turbulence_fields(zero, cfd_settings)
         self._update_turbulence_properties(turbulence)
         self._update_fvSchemes(turbulence)
-        self._update_fvSolution(turbulence)
+        self._update_fvSolution(turbulence, cfd_settings)
 
         # Add function objects to controlDict if not present
         self._inject_function_objects()
+
+
+    def _generate_turbulence_fields(self, zero_dir, cfd_settings):
+        """
+        Dynamically generates initial fields based on cfd_settings.
+        """
+        if not cfd_settings or 'initial_fields' not in cfd_settings:
+            return
+
+        initial_fields = cfd_settings['initial_fields']
+
+        allowed_fields = list(initial_fields.keys()) + ["U", "p", "nut", "nuTilda"]
+        for field_file in os.listdir(zero_dir):
+            if os.path.isfile(os.path.join(zero_dir, field_file)) and field_file not in allowed_fields:
+                os.remove(os.path.join(zero_dir, field_file))
+
+        for field_name, field_config in initial_fields.items():
+            field_path = os.path.join(zero_dir, field_name)
+
+            internal_field = field_config.get('internalField', 'uniform 0')
+            wall_function = field_config.get('wallFunction', 'zeroGradient')
+
+            dimensions = "[0 2 -2 0 0 0 0]"
+            if field_name == "epsilon":
+                dimensions = "[0 2 -3 0 0 0 0]"
+            elif field_name == "omega":
+                dimensions = "[0 0 -1 0 0 0 0]"
+            elif field_name == "nut":
+                dimensions = "[0 2 -1 0 0 0 0]"
+
+            header = f"""/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      {field_name};
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      {dimensions};
+
+internalField   {internal_field};
+
+boundaryField
+{{
+"""
+
+            physics = self.config.get('physics', {})
+            boundaries = physics.get('boundaries', {})
+
+            blocks = []
+
+            for patch_name, patch_info in boundaries.items():
+                patch_type = patch_info.get("type", "patch")
+                if patch_type == "wall":
+                    blocks.append(f"    {patch_name}\n    {{\n        type            {wall_function};\n        value           $internalField;\n    }}")
+                else:
+                    blocks.append(f"    {patch_name}\n    {{\n        type            zeroGradient;\n    }}")
+
+            blocks_str = "\n".join(blocks)
+            footer = "\n}\n"
+
+            blocks_str += f"""
+    ".*"
+    {{
+        type            {wall_function};
+        value           $internalField;
+    }}
+"""
+
+            with open(field_path, 'w') as f:
+                f.write(header + blocks_str + footer)
 
     def _apply_boundary_conditions(self, zero_dir):
         """
@@ -460,7 +545,7 @@ class FoamDriver:
             cleaned = os.linesep.join([s for s in content.splitlines() if s.strip()])
             f.write(cleaned + "\n")
 
-    def _update_fvSolution(self, turbulence):
+    def _update_fvSolution(self, turbulence, cfd_settings=None):
         fvSolution = os.path.join(self.case_dir, "system", "fvSolution")
         if not os.path.exists(fvSolution): return
 
@@ -482,6 +567,11 @@ class FoamDriver:
             content = re.sub(r"R\s+[\d\.]+;", "", content)
         elif turbulence == "kOmegaSST" or turbulence == "kOmegaSST_disabled":
             content = re.sub(r"R\s+[\d\.]+;", "", content)
+
+        if cfd_settings and 'relaxation_factors' in cfd_settings:
+            relax_factors = cfd_settings['relaxation_factors']
+            for factor_name, factor_value in relax_factors.items():
+                content = re.sub(rf"\b{factor_name}\s+[\d\.]+;", f"{factor_name}               {factor_value};", content)
 
         with open(fvSolution, 'w') as f:
             f.write(content)
