@@ -43,6 +43,19 @@ boundaryField
         type            epsilonWallFunction;
         value           uniform 14.8;
     }
+
+    clean_outlet
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+
+    dust_outlet
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+
 }
 
 // ************************************************************************* //

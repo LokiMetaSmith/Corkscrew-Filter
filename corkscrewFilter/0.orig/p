@@ -40,6 +40,19 @@ boundaryField
     {
         type            zeroGradient;
     }
+
+    clean_outlet
+    {
+        type            fixedValue;
+        value           uniform 0;
+    }
+
+    dust_outlet
+    {
+        type            fixedValue;
+        value           uniform 0;
+    }
+
 }
 
 // ************************************************************************* //

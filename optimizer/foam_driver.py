@@ -373,7 +373,7 @@ boundaryField
 
     def _apply_boundary_conditions(self, zero_dir):
         """
-        Applies dynamic boundary conditions from the YAML config to U and p files.
+        Applies dynamic boundary conditions from the YAML config to fields in 0.
         """
         physics = self.config.get('physics', {})
         boundaries = physics.get('boundaries', {})
@@ -381,9 +381,9 @@ boundaryField
         if not boundaries:
             return
 
-        for field in ['U', 'p']:
+        for field in os.listdir(zero_dir):
             file_path = os.path.join(zero_dir, field)
-            if not os.path.exists(file_path):
+            if not os.path.isfile(file_path):
                 continue
 
             with open(file_path, 'r') as f:
@@ -453,6 +453,11 @@ boundaryField
                     else:
                         new_block += f"type            {field_val};\n"
                 else:
+                    # If the field isn't in patch_config, AND it's not already in the file, we add a fallback.
+                    # If it IS already in the file, we DO NOT OVERWRITE it.
+                    if patch_name in blocks:
+                        continue
+
                     # Fallback defaults based on type
                     patch_type = patch_config.get('type')
                     if patch_type == 'wall':
@@ -460,8 +465,16 @@ boundaryField
                             new_block += "type            noSlip;\n"
                         elif field == 'p':
                             new_block += "type            zeroGradient;\n"
+                        elif field in ['k', 'epsilon', 'omega', 'nut']:
+                            # Should use calculated/zeroGradient if we don't know
+                            new_block += "type            calculated;\nvalue           uniform 0;\n"
+                        else:
+                            new_block += "type            calculated;\nvalue           uniform 0;\n"
                     else:
-                        new_block += "type            zeroGradient;\n"
+                        if field in ['U', 'p']:
+                            new_block += "type            zeroGradient;\n"
+                        else:
+                            new_block += "type            calculated;\nvalue           uniform 0;\n"
 
                 blocks[patch_name] = new_block.strip()
 
