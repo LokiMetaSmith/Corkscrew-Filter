@@ -354,6 +354,8 @@ boundaryField
                 patch_type = patch_info.get("type", "patch")
                 if patch_type == "wall":
                     blocks.append(f"    {patch_name}\n    {{\n        type            {wall_function};\n        value           $internalField;\n    }}")
+                elif "inlet" in patch_name.lower():
+                    blocks.append(f"    {patch_name}\n    {{\n        type            fixedValue;\n        value           $internalField;\n    }}")
                 else:
                     blocks.append(f"    {patch_name}\n    {{\n        type            zeroGradient;\n    }}")
 
