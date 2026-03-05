@@ -591,11 +591,46 @@ boundaryField
         with open(fvSolution, 'w') as f:
             f.write(content)
 
-    def _generate_decomposeParDict(self):
+    def _generate_decomposeParDict(self, num_processors=None, method="scotch"):
         """
         Generates system/decomposeParDict for parallel execution using Jinja2.
+        Supports 'scotch' and 'hierarchical' methods.
         """
-        template_str = """/*--------------------------------*- C++ -*----------------------------------*\\
+        if num_processors is None:
+            num_processors = self.num_processors
+
+        coeffs_block = ""
+        if method == "hierarchical":
+            # For hierarchical, we need to find 3 factors that multiply to num_processors
+            # A simple heuristic: try to balance x, y, z roughly equally, or x=y and z different.
+            # Here's a basic prime factorization to get 3 factors
+            def get_3_factors(n):
+                # Try to find x, y, z close to each other
+                best = (1, 1, n)
+                min_diff = n
+                for i in range(1, int(n**(1/3.0)) + 2):
+                    if n % i == 0:
+                        rem = n // i
+                        for j in range(1, int(rem**0.5) + 2):
+                            if rem % j == 0:
+                                k = rem // j
+                                diff = max(i, j, k) - min(i, j, k)
+                                if diff < min_diff:
+                                    min_diff = diff
+                                    best = (i, j, k)
+                return best
+
+            fx, fy, fz = get_3_factors(num_processors)
+            coeffs_block = f"""
+hierarchicalCoeffs
+{{
+    n           ({fx} {fy} {fz});
+    delta       0.001;
+    order       xyz;
+}}
+"""
+
+        template_str = f"""/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
 |  \\    /   O peration     | Version:  v2512                                 |
@@ -603,22 +638,22 @@ boundaryField
 |    \\/     M anipulation  |                                                 |
 \\*---------------------------------------------------------------------------*/
 FoamFile
-{
+{{
     version     2.0;
     format      ascii;
     class       dictionary;
     object      decomposeParDict;
-}
+}}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-numberOfSubdomains {{ num_processors }};
+numberOfSubdomains {{{{ num_processors }}}};
 
-method          scotch;
-
+method          {method};
+{coeffs_block}
 // ************************************************************************* //
 """
         template = jinja2.Template(template_str)
-        content = template.render(num_processors=self.num_processors)
+        content = template.render(num_processors=num_processors)
 
         with open(os.path.join(self.case_dir, "system", "decomposeParDict"), 'w') as f:
             f.write(content)
@@ -1526,6 +1561,10 @@ cloudFunctions
         Runs the meshing pipeline.
         stl_assets: dict of filenames {'fluid': '...', 'inlet': '...', ...}
         """
+        cfd_settings = self.config.get('cfd_settings', {})
+        mesh_procs = cfd_settings.get('mesh_processors', self.num_processors)
+        mesh_method = cfd_settings.get('mesh_decompose_method', 'hierarchical')
+
         # 1. Update snappyHexMeshDict if assets provided
         using_assets = False
         if stl_assets and isinstance(stl_assets, dict):
@@ -1533,7 +1572,6 @@ cloudFunctions
             using_assets = True
 
         # 2. Generate patch creation configs
-        # Pass using_assets flag to conditionally skip inlet/outlet creation
         self._generate_topoSetDict(bin_config, skip_io=False)
         self._generate_createPatchDict(bin_config, skip_io=False)
 
@@ -1542,17 +1580,52 @@ cloudFunctions
         if not self.run_command(["blockMesh"], log_file=log_file, description="Meshing (blockMesh)"): return False
 
         # For surfaceFeatureExtract, if using assets, we might need to update that dict too?
-        # Typically checks 'corkscrew_fluid.stl'. If fluid asset has different name, might fail.
-        # But simulation_runner handles fluid name.
         if not self.run_command(["surfaceFeatureExtract"], log_file=log_file, description="Meshing (surfaceFeatureExtract)"): return False
 
-        if not self.run_command(["snappyHexMesh", "-overwrite"], log_file=log_file, description="Meshing (snappyHexMesh)"):
-            print("Error: Meshing failed. Boundary layers are critical, design rejected.")
-            return False
+        if mesh_procs > 1:
+            self._generate_decomposeParDict(num_processors=mesh_procs, method=mesh_method)
 
-        # Step 2: Create Patches (Bin faces only if using_assets)
-        if not self.run_command(["topoSet"], log_file=log_file, description="Meshing (topoSet)"): return False
-        if not self.run_command(["createPatch", "-overwrite"], log_file=log_file, description="Meshing (createPatch)"): return False
+            # Temporarily hide 0 dir so decomposePar doesn't crash due to missing patches from blockMesh
+            zero_dir = os.path.join(self.case_dir, "0")
+            zero_bak = os.path.join(self.case_dir, "0.bak")
+            if os.path.exists(zero_dir):
+                shutil.move(zero_dir, zero_bak)
+
+            success_decompose = self.run_command(["decomposePar", "-force"], log_file=log_file, description="Decomposing for Meshing")
+
+            # Restore 0 dir
+            if os.path.exists(zero_bak):
+                shutil.move(zero_bak, zero_dir)
+
+            if not success_decompose: return False
+
+            cmd = ["mpirun", "-np", str(mesh_procs), "snappyHexMesh", "-overwrite", "-parallel"]
+            if not self.run_command(cmd, log_file=log_file, description="Meshing (snappyHexMesh Parallel)"):
+                print("Error: Meshing failed. Boundary layers are critical, design rejected.")
+                return False
+
+            # Run patch creation in parallel
+            topo_cmd = ["mpirun", "-np", str(mesh_procs), "topoSet", "-parallel"]
+            if not self.run_command(topo_cmd, log_file=log_file, description="Meshing (topoSet Parallel)"): return False
+
+            patch_cmd = ["mpirun", "-np", str(mesh_procs), "createPatch", "-overwrite", "-parallel"]
+            if not self.run_command(patch_cmd, log_file=log_file, description="Meshing (createPatch Parallel)"): return False
+
+            # Copy base 0 directory to processor directories so parallel solvers can read fields
+            for i in range(mesh_procs):
+                proc_0_dir = os.path.join(self.case_dir, f"processor{i}", "0")
+                if os.path.exists(proc_0_dir):
+                    shutil.rmtree(proc_0_dir)
+                shutil.copytree(zero_dir, proc_0_dir)
+
+        else:
+            if not self.run_command(["snappyHexMesh", "-overwrite"], log_file=log_file, description="Meshing (snappyHexMesh)"):
+                print("Error: Meshing failed. Boundary layers are critical, design rejected.")
+                return False
+
+            # Step 2: Create Patches (Bin faces only if using_assets)
+            if not self.run_command(["topoSet"], log_file=log_file, description="Meshing (topoSet)"): return False
+            if not self.run_command(["createPatch", "-overwrite"], log_file=log_file, description="Meshing (createPatch)"): return False
 
         # Step 3: Check
         if not self.run_command(["checkMesh"], log_file=log_file, description="Meshing (checkMesh)"): return False
@@ -1564,21 +1637,90 @@ cloudFunctions
 
         return True
 
-    def run_solver(self, log_file=None):
+    def _apply_fallback_wall_functions(self):
+        """
+        Applies fallback wall functions if the mesh was scaled up for memory limits.
+        Driven by `cfd_settings.fallback_wall_functions` in the config.
+        """
+        cfd_settings = self.config.get('cfd_settings', {})
+        fallback_funcs = cfd_settings.get('fallback_wall_functions', {})
+        if not fallback_funcs:
+            return
+
+        # Find all 0 directories (base + processor)
+        zero_dirs = [os.path.join(self.case_dir, "0")]
+        zero_dirs.extend(glob.glob(os.path.join(self.case_dir, "processor*", "0")))
+
+        for field_name, new_wall_func in fallback_funcs.items():
+            for z_dir in zero_dirs:
+                field_path = os.path.join(z_dir, field_name)
+                if not os.path.exists(field_path):
+                    continue
+
+                with open(field_path, "r") as f:
+                    content = f.read()
+
+                # The current wall function is likely from initial_fields
+                initial_fields = cfd_settings.get('initial_fields', {})
+                old_wall_func = None
+                if field_name in initial_fields:
+                    old_wall_func = initial_fields[field_name].get('wallFunction')
+
+                # If we know the old one, we could replace it specifically,
+                # or we just try replacing known common ones like nutkRoughWallFunction
+                # if the file specifically uses it. Let's do a generic replace of the type.
+                # But the user might have Ks and Cs fields that need to be removed.
+
+                if old_wall_func:
+                    content = content.replace(f"type            {old_wall_func};", f"type            {new_wall_func};")
+                else:
+                    # If we don't know the exact old wall function, we just try to catch the roughness one for nut
+                    if field_name == "nut":
+                         content = content.replace("type            nutkRoughWallFunction;", f"type            {new_wall_func};")
+                    elif field_name == "epsilon":
+                         content = content.replace("type            epsilonWallFunction;", f"type            {new_wall_func};")
+                    elif field_name == "k":
+                         content = content.replace("type            kqRWallFunction;", f"type            {new_wall_func};")
+
+                # Always clean up roughness constants just in case we are replacing a rough wall function
+                if "nut" in field_name or new_wall_func == "nutkWallFunction":
+                    content = re.sub(r"^\s*Ks\s+.*?$\n?", "", content, flags=re.MULTILINE)
+                    content = re.sub(r"^\s*Cs\s+.*?$\n?", "", content, flags=re.MULTILINE)
+
+                with open(field_path, "w") as f:
+                    f.write(content)
+
+            print(f"Applied fallback wall function {new_wall_func} to {field_name} due to mesh scaling.")
+
+    def run_solver(self, log_file=None, mesh_scaled_for_memory=False):
         """
         Runs the solver.
         """
-        if self.num_processors > 1:
-            self._generate_decomposeParDict()
+        cfd_settings = self.config.get('cfd_settings', {})
+        mesh_procs = cfd_settings.get('mesh_processors', self.num_processors)
+        solve_procs = cfd_settings.get('solve_processors', self.num_processors)
+        solve_method = cfd_settings.get('solve_decompose_method', 'scotch')
 
-            # 1. Decompose
-            if not self.run_command(["decomposePar", "-force"], log_file=log_file, description="Decomposing Domain"): return False
+        if mesh_scaled_for_memory:
+            self._apply_fallback_wall_functions()
+
+        if solve_procs > 1:
+            self._generate_decomposeParDict(num_processors=solve_procs, method=solve_method)
+
+            # 1. Decompose or Redistribute
+            if mesh_procs > 1:
+                # Mesh was generated in parallel.
+                if mesh_procs != solve_procs or mesh_method != solve_method:
+                    # Use parallel redistributePar to change the processor counts and/or method.
+                    max_procs = max(mesh_procs, solve_procs)
+                    if not self.run_command(["mpirun", "-np", str(max_procs), "redistributePar", "-overwrite", "-parallel"], log_file=log_file, description="Redistributing Domain"): return False
+            else:
+                if not self.run_command(["decomposePar", "-force"], log_file=log_file, description="Decomposing Domain"): return False
 
             # 2. Run Parallel
-            # Note: mpirun might be named differently (e.g. mpiexec). OpenFOAM containers usually have mpirun.
-            cmd = ["mpirun", "-np", str(self.num_processors), "simpleFoam", "-parallel"]
+            cmd = ["mpirun", "-np", str(solve_procs), "simpleFoam", "-parallel"]
 
-            if not self.run_command(cmd, log_file=log_file, description=f"Solving CFD (Parallel {self.num_processors} CPUs)"): return False
+            if not self.run_command(cmd, log_file=log_file, description=f"Solving CFD (Parallel {solve_procs} CPUs)"): return False
 
             # 3. Reconstruct
             # Reconstruct latest time for particle tracking and visualization

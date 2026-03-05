@@ -46,6 +46,12 @@ optimization:
 
 cfd_settings:
   turbulence_model: "RNGkEpsilon"
+  mesh_decompose_method: "hierarchical"
+  solve_decompose_method: "scotch"
+  # mesh_processors: 4 # Override for parallel meshing (default: num_processors)
+  # solve_processors: 4 # Override for parallel solving (default: num_processors)
+  fallback_wall_functions:
+    nut: "nutkWallFunction"
   initial_fields:
     k:
       internalField: "uniform 0.375"
