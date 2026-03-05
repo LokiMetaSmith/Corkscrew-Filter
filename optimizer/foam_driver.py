@@ -1611,6 +1611,8 @@ cloudFunctions
             patch_cmd = ["mpirun", "-np", str(mesh_procs), "createPatch", "-overwrite", "-parallel"]
             if not self.run_command(patch_cmd, log_file=log_file, description="Meshing (createPatch Parallel)"): return False
 
+            if not self.run_command(["reconstructParMesh", "-constant"], log_file=log_file, description="Reconstructing Mesh"): return False
+
             # Copy base 0 directory to processor directories so parallel solvers can read fields
             for i in range(mesh_procs):
                 proc_0_dir = os.path.join(self.case_dir, f"processor{i}", "0")
@@ -1682,7 +1684,7 @@ cloudFunctions
                     elif field_name == "k":
                          content = content.replace("type            kqRWallFunction;", f"type            {new_wall_func};")
 
-                # Always clean up roughness constants just in case we are replacing a rough wall function
+                # Clean up roughness constants just in case we are replacing a rough wall function
                 if "nut" in field_name or new_wall_func == "nutkWallFunction":
                     content = re.sub(r"^\s*Ks\s+.*?$\n?", "", content, flags=re.MULTILINE)
                     content = re.sub(r"^\s*Cs\s+.*?$\n?", "", content, flags=re.MULTILINE)
