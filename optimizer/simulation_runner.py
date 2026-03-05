@@ -222,10 +222,12 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                         print(f"WARNING: Geometry requires ~{min_required_cells:.0f} cells for accuracy, but memory limit is {MAX_CELLS}. Resolution will be reduced to fit available RAM. Results may be inaccurate.")
                         # Do not override MAX_CELLS. Let the subsequent logic resize the mesh.
 
+                mesh_scaled_for_memory = False
                 if estimated_cells > MAX_CELLS:
                     new_size = (block_volume / MAX_CELLS) ** (1/3)
                     print(f"Warning: Estimated cell count {estimated_cells:.0f} exceeds {MAX_CELLS} limit (RAM: {ram_gb:.1f}GB). Increasing target_cell_size from {target_cell_size:.5f}m to {new_size:.5f}m to prevent OOM.")
                     target_cell_size = new_size
+                    mesh_scaled_for_memory = True
 
                 print(f"Updating blockMesh with target_cell_size={target_cell_size:.3f}m")
                 # Pass scaled bounds to foam_driver
@@ -327,7 +329,8 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
 
         if success:
             with Timer("Solver"):
-                success = foam_driver.run_solver(log_file=solver_log)
+                _scaled = mesh_scaled_for_memory if 'mesh_scaled_for_memory' in locals() else False
+                success = foam_driver.run_solver(log_file=solver_log, mesh_scaled_for_memory=_scaled)
 
             if success:
                 # Attempt particle tracking

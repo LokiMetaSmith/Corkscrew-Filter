@@ -40,7 +40,8 @@ class TestCloudConfig(unittest.TestCase):
         self.assertIn("outlet", content)
         # In current version of foam_driver.py, cloudFunctions are commented out due to a bug in OpenFOAM 2512.
         # We'll just verify the model and turbulence parameterization here.
-        self.assertIn("dispersionModel none", content) if "dispersionModel none" in content else self.assertIn("dispersionModel {\"stochasticDispersionRAS\" if turbulence != \"laminar\" and turbulence != \"kOmegaSST_disabled\" else \"none\"}", content)
+        if "dispersionModel none" not in content:
+            self.assertIn("dispersionModel stochasticDispersionRAS", content)
         # self.assertNotIn("k               cellPoint;", content)
 
         # Test turbulent mode
