@@ -97,6 +97,11 @@ wsl --shutdown
 
 # 5. Dynamically find and unregister leftover Podman WSL distributions
 Write-Host "Checking for lingering Podman WSL distributions..." -ForegroundColor Yellow
+
+# Explicitly unregister known default names in case `wsl --list` fails or omits them
+wsl --unregister podman-machine-default 2>$null
+wsl --unregister podman-machine-default-root 2>$null
+
 $wslList = wsl --list --quiet 2>$null
 if ($wslList) {
     # Remove carriage returns and null characters (UTF-16 encoding artifacts)
