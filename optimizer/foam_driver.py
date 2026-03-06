@@ -1604,28 +1604,22 @@ cloudFunctions
                 print("Error: Meshing failed. Boundary layers are critical, design rejected.")
                 return False
 
-            # Run patch creation in parallel
-            topo_cmd = ["mpirun", "-np", str(mesh_procs), "topoSet", "-parallel"]
-            if not self.run_command(topo_cmd, log_file=log_file, description="Meshing (topoSet Parallel)"): return False
-
-            patch_cmd = ["mpirun", "-np", str(mesh_procs), "createPatch", "-overwrite", "-parallel"]
-            if not self.run_command(patch_cmd, log_file=log_file, description="Meshing (createPatch Parallel)"): return False
-
             if not self.run_command(["reconstructParMesh", "-constant"], log_file=log_file, description="Reconstructing Mesh"): return False
 
-            # Copy base 0 directory to processor directories so parallel solvers can read fields
-            for i in range(mesh_procs):
-                proc_0_dir = os.path.join(self.case_dir, f"processor{i}", "0")
-                if os.path.exists(proc_0_dir):
-                    shutil.rmtree(proc_0_dir)
-                shutil.copytree(zero_dir, proc_0_dir)
+            # After reconstruction, clean up processor directories to save disk space
+            for proc_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
+                shutil.rmtree(proc_dir, ignore_errors=True)
+
+            # Step 2: Create Patches (Serial, after reconstruction to prevent boundary overlap bugs)
+            if not self.run_command(["topoSet"], log_file=log_file, description="Meshing (topoSet)"): return False
+            if not self.run_command(["createPatch", "-overwrite"], log_file=log_file, description="Meshing (createPatch)"): return False
 
         else:
             if not self.run_command(["snappyHexMesh", "-overwrite"], log_file=log_file, description="Meshing (snappyHexMesh)"):
                 print("Error: Meshing failed. Boundary layers are critical, design rejected.")
                 return False
 
-            # Step 2: Create Patches (Bin faces only if using_assets)
+            # Step 2: Create Patches (Serial)
             if not self.run_command(["topoSet"], log_file=log_file, description="Meshing (topoSet)"): return False
             if not self.run_command(["createPatch", "-overwrite"], log_file=log_file, description="Meshing (createPatch)"): return False
 
@@ -1709,15 +1703,8 @@ cloudFunctions
         if solve_procs > 1:
             self._generate_decomposeParDict(num_processors=solve_procs, method=solve_method)
 
-            # 1. Decompose or Redistribute
-            if mesh_procs > 1:
-                # Mesh was generated in parallel.
-                if mesh_procs != solve_procs or mesh_method != solve_method:
-                    # Use parallel redistributePar to change the processor counts and/or method.
-                    max_procs = max(mesh_procs, solve_procs)
-                    if not self.run_command(["mpirun", "-np", str(max_procs), "redistributePar", "-overwrite", "-parallel"], log_file=log_file, description="Redistributing Domain"): return False
-            else:
-                if not self.run_command(["decomposePar", "-force"], log_file=log_file, description="Decomposing Domain"): return False
+            # 1. Decompose
+            if not self.run_command(["decomposePar", "-force"], log_file=log_file, description="Decomposing Domain"): return False
 
             # 2. Run Parallel
             cmd = ["mpirun", "-np", str(solve_procs), "simpleFoam", "-parallel"]
@@ -1727,6 +1714,10 @@ cloudFunctions
             # 3. Reconstruct
             # Reconstruct latest time for particle tracking and visualization
             if not self.run_command(["reconstructPar", "-latestTime"], log_file=log_file, description="Reconstructing Domain"): return False
+
+            # Clean up processor directories to save massive amounts of disk space
+            for proc_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
+                shutil.rmtree(proc_dir, ignore_errors=True)
 
             return True
         else:
