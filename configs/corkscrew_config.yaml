@@ -69,6 +69,8 @@ cfd_settings:
   # solve_processors: 4 # Override for parallel solving (default: num_processors)
   fallback_wall_functions:
     nut: "nutkWallFunction"
+    epsilon: "zeroGradient"
+    k: "zeroGradient"
   initial_fields:
     k:
       internalField: "uniform 0.375"
