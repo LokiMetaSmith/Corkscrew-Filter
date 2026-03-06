@@ -83,9 +83,11 @@ if (Get-Command "podman" -ErrorAction SilentlyContinue) {
             }
         }
     } else {
-        Write-Host "Attempting to remove default Podman machine..."
+        Write-Host "Attempting to remove default Podman machines..."
         podman machine stop default 2>$null
         podman machine rm -f default 2>$null
+        podman machine stop podman-machine-default 2>$null
+        podman machine rm -f podman-machine-default 2>$null
     }
 }
 
