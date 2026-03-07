@@ -115,7 +115,19 @@ if ($wslList) {
     }
 }
 
-# 6. Initialize and start a fresh Podman machine
+# 6. Forcefully clean Podman configuration directories (Hyper-V state)
+Write-Host "Cleaning up lingering Podman machine configuration files..." -ForegroundColor Yellow
+$localMachineConf = "$env:USERPROFILE\.local\share\containers\podman\machine"
+$configMachineConf = "$env:USERPROFILE\.config\containers\podman\machine"
+
+if (Test-Path $localMachineConf) {
+    Remove-Item -Recurse -Force $localMachineConf -ErrorAction SilentlyContinue
+}
+if (Test-Path $configMachineConf) {
+    Remove-Item -Recurse -Force $configMachineConf -ErrorAction SilentlyContinue
+}
+
+# 7. Initialize and start a fresh Podman machine
 Write-Host "Initializing a fresh Podman machine..." -ForegroundColor Cyan
 podman machine init
 if ($LASTEXITCODE -ne 0) {
@@ -130,7 +142,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# 7. Verify functionality
+# 8. Verify functionality
 Write-Host "Verifying Podman installation and machine status..." -ForegroundColor Cyan
 podman info
 
