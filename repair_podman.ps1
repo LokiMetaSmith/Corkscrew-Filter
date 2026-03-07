@@ -115,7 +115,13 @@ if ($wslList) {
     }
 }
 
-# 6. Forcefully clean Podman configuration directories (Hyper-V state)
+# 6. Forcefully clean up Windows Hyper-V VMs
+Write-Host "Checking for lingering Hyper-V VMs..." -ForegroundColor Yellow
+if (Get-Command "Remove-VM" -ErrorAction SilentlyContinue) {
+    Get-VM -Name "podman-machine-default*" -ErrorAction SilentlyContinue | Remove-VM -Force -ErrorAction SilentlyContinue
+}
+
+# 7. Forcefully clean Podman configuration directories
 Write-Host "Cleaning up lingering Podman machine configuration files..." -ForegroundColor Yellow
 $localMachineConf = "$env:USERPROFILE\.local\share\containers\podman\machine"
 $configMachineConf = "$env:USERPROFILE\.config\containers\podman\machine"
@@ -127,7 +133,7 @@ if (Test-Path $configMachineConf) {
     Remove-Item -Recurse -Force $configMachineConf -ErrorAction SilentlyContinue
 }
 
-# 7. Initialize and start a fresh Podman machine
+# 8. Initialize and start a fresh Podman machine
 Write-Host "Initializing a fresh Podman machine..." -ForegroundColor Cyan
 podman machine init
 if ($LASTEXITCODE -ne 0) {
@@ -142,7 +148,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# 8. Verify functionality
+# 9. Verify functionality
 Write-Host "Verifying Podman installation and machine status..." -ForegroundColor Cyan
 podman info
 
