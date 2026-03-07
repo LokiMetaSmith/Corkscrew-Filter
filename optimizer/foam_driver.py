@@ -549,6 +549,8 @@ boundaryField
             content = re.sub(r"div\(phi,epsilon\).*?;", "", content)
             content = re.sub(r"div\(phi,omega\).*?;", "", content)
             content = re.sub(r"div\(phi,R\).*?;", "", content)
+            # Switch to upwind for U to ensure stability on coarse mesh without turbulent viscosity
+            content = re.sub(r"div\(phi,U\).*?;", "div(phi,U)      bounded Gauss upwind;", content)
         elif turbulence == "RNGkEpsilon":
             content = re.sub(r"div\(phi,omega\).*?;", "", content)
             content = re.sub(r"div\(phi,R\).*?;", "", content)
@@ -568,16 +570,16 @@ boundaryField
             content = f.read()
 
         if turbulence == "laminar":
-            content = content.replace('"(U|k|epsilon|omega)"', '"U"')
-            content = content.replace('"(k|epsilon|omega)" 1e-4;', '')
+            content = re.sub(r'"\(U\|k\|epsilon(?:\|omega)?\)"', '"U"', content)
+            content = re.sub(r'"\(k\|epsilon(?:\|omega)?\)"\s+[\d\.e\-\+]+;', '', content)
             # Remove relaxation factors for k, epsilon, omega
             content = re.sub(r"k\s+[\d\.]+;", "", content)
             content = re.sub(r"epsilon\s+[\d\.]+;", "", content)
             content = re.sub(r"omega\s+[\d\.]+;", "", content)
             content = re.sub(r"R\s+[\d\.]+;", "", content)
         elif turbulence == "RNGkEpsilon":
-            content = content.replace('"(U|k|epsilon|omega)"', '"(U|k|epsilon)"')
-            content = content.replace('"(k|epsilon|omega)" 1e-4;', '"(k|epsilon)" 1e-4;')
+            content = re.sub(r'"\(U\|k\|epsilon\|omega\)"', '"(U|k|epsilon)"', content)
+            content = re.sub(r'"\(k\|epsilon\|omega\)"\s+[\d\.e\-\+]+;', '"(k|epsilon)" 1e-4;', content)
             content = re.sub(r"omega\s+[\d\.]+;", "", content)
             content = re.sub(r"R\s+[\d\.]+;", "", content)
         elif turbulence == "kOmegaSST" or turbulence == "kOmegaSST_disabled":
