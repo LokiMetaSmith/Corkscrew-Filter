@@ -330,6 +330,14 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         if success:
             with Timer("Solver"):
                 _scaled = mesh_scaled_for_memory if 'mesh_scaled_for_memory' in locals() else False
+                if _scaled:
+                    print("Mesh was scaled for memory. Switching turbulence model to 'laminar' for stability.")
+                    turbulence = "laminar"
+                    # Update turbulence properties, fvSchemes, and fvSolution to laminar
+                    foam_driver._update_turbulence_properties(turbulence)
+                    foam_driver._update_fvSchemes(turbulence)
+                    foam_driver._update_fvSolution(turbulence, foam_driver.config.get('cfd_settings', {}))
+
                 success = foam_driver.run_solver(log_file=solver_log, mesh_scaled_for_memory=_scaled)
 
             if success:

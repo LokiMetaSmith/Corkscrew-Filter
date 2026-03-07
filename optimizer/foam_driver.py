@@ -1683,6 +1683,10 @@ cloudFunctions
                     content = re.sub(r"^\s*Ks\s+.*?$\n?", "", content, flags=re.MULTILINE)
                     content = re.sub(r"^\s*Cs\s+.*?$\n?", "", content, flags=re.MULTILINE)
 
+                if new_wall_func == "zeroGradient":
+                    content = re.sub(r"type\s+zeroGradient;\s*value\s+uniform\s+[\d\.\-e\+]+;", r"type            zeroGradient;", content)
+                    content = re.sub(r"type\s+zeroGradient;\s*value\s+\$internalField;", r"type            zeroGradient;", content)
+
                 with open(field_path, "w") as f:
                     f.write(content)
 
