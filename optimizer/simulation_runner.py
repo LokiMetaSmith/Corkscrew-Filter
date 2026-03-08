@@ -198,16 +198,16 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                     print(f"Warning: Failed to detect memory ({e}). Using default.")
                     ram_gb = 4.0 # Conservative default
 
-                # Heuristic: 25,000 background cells per GB of RAM.
+                # Heuristic: 100,000 background cells per GB of RAM.
                 # Background cells are multiplied by ~8x in final mesh.
-                # 4GB -> 100k block cells -> ~800k final cells.
-                # 16GB -> 400k block cells -> ~3.2M final cells.
+                # 4GB -> 400k block cells -> ~3.2M final cells.
+                # 16GB -> 1.6M block cells -> ~12.8M final cells.
 
-                calculated_limit = int(ram_gb * 25000)
+                calculated_limit = int(ram_gb * 100000)
 
                 # Clamp limits
                 MIN_LIMIT = 100_000
-                MAX_LIMIT = 500_000 # Cap at 500k to avoid excessive runtimes even on big machines
+                MAX_LIMIT = 3_000_000 # Cap at 3M to avoid excessive runtimes even on big machines
 
                 MAX_CELLS = max(MIN_LIMIT, min(calculated_limit, MAX_LIMIT))
 
@@ -330,13 +330,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         if success:
             with Timer("Solver"):
                 _scaled = mesh_scaled_for_memory if 'mesh_scaled_for_memory' in locals() else False
-                if _scaled:
-                    print("Mesh was scaled for memory. Switching turbulence model to 'laminar' for stability.")
-                    turbulence = "laminar"
-                    # Update turbulence properties, fvSchemes, and fvSolution to laminar
-                    foam_driver._update_turbulence_properties(turbulence)
-                    foam_driver._update_fvSchemes(turbulence)
-                    foam_driver._update_fvSolution(turbulence, foam_driver.config.get('cfd_settings', {}))
+                # User directive: keep turbulence model active on coarse mesh instead of trapping into laminar FPE
 
                 success = foam_driver.run_solver(log_file=solver_log, mesh_scaled_for_memory=_scaled)
 
