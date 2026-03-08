@@ -515,10 +515,20 @@ boundaryField
             f.write(content)
 
     def _update_fvSchemes(self, turbulence):
-        fvSchemes = os.path.join(self.case_dir, "system", "fvSchemes")
-        if not os.path.exists(fvSchemes): return
+        import shutil
+        template_path = os.path.join(self.case_dir, "system", "fvSchemes.template")
+        target_path = os.path.join(self.case_dir, "system", "fvSchemes")
 
-        with open(fvSchemes, 'r') as f:
+        # Recover from permanent modification if user lacks template
+        if not os.path.exists(template_path) and os.path.exists(target_path):
+            shutil.copy2(target_path, template_path)
+
+        if os.path.exists(template_path):
+            shutil.copy2(template_path, target_path)
+
+        if not os.path.exists(target_path): return
+
+        with open(target_path, 'r') as f:
             content = f.read()
 
         if turbulence == "laminar":
@@ -531,19 +541,45 @@ boundaryField
         elif turbulence == "RNGkEpsilon":
             content = re.sub(r"div\(phi,omega\).*?;", "", content)
             content = re.sub(r"div\(phi,R\).*?;", "", content)
+
+            # Robustly inject if missing due to prior corrupted files
+            if "div(phi,k)" not in content and "divSchemes" in content:
+                content = content.replace("divSchemes\n{", "divSchemes\n{\n    div(phi,k)      bounded Gauss upwind;")
+            if "div(phi,epsilon)" not in content and "divSchemes" in content:
+                content = content.replace("divSchemes\n{", "divSchemes\n{\n    div(phi,epsilon) bounded Gauss upwind;")
+
         elif turbulence == "kOmegaSST" or turbulence == "kOmegaSST_disabled":
             content = re.sub(r"div\(phi,R\).*?;", "", content)
 
-        with open(fvSchemes, 'w') as f:
+            if "div(phi,k)" not in content and "divSchemes" in content:
+                content = content.replace("divSchemes\n{", "divSchemes\n{\n    div(phi,k)      bounded Gauss upwind;")
+            if "div(phi,omega)" not in content and "divSchemes" in content:
+                content = content.replace("divSchemes\n{", "divSchemes\n{\n    div(phi,omega) bounded Gauss upwind;")
+
+        with open(target_path, 'w') as f:
             # Clean up empty lines created by regex sub
             cleaned = os.linesep.join([s for s in content.splitlines() if s.strip()])
             f.write(cleaned + "\n")
 
-    def _update_fvSolution(self, turbulence, cfd_settings=None):
-        fvSolution = os.path.join(self.case_dir, "system", "fvSolution")
-        if not os.path.exists(fvSolution): return
+        # If we had to synthesize the file from scratch because template was corrupted, save it
+        if not os.path.exists(template_path):
+            shutil.copy2(target_path, template_path)
 
-        with open(fvSolution, 'r') as f:
+    def _update_fvSolution(self, turbulence, cfd_settings=None):
+        import shutil
+        template_path = os.path.join(self.case_dir, "system", "fvSolution.template")
+        target_path = os.path.join(self.case_dir, "system", "fvSolution")
+
+        # Recover from permanent modification if user lacks template
+        if not os.path.exists(template_path) and os.path.exists(target_path):
+            shutil.copy2(target_path, template_path)
+
+        if os.path.exists(template_path):
+            shutil.copy2(template_path, target_path)
+
+        if not os.path.exists(target_path): return
+
+        with open(target_path, 'r') as f:
             content = f.read()
 
         if turbulence == "laminar":
@@ -567,7 +603,7 @@ boundaryField
             for factor_name, factor_value in relax_factors.items():
                 content = re.sub(rf"\b{factor_name}\s+[\d\.]+;", f"{factor_name}               {factor_value};", content)
 
-        with open(fvSolution, 'w') as f:
+        with open(target_path, 'w') as f:
             f.write(content)
 
     def _generate_decomposeParDict(self, num_processors=None, method="scotch"):
@@ -1685,28 +1721,31 @@ cloudFunctions
         if mesh_scaled_for_memory:
             self._apply_fallback_wall_functions()
 
-        if solve_procs > 1:
-            self._generate_decomposeParDict(num_processors=solve_procs, method=solve_method)
+        def _execute():
+            if solve_procs > 1:
+                self._generate_decomposeParDict(num_processors=solve_procs, method=solve_method)
+                if not self.run_command(["decomposePar", "-force"], log_file=log_file, description="Decomposing Domain"): return False
+                cmd = ["mpirun", "-np", str(solve_procs), "simpleFoam", "-parallel"]
+                if not self.run_command(cmd, log_file=log_file, description=f"Solving CFD (Parallel {solve_procs} CPUs)"): return False
+                if not self.run_command(["reconstructPar", "-latestTime"], log_file=log_file, description="Reconstructing Domain"): return False
+                for proc_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
+                    shutil.rmtree(proc_dir, ignore_errors=True)
+                return True
+            else:
+                return self.run_command(["simpleFoam"], log_file=log_file, description="Solving CFD")
 
-            # 1. Decompose
-            if not self.run_command(["decomposePar", "-force"], log_file=log_file, description="Decomposing Domain"): return False
+        success = _execute()
 
-            # 2. Run Parallel
-            cmd = ["mpirun", "-np", str(solve_procs), "simpleFoam", "-parallel"]
+        # If it failed, and we haven't applied fallback wall functions yet, try doing so to recover from unstable baseline!
+        if not success and not mesh_scaled_for_memory:
+            print("Solver failed on standard mesh. Attempting to recover by applying fallback wall functions...")
+            self._apply_fallback_wall_functions()
+            # Need to clean up potentially broken fields, simpleFoam will continue from latest time or 0
+            # If it failed at Time 1, it might try to restart from 1.
+            # We can just try executing again.
+            success = _execute()
 
-            if not self.run_command(cmd, log_file=log_file, description=f"Solving CFD (Parallel {solve_procs} CPUs)"): return False
-
-            # 3. Reconstruct
-            # Reconstruct latest time for particle tracking and visualization
-            if not self.run_command(["reconstructPar", "-latestTime"], log_file=log_file, description="Reconstructing Domain"): return False
-
-            # Clean up processor directories to save massive amounts of disk space
-            for proc_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
-                shutil.rmtree(proc_dir, ignore_errors=True)
-
-            return True
-        else:
-            return self.run_command(["simpleFoam"], log_file=log_file, description="Solving CFD")
+        return success
 
     def _create_constant_field(self, time_dir, field_name, value, dimensions, class_type="volScalarField", boundary_type="fixedValue"):
         """
