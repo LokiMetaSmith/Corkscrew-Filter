@@ -503,32 +503,9 @@ boundaryField
         with open(tp_path, 'r') as f:
             content = f.read()
 
-        if turbulence == "laminar":
-            content = re.sub(r"simulationType\s+.*?;", "simulationType  laminar;", content)
-            content = re.sub(r"model\s+.*?;", "model           laminar;", content)
+        if turbulence == "laminar" or turbulence == "kOmegaSST_disabled":
+            # Cleanly disable turbulence without removing the underlying model.
             content = re.sub(r"turbulence\s+.*?;", "turbulence      off;", content)
-        elif turbulence == "kOmegaSST_disabled":
-            content = re.sub(r"simulationType\s+.*?;", "simulationType  RAS;", content)
-            content = re.sub(r"model\s+.*?;", "model           kOmegaSST;", content)
-            content = re.sub(r"turbulence\s+.*?;", "turbulence      off;", content)
-
-            # Robustly remove the RAS block even if it contains nested braces
-            ras_match = re.search(r"RAS\s*\{", content)
-            if ras_match:
-                start_idx = ras_match.start()
-                brace_start = content.find('{', start_idx)
-                if brace_start != -1:
-                    brace_count = 1
-                    end_idx = brace_start + 1
-                    while brace_count > 0 and end_idx < len(content):
-                        if content[end_idx] == '{':
-                            brace_count += 1
-                        elif content[end_idx] == '}':
-                            brace_count -= 1
-                        end_idx += 1
-
-                    if brace_count == 0:
-                        content = content[:start_idx] + content[end_idx:]
         else:
             content = re.sub(r"simulationType\s+.*?;", "simulationType  RAS;", content)
             content = re.sub(r"model\s+.*?;", f"model           {turbulence};", content)
@@ -1417,9 +1394,11 @@ cloudFunctions
         turb_path = os.path.join(self.case_dir, "constant", "turbulenceProperties")
         if os.path.exists(turb_path):
             with open(turb_path, 'r') as f:
-                content = f.read()
-                if "simulationType laminar;" in content or "simulationType  laminar;" in content:
+                t_content = f.read()
+                if "simulationType laminar;" in t_content or "simulationType  laminar;" in t_content:
                     is_laminar = True
+                if "turbulence      off;" in t_content or "turbulence off;" in t_content:
+                    is_laminar = True  # Treat as laminar for dispersion model purposes!
 
         # Build the conditional strings
         if is_laminar:
@@ -1892,11 +1871,7 @@ boundaryField
                 self.run_command(["postProcess", "-func", "epsilon", "-time", str(source_time)], description="Generating epsilon")
 
         # 4. Copy fields from source_time to 0
-        if turbulence == "laminar":
-            fields_to_copy = ["U", "p", "phi"]
-        elif turbulence == "kOmegaSST_disabled":
-            fields_to_copy = ["U", "p", "phi", "k", "epsilon", "omega", "nut"]
-        elif turbulence == "RNGkEpsilon":
+        if turbulence == "RNGkEpsilon":
             fields_to_copy = ["U", "p", "phi", "k", "epsilon", "nut"]
         else:
             fields_to_copy = ["U", "p", "phi", "k", "epsilon", "omega", "nut"]
@@ -1906,9 +1881,12 @@ boundaryField
             dst = os.path.join(zero_dir, field)
             if os.path.exists(src):
                 shutil.copy2(src, dst)
-
-            elif field == "phi":
-                 print("Warning: 'phi' field still missing after generation attempt.")
+            else:
+                orig_src = os.path.join(self.case_dir, "0.orig", field)
+                if os.path.exists(orig_src):
+                    shutil.copy2(orig_src, dst)
+                elif field == "phi":
+                     print("Warning: 'phi' field still missing after generation attempt.")
 
         # 5. Generate rho and mu
         self._generate_particle_tracking_fields("0", fallback_dirs=[source_time])
