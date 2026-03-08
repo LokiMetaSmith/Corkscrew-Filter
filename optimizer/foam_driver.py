@@ -570,6 +570,18 @@ boundaryField
         template_path = os.path.join(self.case_dir, "system", "fvSolution.template")
         target_path = os.path.join(self.case_dir, "system", "fvSolution")
 
+        # If the template file exists but we are running a new version, it might be outdated.
+        # But we also don't want to overwrite custom user templates.
+        # Since we changed the base target_path format to use explicit blocks,
+        # let's overwrite the template if it uses the old regex block approach.
+        if os.path.exists(template_path):
+            with open(template_path, 'r') as f:
+                template_content = f.read()
+            if '"(U|k|epsilon)"' in template_content or '"(U|k|epsilon|omega)"' in template_content:
+                # The template is outdated, overwrite it with the new explicit-block version
+                if os.path.exists(target_path):
+                    shutil.copy2(target_path, template_path)
+
         # Recover from permanent modification if user lacks template
         if not os.path.exists(template_path) and os.path.exists(target_path):
             shutil.copy2(target_path, template_path)
@@ -582,21 +594,22 @@ boundaryField
         with open(target_path, 'r') as f:
             content = f.read()
 
+        def remove_block(text, block_name):
+            pattern_solver = r"\s*" + block_name + r"\s*\{[^}]+\}"
+            text = re.sub(pattern_solver, "", text)
+            pattern_line = r"^\s*" + block_name + r"\s+[\d\.e\-\+]+;\s*$"
+            text = re.sub(pattern_line, "", text, flags=re.MULTILINE)
+            return text
+
         if turbulence == "laminar":
-            content = re.sub(r'"\(U\|k\|epsilon(?:\|omega)?\)"', '"U"', content)
-            content = re.sub(r'"\(k\|epsilon(?:\|omega)?\)"\s+[\d\.e\-\+]+;', '', content)
-            # Remove relaxation factors for k, epsilon, omega
-            content = re.sub(r"k\s+[\d\.]+;", "", content)
-            content = re.sub(r"epsilon\s+[\d\.]+;", "", content)
-            content = re.sub(r"omega\s+[\d\.]+;", "", content)
-            content = re.sub(r"R\s+[\d\.]+;", "", content)
+            for field in ["k", "epsilon", "omega", "R"]:
+                content = remove_block(content, field)
         elif turbulence == "RNGkEpsilon":
-            content = re.sub(r'"\(U\|k\|epsilon\|omega\)"', '"(U|k|epsilon)"', content)
-            content = re.sub(r'"\(k\|epsilon\|omega\)"\s+[\d\.e\-\+]+;', '"(k|epsilon)" 1e-4;', content)
-            content = re.sub(r"omega\s+[\d\.]+;", "", content)
-            content = re.sub(r"R\s+[\d\.]+;", "", content)
+            for field in ["omega", "R"]:
+                content = remove_block(content, field)
         elif turbulence == "kOmegaSST" or turbulence == "kOmegaSST_disabled":
-            content = re.sub(r"R\s+[\d\.]+;", "", content)
+            for field in ["epsilon", "R"]:
+                content = remove_block(content, field)
 
         if cfd_settings and 'relaxation_factors' in cfd_settings:
             relax_factors = cfd_settings['relaxation_factors']
