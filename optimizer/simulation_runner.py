@@ -156,22 +156,26 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                 bounds_arr = bounds
 
                 # Calculate dynamic target cell size based on smallest feature
-                target_cell_size = 1.5 * SCALE_FACTOR # Default scaled
-                void_r = params.get("helix_void_profile_radius_mm")
-                if void_r:
-                    try:
-                        # Ensure resolution is sufficient for small channels (at least ~2.5 cells radius)
-                        # We use 0.3 * radius to be safe (diameter / 6), clamped between 0.2mm and 0.8mm
-                        # This ensures small inlet patches are captured by snappyHexMesh
-                        calculated_size_mm = float(void_r) * 0.3
-                        target_cell_size_mm = max(0.2, min(0.8, calculated_size_mm))
+                # Default scaled
+                target_cell_size = float(params.get("target_cell_size", 1.5)) * SCALE_FACTOR
 
-                        # Adjust target size by refinement factor because blockMesh is coarser
-                        # The final surface resolution will be target_cell_size / (2^REFINEMENT_LEVEL)
-                        # So we multiply here to set blockMesh size.
-                        target_cell_size = target_cell_size_mm * SCALE_FACTOR * (2 ** REFINEMENT_LEVEL)
-                    except (ValueError, TypeError):
-                        pass
+                # Allow override from params if provided, bypassing automatic void_r logic if explicit
+                if "target_cell_size" not in params:
+                    void_r = params.get("helix_void_profile_radius_mm")
+                    if void_r:
+                        try:
+                            # Ensure resolution is sufficient for small channels (at least ~2.5 cells radius)
+                            # We use 0.3 * radius to be safe (diameter / 6), clamped between 0.2mm and 0.8mm
+                            # This ensures small inlet patches are captured by snappyHexMesh
+                            calculated_size_mm = float(void_r) * 0.3
+                            target_cell_size_mm = max(0.2, min(0.8, calculated_size_mm))
+
+                            # Adjust target size by refinement factor because blockMesh is coarser
+                            # The final surface resolution will be target_cell_size / (2^REFINEMENT_LEVEL)
+                            # So we multiply here to set blockMesh size.
+                            target_cell_size = target_cell_size_mm * SCALE_FACTOR * (2 ** REFINEMENT_LEVEL)
+                        except (ValueError, TypeError):
+                            pass
 
                 # Estimate cell count to prevent OOM
                 BLOCK_MARGIN = np.array([1.2, 1.2, 0.95])

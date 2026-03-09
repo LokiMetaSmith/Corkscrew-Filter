@@ -18,7 +18,10 @@ class TestCFDGeneration(unittest.TestCase):
         cls.original_cwd = os.getcwd()
         cls.repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
         os.chdir(cls.repo_root)
-        cls.driver = ScadDriver("corkscrew.scad")
+
+        cls.corkscrew_driver = ScadDriver("corkscrew.scad")
+        cls.manifold_driver = ScadDriver("cyclone_filter_manifold.scad", fluid_volume_module="fluid_volume")
+
 
     @classmethod
     def tearDownClass(cls):
@@ -70,7 +73,7 @@ class TestCFDGeneration(unittest.TestCase):
             }
 
             print("Generating Inlet Cap with repro parameters...")
-            success = self.driver.generate_stl(params, output_path)
+            success = self.corkscrew_driver.generate_stl(params, output_path)
             self.assertTrue(success, "Inlet Cap generation failed")
             self.verify_stl(output_path)
 
@@ -98,7 +101,7 @@ class TestCFDGeneration(unittest.TestCase):
             }
 
             print("Generating Outlet Cap with repro parameters...")
-            success = self.driver.generate_stl(params, output_path)
+            success = self.corkscrew_driver.generate_stl(params, output_path)
             self.assertTrue(success, "Outlet Cap generation failed")
             self.verify_stl(output_path)
 
@@ -126,7 +129,7 @@ class TestCFDGeneration(unittest.TestCase):
             }
 
             print("Generating Fluid Volume with repro parameters...")
-            success = self.driver.generate_stl(params, output_path)
+            success = self.corkscrew_driver.generate_stl(params, output_path)
             self.assertTrue(success, "Fluid Volume generation failed")
             self.verify_stl(output_path)
 
