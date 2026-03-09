@@ -595,11 +595,67 @@ boundaryField
             content = f.read()
 
         def remove_block(text, block_name):
-            pattern_solver = r"\s*" + block_name + r"\s*\{[^}]+\}"
-            text = re.sub(pattern_solver, "", text)
-            pattern_line = r"^\s*" + block_name + r"\s+[\d\.e\-\+]+;\s*$"
-            text = re.sub(pattern_line, "", text, flags=re.MULTILINE)
-            return text
+            # This regex needs to handle nested curly braces, like the solver block which has sub-blocks.
+            # Let's write a simple nested brace parser for robust block removal.
+
+            # Find all top-level occurrences of the block name before a {
+            # Since this is tricky with regex, we can do this algorithmically.
+
+            new_text = ""
+            lines = text.split('\n')
+
+            skip = False
+            brace_level = 0
+
+            # Simple line-by-line parser to skip entire blocks like "k { ... }"
+            # And also single parameter lines like "k 0.5;"
+
+            for i, line in enumerate(lines):
+                stripped = line.strip()
+
+                # If we're already skipping a block, look for braces
+                if skip:
+                    if '{' in line:
+                        brace_level += line.count('{')
+                    if '}' in line:
+                        brace_level -= line.count('}')
+                        if brace_level <= 0:
+                            skip = False  # Done skipping the block
+                    continue
+
+                # If not skipping, check if this line starts a block we want to remove
+                # Or if it's a single parameter line we want to remove
+
+                # Check for block: e.g., "k" or "epsilon" alone on a line, followed by {
+                # OR on the same line "k {"
+                if stripped == block_name or stripped.startswith(block_name + " {") or stripped.startswith('"' + block_name + '"'):
+                    # To be safer, make sure it's an exact match.
+                    is_exact_block_start = False
+                    if stripped == block_name or stripped.startswith(block_name + " {"):
+                         is_exact_block_start = True
+
+                    if is_exact_block_start:
+                        if '{' in line:
+                            brace_level = line.count('{') - line.count('}')
+                            if brace_level > 0:
+                                skip = True
+                            continue
+                        else:
+                            # The '{' might be on the next line
+                            # Check next line
+                            if i + 1 < len(lines) and '{' in lines[i+1]:
+                                skip = True
+                                brace_level = 0
+                                continue
+
+                # Check for single parameter line: e.g., "k 0.5;"
+                if stripped.startswith(block_name + " ") and stripped.endswith(";"):
+                    # Only remove if it looks like a parameter assignment
+                    continue
+
+                new_text += line + "\n"
+
+            return new_text.strip() + "\n"
 
         if turbulence == "laminar":
             for field in ["k", "epsilon", "omega", "R"]:
