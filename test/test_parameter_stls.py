@@ -50,7 +50,21 @@ def create_test_method(param_file):
     def test_method(self):
         file_name = os.path.basename(param_file)
         print(f"Testing parameter file: {file_name}", flush=True)
-        driver = ScadDriver("corkscrew.scad")
+
+        scad_file = "corkscrew.scad"
+        fluid_volume_module = "modular_filter_assembly"
+
+        # Check if the parameter file defines the base SCAD file
+        # Format: // scad_file: "corkscrew.scad"
+        with open(param_file, "r") as pf:
+            for line in pf:
+                if "scad_file:" in line:
+                    scad_file = line.split("scad_file:")[1].strip().strip('"').strip("'")
+                if "fluid_volume_module:" in line:
+                    fluid_volume_module = line.split("fluid_volume_module:")[1].strip().strip('"').strip("'")
+
+        driver = ScadDriver(scad_file, fluid_volume_module=fluid_volume_module)
+
 
         # Patch subprocess.run to include a timeout
         original_run = subprocess.run
