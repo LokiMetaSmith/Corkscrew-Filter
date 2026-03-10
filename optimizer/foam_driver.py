@@ -570,21 +570,136 @@ boundaryField
         template_path = os.path.join(self.case_dir, "system", "fvSolution.template")
         target_path = os.path.join(self.case_dir, "system", "fvSolution")
 
-        # If the template file exists but we are running a new version, it might be outdated.
-        # But we also don't want to overwrite custom user templates.
-        # Since we changed the base target_path format to use explicit blocks,
-        # let's overwrite the template if it uses the old regex block approach.
+        default_base_template = """/*--------------------------------*- C++ -*----------------------------------*\\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSolution;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+solvers
+{
+    p
+    {
+        solver          PCG;
+        preconditioner  DIC;
+        tolerance       1e-6;
+        relTol          0.01;
+    }
+
+    U
+    {
+        solver          smoothSolver;
+        smoother        symGaussSeidel;
+        tolerance       1e-6;
+        relTol          0.1;
+    }
+
+    k
+    {
+        solver          smoothSolver;
+        smoother        symGaussSeidel;
+        tolerance       1e-6;
+        relTol          0.1;
+    }
+
+    epsilon
+    {
+        solver          smoothSolver;
+        smoother        symGaussSeidel;
+        tolerance       1e-6;
+        relTol          0.1;
+    }
+
+    omega
+    {
+        solver          smoothSolver;
+        smoother        symGaussSeidel;
+        tolerance       1e-6;
+        relTol          0.1;
+    }
+
+    R
+    {
+        solver          smoothSolver;
+        smoother        symGaussSeidel;
+        tolerance       1e-6;
+        relTol          0.1;
+    }
+}
+
+SIMPLE
+{
+    nNonOrthogonalCorrectors 2;
+    consistent      no;
+    pRefCell        0;
+    pRefValue       0;
+    residualControl
+    {
+        p               1e-4;
+        U               1e-4;
+        k               1e-4;
+        epsilon         1e-4;
+        omega           1e-4;
+        R               1e-4;
+    }
+}
+
+relaxationFactors
+{
+    fields
+    {
+        p               0.2;
+    }
+    equations
+    {
+        U               0.5;
+        k               0.5;
+        epsilon         0.5;
+        omega           0.5;
+        R               0.5;
+    }
+}
+
+// ************************************************************************* //
+"""
+
+        # Repair corrupted templates from previous bugs
         if os.path.exists(template_path):
             with open(template_path, 'r') as f:
                 template_content = f.read()
-            if '"(U|k|epsilon)"' in template_content or '"(U|k|epsilon|omega)"' in template_content:
-                # The template is outdated, overwrite it with the new explicit-block version
-                if os.path.exists(target_path):
-                    shutil.copy2(target_path, template_path)
 
-        # Recover from permanent modification if user lacks template
-        if not os.path.exists(template_path) and os.path.exists(target_path):
-            shutil.copy2(target_path, template_path)
+            # If the template is an outdated regex block template, or is missing critical base fields
+            # (which means it was corrupted by the previous overwrite bug), restore it to the full default.
+            is_corrupted = False
+            if '"(U|k|epsilon)"' in template_content or '"(U|k|epsilon|omega)"' in template_content:
+                is_corrupted = True
+            elif not re.search(r"\bepsilon\b\s*\{", template_content) or not re.search(r"\bomega\b\s*\{", template_content):
+                # Only repair if it looks like our default file structure
+                if "FoamFile" in template_content and "solvers" in template_content:
+                    is_corrupted = True
+
+            if is_corrupted:
+                with open(template_path, 'w', newline='\n') as f:
+                    f.write(default_base_template)
+
+        # Recover from permanent modification if user lacks template entirely
+        if not os.path.exists(template_path):
+            if os.path.exists(target_path):
+                shutil.copy2(target_path, template_path)
+            else:
+                with open(template_path, 'w', newline='\n') as f:
+                    f.write(default_base_template)
 
         if os.path.exists(template_path):
             shutil.copy2(template_path, target_path)

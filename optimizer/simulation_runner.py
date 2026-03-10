@@ -342,7 +342,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                 # Attempt particle tracking
                 with Timer("Particle Tracking"):
                     # Pass bin config for injection/interaction setup
-                    foam_driver.run_particle_tracking(log_file=solver_log, bin_config=bin_config, turbulence=turbulence)
+                    foam_driver.run_particle_tracking(log_file=solver_log, bin_config=bin_config, turbulence=turbulence, mesh_scaled_for_memory=_scaled)
 
                 # Fetch foam metrics and preserve any existing custom metrics (like cell size)
                 foam_metrics = foam_driver.get_metrics(log_file=solver_log)
