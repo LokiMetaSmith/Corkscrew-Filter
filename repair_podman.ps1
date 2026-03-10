@@ -8,8 +8,9 @@
     2. Forcefully remove any existing Podman machines to resolve corruption.
     3. Shut down WSL to release any locks.
     4. Unregister any lingering Podman WSL distributions.
-    5. Re-initialize and start a fresh Podman machine.
-    6. Verify functionality.
+    5. Forcefully clean up lingering system connections.
+    6. Re-initialize and start a fresh Podman machine.
+    7. Verify functionality.
 #>
 
 Write-Host "Starting Podman deployment and repair process..." -ForegroundColor Cyan
@@ -149,7 +150,27 @@ if (Test-Path $configMachineConf) {
     Remove-Item -Recurse -Force $configMachineConf -ErrorAction SilentlyContinue
 }
 
-# 8. Initialize and start a fresh Podman machine
+# 8. Forcefully clean lingering Podman system connections
+Write-Host "Cleaning up lingering Podman system connections..." -ForegroundColor Yellow
+if (Get-Command "podman" -ErrorAction SilentlyContinue) {
+    $connections = podman system connection list --format "{{.Name}}" 2>$null
+    if ($LASTEXITCODE -eq 0 -and $connections) {
+        foreach ($conn in $connections) {
+            $connName = $conn.Trim()
+            if (![string]::IsNullOrEmpty($connName)) {
+                Write-Host "Removing lingering Podman connection: $connName"
+                podman system connection rm $connName 2>$null
+            }
+        }
+    } else {
+        # Fallback to defaults if list fails
+        podman system connection rm default 2>$null
+        podman system connection rm podman-machine-default 2>$null
+        podman system connection rm podman-machine-default-root 2>$null
+    }
+}
+
+# 9. Initialize and start a fresh Podman machine
 Write-Host "Initializing a fresh Podman machine..." -ForegroundColor Cyan
 podman machine init
 if ($LASTEXITCODE -ne 0) {
@@ -164,7 +185,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# 9. Verify functionality
+# 10. Verify functionality
 Write-Host "Verifying Podman installation and machine status..." -ForegroundColor Cyan
 podman info
 
