@@ -80,7 +80,17 @@ if (!$podmanInstalled) {
     Write-Host "Podman is already installed." -ForegroundColor Green
 }
 
-# 3. Stop and remove existing Podman machines
+# 3. Kill lingering Podman and API proxy processes BEFORE attempting to delete files
+Write-Host "Checking for lingering Podman and proxy processes..." -ForegroundColor Yellow
+$lingeringProcesses = Get-Process -Name "*sshproxy*", "*gvproxy*", "podman*" -ErrorAction SilentlyContinue
+if ($lingeringProcesses) {
+    foreach ($proc in $lingeringProcesses) {
+        Write-Host "Stopping $($proc.ProcessName) (PID: $($proc.Id))..." -ForegroundColor Yellow
+        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# 4. Stop and remove existing Podman machines
 Write-Host "Cleaning up existing Podman machines..." -ForegroundColor Yellow
 if (Get-Command "podman" -ErrorAction SilentlyContinue) {
     $machines = podman machine list --format "{{.Name}}" 2>$null
@@ -102,7 +112,7 @@ if (Get-Command "podman" -ErrorAction SilentlyContinue) {
     }
 }
 
-# 4. Shut down WSL and ensure it is stopped
+# 5. Shut down WSL and ensure it is stopped
 Write-Host "Shutting down WSL to clear locks..." -ForegroundColor Yellow
 wsl --shutdown
 Start-Sleep -Seconds 3
@@ -119,12 +129,12 @@ while ($wslRetryCount -lt 5) {
     $wslRetryCount++
 }
 
-# 5. Dynamically find and unregister leftover Podman WSL distributions
+# 6. Dynamically find and unregister leftover Podman WSL distributions
 Write-Host "Checking for lingering Podman WSL distributions..." -ForegroundColor Yellow
 
 # Explicitly unregister known default names in case `wsl --list` fails or omits them
-wsl --unregister podman-machine-default 2>$null
-wsl --unregister podman-machine-default-root 2>$null
+wsl --unregister podman-machine-default >$null 2>&1
+wsl --unregister podman-machine-default-root >$null 2>&1
 
 $wslList = wsl --list --quiet 2>$null
 if ($wslList) {
@@ -134,12 +144,12 @@ if ($wslList) {
     foreach ($distro in $distros) {
         if ($distro -match "podman") {
             Write-Host "Unregistering lingering WSL distribution: $distro" -ForegroundColor Yellow
-            wsl --unregister $distro 2>$null
+            wsl --unregister $distro >$null 2>&1
         }
     }
 }
 
-# 6. Forcefully clean up Windows Hyper-V VMs
+# 7. Forcefully clean up Windows Hyper-V VMs
 Write-Host "Checking for lingering Hyper-V VMs..." -ForegroundColor Yellow
 if (Get-Command "Get-VM" -ErrorAction SilentlyContinue) {
     $vms = Get-VM -Name "podman-machine-default*" -ErrorAction SilentlyContinue
@@ -152,7 +162,7 @@ if (Get-Command "Get-VM" -ErrorAction SilentlyContinue) {
     }
 }
 
-# 7. Forcefully clean Podman configuration directories
+# 8. Forcefully clean Podman configuration directories
 Write-Host "Cleaning up lingering Podman machine configuration files..." -ForegroundColor Yellow
 $localMachineConf = "$env:USERPROFILE\.local\share\containers\podman\machine"
 $configMachineConf = "$env:USERPROFILE\.config\containers\podman\machine"
@@ -164,7 +174,7 @@ if (Test-Path $configMachineConf) {
     Remove-Item -Recurse -Force $configMachineConf -ErrorAction SilentlyContinue
 }
 
-# 8. Forcefully clean lingering Podman system connections
+# 9. Forcefully clean lingering Podman system connections
 Write-Host "Cleaning up lingering Podman system connections..." -ForegroundColor Yellow
 if (Get-Command "podman" -ErrorAction SilentlyContinue) {
     $connections = podman system connection list --format "{{.Name}}" 2>$null
@@ -181,16 +191,6 @@ if (Get-Command "podman" -ErrorAction SilentlyContinue) {
         podman system connection rm default 2>$null
         podman system connection rm podman-machine-default 2>$null
         podman system connection rm podman-machine-default-root 2>$null
-    }
-}
-
-# 9. Kill lingering SSH proxy processes
-Write-Host "Checking for lingering win-sshproxy.exe processes..." -ForegroundColor Yellow
-$sshProxies = Get-Process -Name "win-sshproxy" -ErrorAction SilentlyContinue
-if ($sshProxies) {
-    foreach ($proxy in $sshProxies) {
-        Write-Host "Stopping win-sshproxy.exe (PID: $($proxy.Id))..." -ForegroundColor Yellow
-        Stop-Process -Id $proxy.Id -Force -ErrorAction SilentlyContinue
     }
 }
 
