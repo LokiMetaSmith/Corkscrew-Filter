@@ -567,37 +567,121 @@ boundaryField
 
     def _update_fvSolution(self, turbulence, cfd_settings=None):
         import shutil
-        template_path = os.path.join(self.case_dir, "system", "fvSolution.template")
+        import textwrap
+
         target_path = os.path.join(self.case_dir, "system", "fvSolution")
 
-        # If the template file exists but we are running a new version, it might be outdated.
-        # But we also don't want to overwrite custom user templates.
-        # Since we changed the base target_path format to use explicit blocks,
-        # let's overwrite the template if it uses the old regex block approach.
-        if os.path.exists(template_path):
-            with open(template_path, 'r') as f:
-                template_content = f.read()
-            if '"(U|k|epsilon)"' in template_content or '"(U|k|epsilon|omega)"' in template_content:
-                # The template is outdated, overwrite it with the new explicit-block version
-                if os.path.exists(target_path):
-                    shutil.copy2(target_path, template_path)
+        # Instead of relying on a potentially corrupted fvSolution.template, we generate the entire
+        # base fvSolution dictionary cleanly, and then conditionally remove variables based on the turbulence model.
+        base_template = """/*--------------------------------*- C++ -*----------------------------------*\\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSolution;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-        # Recover from permanent modification if user lacks template
-        if not os.path.exists(template_path) and os.path.exists(target_path):
-            shutil.copy2(target_path, template_path)
+solvers
+{
+    p
+    {
+        solver          PCG;
+        preconditioner  DIC;
+        tolerance       1e-6;
+        relTol          0.01;
+    }
 
-        if os.path.exists(template_path):
-            shutil.copy2(template_path, target_path)
+    U
+    {
+        solver          smoothSolver;
+        smoother        symGaussSeidel;
+        tolerance       1e-6;
+        relTol          0.1;
+    }
 
-        if not os.path.exists(target_path): return
+    k
+    {
+        solver          smoothSolver;
+        smoother        symGaussSeidel;
+        tolerance       1e-6;
+        relTol          0.1;
+    }
 
-        with open(target_path, 'r') as f:
-            content = f.read()
+    epsilon
+    {
+        solver          smoothSolver;
+        smoother        symGaussSeidel;
+        tolerance       1e-6;
+        relTol          0.1;
+    }
+
+    omega
+    {
+        solver          smoothSolver;
+        smoother        symGaussSeidel;
+        tolerance       1e-6;
+        relTol          0.1;
+    }
+
+    R
+    {
+        solver          smoothSolver;
+        smoother        symGaussSeidel;
+        tolerance       1e-6;
+        relTol          0.1;
+    }
+}
+
+SIMPLE
+{
+    nNonOrthogonalCorrectors 2;
+    consistent      no;
+    pRefCell        0;
+    pRefValue       0;
+    residualControl
+    {
+        p               1e-4;
+        U               1e-4;
+        k               1e-4;
+        epsilon         1e-4;
+        omega           1e-4;
+        R               1e-4;
+    }
+}
+
+relaxationFactors
+{
+    fields
+    {
+        p               0.2;
+    }
+    equations
+    {
+        U               0.5;
+        k               0.5;
+        epsilon         0.5;
+        omega           0.5;
+        R               0.5;
+    }
+}
+
+// ************************************************************************* //
+"""
+        content = base_template
 
         def remove_block(text, block_name):
-            pattern_solver = r"\s*" + block_name + r"\s*\{[^}]+\}"
+            pattern_solver = r"\s*\b" + block_name + r"\b\s*\{[^}]+\}"
             text = re.sub(pattern_solver, "", text)
-            pattern_line = r"^\s*" + block_name + r"\s+[\d\.e\-\+]+;\s*$"
+            pattern_line = r"^\s*\b" + block_name + r"\b\s+[\d\.e\-\+]+;\s*$"
             text = re.sub(pattern_line, "", text, flags=re.MULTILINE)
             return text
 
@@ -616,8 +700,11 @@ boundaryField
             for factor_name, factor_value in relax_factors.items():
                 content = re.sub(rf"\b{factor_name}\s+[\d\.]+;", f"{factor_name}               {factor_value};", content)
 
+        # Clean up empty lines created by regex sub
+        cleaned = os.linesep.join([s for s in content.splitlines() if s.strip()])
+
         with open(target_path, 'w') as f:
-            f.write(content)
+            f.write(cleaned + "\n")
 
     def _generate_decomposeParDict(self, num_processors=None, method="scotch"):
         """
