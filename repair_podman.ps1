@@ -14,6 +14,15 @@
 
 Write-Host "Starting Podman deployment and repair process..." -ForegroundColor Cyan
 
+# 0. Check for Administrator privileges
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (!$isAdmin) {
+    Write-Warning "This script is not running as Administrator."
+    Write-Warning "Hyper-V cleanup and forceful removals may fail or be skipped."
+    Write-Warning "If you encounter issues, please run PowerShell as Administrator and try again."
+    Write-Host ""
+}
+
 # 1. Check Winget availability
 $wingetAvailable = [bool](Get-Command "winget" -ErrorAction SilentlyContinue)
 if (!$wingetAvailable) {
@@ -117,8 +126,15 @@ if ($wslList) {
 
 # 6. Forcefully clean up Windows Hyper-V VMs
 Write-Host "Checking for lingering Hyper-V VMs..." -ForegroundColor Yellow
-if (Get-Command "Remove-VM" -ErrorAction SilentlyContinue) {
-    Get-VM -Name "podman-machine-default*" -ErrorAction SilentlyContinue | Remove-VM -Force -ErrorAction SilentlyContinue
+if (Get-Command "Get-VM" -ErrorAction SilentlyContinue) {
+    $vms = Get-VM -Name "podman-machine-default*" -ErrorAction SilentlyContinue
+    if ($vms) {
+        foreach ($vm in $vms) {
+            Write-Host "Stopping and removing lingering Hyper-V VM: $($vm.Name)" -ForegroundColor Yellow
+            Stop-VM -Name $vm.Name -Force -TurnOff -ErrorAction SilentlyContinue
+            Remove-VM -Name $vm.Name -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 # 7. Forcefully clean Podman configuration directories
