@@ -9,8 +9,9 @@
     3. Shut down WSL to release any locks.
     4. Unregister any lingering Podman WSL distributions.
     5. Forcefully clean up lingering system connections.
-    6. Re-initialize and start a fresh Podman machine.
-    7. Verify functionality.
+    6. Kill lingering API proxy processes.
+    7. Re-initialize and start a fresh Podman machine.
+    8. Verify functionality.
 #>
 
 Write-Host "Starting Podman deployment and repair process..." -ForegroundColor Cyan
@@ -101,9 +102,22 @@ if (Get-Command "podman" -ErrorAction SilentlyContinue) {
     }
 }
 
-# 4. Shut down WSL
+# 4. Shut down WSL and ensure it is stopped
 Write-Host "Shutting down WSL to clear locks..." -ForegroundColor Yellow
 wsl --shutdown
+Start-Sleep -Seconds 3
+
+# Wait for WSL to fully shut down to prevent win-sshproxy.exe expected pipe failures
+$wslRetryCount = 0
+while ($wslRetryCount -lt 5) {
+    $runningDistros = wsl --list --running --quiet 2>$null
+    if ([string]::IsNullOrWhiteSpace($runningDistros)) {
+        break
+    }
+    Write-Host "Waiting for WSL to fully shut down... ($wslRetryCount)"
+    Start-Sleep -Seconds 2
+    $wslRetryCount++
+}
 
 # 5. Dynamically find and unregister leftover Podman WSL distributions
 Write-Host "Checking for lingering Podman WSL distributions..." -ForegroundColor Yellow
@@ -170,7 +184,17 @@ if (Get-Command "podman" -ErrorAction SilentlyContinue) {
     }
 }
 
-# 9. Initialize and start a fresh Podman machine
+# 9. Kill lingering SSH proxy processes
+Write-Host "Checking for lingering win-sshproxy.exe processes..." -ForegroundColor Yellow
+$sshProxies = Get-Process -Name "win-sshproxy" -ErrorAction SilentlyContinue
+if ($sshProxies) {
+    foreach ($proxy in $sshProxies) {
+        Write-Host "Stopping win-sshproxy.exe (PID: $($proxy.Id))..." -ForegroundColor Yellow
+        Stop-Process -Id $proxy.Id -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# 10. Initialize and start a fresh Podman machine
 Write-Host "Initializing a fresh Podman machine..." -ForegroundColor Cyan
 podman machine init
 if ($LASTEXITCODE -ne 0) {
@@ -185,7 +209,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# 10. Verify functionality
+# 11. Verify functionality
 Write-Host "Verifying Podman installation and machine status..." -ForegroundColor Cyan
 podman info
 
