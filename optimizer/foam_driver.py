@@ -1704,7 +1704,7 @@ cloudFunctions
         with open(shm_path, 'w') as f:
             f.write(content)
 
-    def run_meshing(self, log_file=None, bin_config=None, stl_assets=None, add_layers=True):
+    def run_meshing(self, log_file=None, bin_config=None, stl_assets=None, add_layers=True, **kwargs):
         """
         Runs the meshing pipeline.
         stl_assets: dict of filenames {'fluid': '...', 'inlet': '...', ...}
@@ -1840,7 +1840,7 @@ cloudFunctions
 
             print(f"Applied fallback wall function {new_wall_func} to {field_name} due to mesh scaling.")
 
-    def run_solver(self, log_file=None, mesh_scaled_for_memory=False):
+    def run_solver(self, log_file=None, mesh_scaled_for_memory=False, **kwargs):
         """
         Runs the solver.
         """
@@ -2160,7 +2160,7 @@ boundaryField
         with open(u_file, 'w') as f:
             f.write(content)
 
-    def run_particle_tracking(self, log_file=None, bin_config=None, turbulence="laminar"):
+    def run_particle_tracking(self, log_file=None, bin_config=None, turbulence="laminar", mesh_scaled_for_memory=False, **kwargs):
         """
         Runs particle tracking (Lagrangian) using a robust transient strategy on frozen flow.
         """

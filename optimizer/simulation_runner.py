@@ -202,16 +202,13 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                     print(f"Warning: Failed to detect memory ({e}). Using default.")
                     ram_gb = 4.0 # Conservative default
 
-                # Heuristic: 100,000 background cells per GB of RAM.
-                # Background cells are multiplied by ~8x in final mesh.
-                # 4GB -> 400k block cells -> ~3.2M final cells.
-                # 16GB -> 1.6M block cells -> ~12.8M final cells.
-
-                calculated_limit = int(ram_gb * 100000)
+                # Heuristic: 1.5 to 2 gigabytes of RAM per 1 million cells. Let's use 1.75 GB / 1M cells.
+                # So MAX_CELLS = (ram_gb / 1.75) * 1_000_000
+                calculated_limit = int((ram_gb / 1.75) * 1_000_000)
 
                 # Clamp limits
                 MIN_LIMIT = 100_000
-                MAX_LIMIT = 3_000_000 # Cap at 3M to avoid excessive runtimes even on big machines
+                MAX_LIMIT = 10_000_000 # Cap reasonable enough for 16GB+ systems
 
                 MAX_CELLS = max(MIN_LIMIT, min(calculated_limit, MAX_LIMIT))
 
@@ -223,15 +220,20 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                     min_required_cells = block_volume / (min_res_cell_size ** 3)
 
                     if min_required_cells > MAX_CELLS:
-                        print(f"WARNING: Geometry requires ~{min_required_cells:.0f} cells for accuracy, but memory limit is {MAX_CELLS}. Resolution will be reduced to fit available RAM. Results may be inaccurate.")
-                        # Do not override MAX_CELLS. Let the subsequent logic resize the mesh.
+                        print(f"WARNING: Geometry requires ~{min_required_cells:.0f} cells for accuracy, but memory limit is {MAX_CELLS}.")
 
                 mesh_scaled_for_memory = False
                 if estimated_cells > MAX_CELLS:
-                    new_size = (block_volume / MAX_CELLS) ** (1/3)
-                    print(f"Warning: Estimated cell count {estimated_cells:.0f} exceeds {MAX_CELLS} limit (RAM: {ram_gb:.1f}GB). Increasing target_cell_size from {target_cell_size:.5f}m to {new_size:.5f}m to prevent OOM.")
-                    target_cell_size = new_size
-                    mesh_scaled_for_memory = True
+                    print(f"ERROR: Estimated cell count {estimated_cells:.0f} exceeds {MAX_CELLS} limit (RAM: {ram_gb:.1f}GB).")
+                    print("Simulation fundamentally compromised. Rejecting geometrically intractable configuration.")
+                    # Return a structured penalty score directly to the LLM agent
+                    error_details = f"Estimated cell count {estimated_cells:.0f} exceeds hardware capacity of {MAX_CELLS} cells (based on {ram_gb:.1f} GB RAM)."
+                    metrics = {
+                        "error": "computationally_intractable",
+                        "penalty": 1e9,
+                        "details": error_details
+                    }
+                    return metrics, [], None, None, None
 
                 print(f"Updating blockMesh with target_cell_size={target_cell_size:.3f}m")
                 # Pass scaled bounds to foam_driver
