@@ -541,6 +541,8 @@ boundaryField
         elif turbulence == "RNGkEpsilon":
             content = re.sub(r"div\(phi,omega\).*?;", "", content)
             content = re.sub(r"div\(phi,R\).*?;", "", content)
+            # Upwind U to ensure stability on coarse/scaled meshes with turbulence enabled
+            content = re.sub(r"div\(phi,U\).*?;", "div(phi,U)      bounded Gauss upwind;", content)
 
             # Robustly inject if missing due to prior corrupted files (handles Windows CRLF and arbitrary spacing)
             if "div(phi,k)" not in content and "divSchemes" in content:
@@ -729,7 +731,7 @@ relaxationFactors
         if cfd_settings and 'relaxation_factors' in cfd_settings:
             relax_factors = cfd_settings['relaxation_factors']
             for factor_name, factor_value in relax_factors.items():
-                content = re.sub(rf"\b{factor_name}\s+[\d\.]+;", f"{factor_name}               {factor_value};", content)
+                content = re.sub(rf"\b{factor_name}\s+[\d\.\-e\+]+;", f"{factor_name}               {factor_value};", content)
 
         # Clean up empty lines created by regex sub and enforce Unix line endings for OpenFOAM in Podman
         cleaned = "\n".join([s for s in content.splitlines() if s.strip()])
@@ -1832,8 +1834,8 @@ cloudFunctions
                     content = re.sub(r"^\s*Cs\s+.*?$\n?", "", content, flags=re.MULTILINE)
 
                 if new_wall_func == "zeroGradient":
-                    content = re.sub(r"type\s+zeroGradient;\s*value\s+uniform\s+[\d\.\-e\+]+;", r"type            zeroGradient;", content)
-                    content = re.sub(r"type\s+zeroGradient;\s*value\s+\$internalField;", r"type            zeroGradient;", content)
+                    content = re.sub(r"type\s+zeroGradient;\s+value\s+uniform\s+[\d\.\-e\+]+;", r"type            zeroGradient;", content, flags=re.MULTILINE)
+                    content = re.sub(r"type\s+zeroGradient;\s+value\s+\$internalField;", r"type            zeroGradient;", content, flags=re.MULTILINE)
 
                 with open(field_path, "w") as f:
                     f.write(content)
