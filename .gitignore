@@ -35,6 +35,8 @@ corkscrewFilter/system/blockMeshDict
 corkscrewFilter/system/snappyHexMeshDict
 corkscrewFilter/system/controlDict
 corkscrewFilter/system/decomposeParDict
+corkscrewFilter/system/fvSchemes
+corkscrewFilter/system/fvSolution
 
 # Ignore generated particle tracking configuration
 corkscrewFilter/constant/kinematicCloudProperties
