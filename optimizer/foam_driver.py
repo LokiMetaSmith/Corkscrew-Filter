@@ -730,8 +730,15 @@ relaxationFactors
 
         if cfd_settings and 'relaxation_factors' in cfd_settings:
             relax_factors = cfd_settings['relaxation_factors']
-            for factor_name, factor_value in relax_factors.items():
-                content = re.sub(rf"\b{factor_name}\s+[\d\.\-e\+]+;", f"{factor_name}               {factor_value};", content)
+            parts = content.split("relaxationFactors", 1)
+            if len(parts) > 1:
+                relax_block = parts[1]
+                for factor_name, factor_value in relax_factors.items():
+                    relax_block = re.sub(rf"\b{factor_name}\s+[\d\.\-e\+]+;", f"{factor_name}               {factor_value};", relax_block)
+                content = parts[0] + "relaxationFactors" + relax_block
+            else:
+                for factor_name, factor_value in relax_factors.items():
+                    content = re.sub(rf"\b{factor_name}\s+[\d\.\-e\+]+;", f"{factor_name}               {factor_value};", content)
 
         # Clean up empty lines created by regex sub and enforce Unix line endings for OpenFOAM in Podman
         cleaned = "\n".join([s for s in content.splitlines() if s.strip()])
