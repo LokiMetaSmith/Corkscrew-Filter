@@ -282,8 +282,8 @@ class FoamDriver:
         if cfd_settings and 'turbulence_model' in cfd_settings:
             turbulence = cfd_settings['turbulence_model']
 
-        self._apply_boundary_conditions(zero)
         self._generate_turbulence_fields(zero, cfd_settings)
+        self._apply_boundary_conditions(zero)
         self._update_turbulence_properties(turbulence)
         self._update_fvSchemes(turbulence)
         self._update_fvSolution(turbulence, cfd_settings)
