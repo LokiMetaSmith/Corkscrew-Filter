@@ -1576,8 +1576,14 @@ cloudFunctions
         else:
             turb_interpolation = """
         k               cellPoint;
-        epsilon         cellPoint;
-        omega           cellPoint;"""
+        epsilon         cellPoint;"""
+
+            # Add omega only if not using RNGkEpsilon (which doesn't solve omega)
+            cfd_settings = self.config.get('cfd_settings', {})
+            turbulence_model = cfd_settings.get('turbulence_model', 'laminar')
+            if turbulence_model != "RNGkEpsilon":
+                turb_interpolation += "\n        omega           cellPoint;"
+
             disp_model = "stochasticDispersionRAS"
         # -----------------------------------------
 
