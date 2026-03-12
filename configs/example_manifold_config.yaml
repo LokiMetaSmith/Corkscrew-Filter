@@ -56,10 +56,10 @@ cfd_settings:
     k: "kqRWallFunction"
   initial_fields:
     k:
-      internalField: "uniform 0.375"
+      internalField: "uniform 1e-5"
       wallFunction: "kqRWallFunction"
     epsilon:
-      internalField: "uniform 14.855"
+      internalField: "uniform 1e-5"
       wallFunction: "epsilonWallFunction"
   relaxation_factors:
     p: 0.2
