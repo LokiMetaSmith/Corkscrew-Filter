@@ -1867,6 +1867,20 @@ cloudFunctions
         if mesh_scaled_for_memory:
             self._apply_fallback_wall_functions()
 
+        # Clean up any crashed or old time directories to ensure a fresh start from 0 for the new mesh
+        for d in os.listdir(self.case_dir):
+            path = os.path.join(self.case_dir, d)
+            try:
+                if d != "0" and os.path.isdir(path):
+                    float(d)  # Check if it's a numeric time directory
+                    shutil.rmtree(path, ignore_errors=True)
+            except ValueError:
+                pass
+
+        # Also clean up processor time directories if running in parallel
+        for p_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
+            shutil.rmtree(p_dir, ignore_errors=True)
+
         def _execute():
             if solve_procs > 1:
                 self._generate_decomposeParDict(num_processors=solve_procs, method=solve_method)
