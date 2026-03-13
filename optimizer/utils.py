@@ -67,6 +67,9 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
                 self.total_time = 0.0
                 self.start_wall_time = time.time()
                 self.is_openfoam = any("Foam" in arg or "Mesh" in arg or "topoSet" in arg or "createPatch" in arg for arg in cmd)
+                self.is_meshing = any("snappyHexMesh" in arg for arg in cmd)
+                self.current_phase = ""
+                self.phase_start_time = time.time()
 
         state = ProgressState()
 
@@ -98,6 +101,23 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
                                 state.current_time = float(m.group(1))
                             except ValueError:
                                 pass
+
+                        if state.is_meshing:
+                            phase_match = re.search(r"^(Refinement phase|Feature refinement iteration|Surface refinement iteration|Shell refinement iteration|Snapping phase|Morphing phase|Layer addition phase)", line.strip())
+                            if phase_match:
+                                new_phase = phase_match.group(1).strip()
+                                # Handle cases like "Feature refinement iteration X"
+                                iter_match = re.search(r"iteration (\d+)", line.strip())
+                                if iter_match:
+                                    new_phase += f" {iter_match.group(1)}"
+
+                                if new_phase != state.current_phase:
+                                    if state.current_phase:
+                                        # When phase changes, print a newline so the previous phase's block progress remains on screen
+                                        sys.stdout.write("\n")
+                                    state.current_phase = new_phase
+                                    state.phase_start_time = time.time()
+
             except Exception as e:
                 file_handle.write(f"\nError reading output: {e}\n")
 
@@ -127,6 +147,19 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
                     else:
                         progress_str = f" [{state.current_time:g}/{state.total_time:g}]"
                         sys.stdout.write(f"\r{spinner[idx]} {description}{progress_str}" + " " * 20)
+                elif state.is_meshing and state.current_phase:
+                    # Meshing block characters representation
+                    elapsed_phase = time.time() - state.phase_start_time
+
+                    # 1 block per 2 seconds, cap at 30 blocks
+                    num_blocks = min(int(elapsed_phase / 2), 30)
+                    blocks_str = "█" * num_blocks
+
+                    # Also show elapsed time in seconds
+                    time_str = f"{int(elapsed_phase)}s"
+
+                    progress_str = f" [{state.current_phase}: {blocks_str} {time_str}]"
+                    sys.stdout.write(f"\r{spinner[idx]} {description}{progress_str}" + " " * 20)
                 else:
                     sys.stdout.write(f"\r{spinner[idx]} {description}..." + " " * 30)
 
