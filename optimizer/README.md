@@ -52,6 +52,7 @@ python optimizer/main.py --iterations 5 --scad-file corkscrew.scad --case-dir co
 *   `--case-dir`: Path to the OpenFOAM case directory (default: `corkscrewFilter`).
 *   `--output-stl`: Name of the generated STL file (default: `corkscrew_fluid.stl`).
 *   `--dry-run`: Use this flag to simulate the process without running actual OpenSCAD or OpenFOAM commands (useful for testing the logic).
+*   `--cpus`: Set the number of CPUs (cores) to use for parallel meshing and solving in OpenFOAM (default: 1). Use this flag to speed up OpenFOAM processing significantly on multi-core machines.
 
 ## File Descriptions
 

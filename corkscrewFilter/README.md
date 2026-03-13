@@ -17,7 +17,9 @@ This directory contains the necessary files to run a basic CFD simulation of the
 
 ## Step 3: Run the Simulation
 
-Execute the following commands in order from within this directory (`corkscrewFilter/`) in your OpenFOAM terminal:
+Execute the following commands in order from within this directory (`corkscrewFilter/`) in your OpenFOAM terminal.
+
+### Option A: Serial Execution (Single Core)
 
 1.  **Create the background mesh:**
     ```bash
@@ -35,14 +37,67 @@ Execute the following commands in order from within this directory (`corkscrewFi
     snappyHexMesh -overwrite
     ```
 
-4.  **(Optional) Check mesh quality:**
+4.  **(Optional) Create Patches:**
+    ```bash
+    topoSet
+    createPatch -overwrite
+    ```
+
+5.  **(Optional) Check mesh quality:**
     ```bash
     checkMesh
     ```
 
-5.  **Run the solver:**
+6.  **Run the solver:**
     ```bash
     simpleFoam
+    ```
+
+### Option B: Parallel Execution (Multiple Cores)
+
+If you have multiple cores, you can parallelize the meshing and solving steps to make them go faster. Ensure you have `system/decomposeParDict` configured (the default is 4 cores using the `hierarchical` method). Note that if you are using the AI-optimizer Python framework, you do not need to do this manually; just pass the `--cpus X` argument to the script!
+
+1.  **Create the background mesh and extract features:**
+    ```bash
+    blockMesh
+    surfaceFeatureExtract
+    ```
+
+2.  **Decompose the mesh for parallel processing:**
+    ```bash
+    decomposePar
+    ```
+
+3.  **Run snappyHexMesh in parallel (e.g., with 4 processors):**
+    ```bash
+    mpirun -np 4 snappyHexMesh -overwrite -parallel
+    ```
+
+4.  **Reconstruct the mesh:**
+    ```bash
+    reconstructParMesh -constant
+    rm -rf processor*  # Optional: Clean up to save disk space
+    ```
+
+5.  **(Optional) Create Patches (Must be done serially!):**
+    ```bash
+    topoSet
+    createPatch -overwrite
+    ```
+
+6.  **Decompose the final mesh for solving:**
+    ```bash
+    decomposePar -force
+    ```
+
+7.  **Run simpleFoam in parallel:**
+    ```bash
+    mpirun -np 4 simpleFoam -parallel
+    ```
+
+8.  **Reconstruct the final results:**
+    ```bash
+    reconstructPar -latestTime
     ```
 
 ## Step 4: Visualize the Results
