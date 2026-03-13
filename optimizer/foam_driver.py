@@ -1884,7 +1884,13 @@ cloudFunctions
 
         # If it failed, and we haven't applied fallback wall functions yet, try doing so to recover from unstable baseline!
         if not success and not mesh_scaled_for_memory:
-            print("Solver failed on standard mesh. Attempting to recover by applying fallback wall functions...")
+            print("Solver failed on standard mesh. Attempting to recover by disabling turbulence (laminar fallback) and applying fallback wall functions...")
+
+            # Cleanly disable turbulence to prevent epsilonWallFunction FPEs on bad mesh boundary cells
+            self._update_turbulence_properties("laminar")
+            self._update_fvSchemes("laminar")
+            self._update_fvSolution("laminar", self.config.get('cfd_settings', {}))
+
             self._apply_fallback_wall_functions()
 
             # Clean up any crashed time directories to ensure a fresh start from 0
