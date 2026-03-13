@@ -60,6 +60,8 @@ The `optimizer/` directory contains tools to automate the design-simulation-anal
 *   See [optimizer/README.md](./optimizer/README.md) for details on the AI-driven optimization workflow.
 *   See [parameters/README.md](./parameters/README.md) for information on parameter configuration files.
 
+> **Pro Tip:** When running the optimizer `main.py`, you can parallelize the meshing and CFD solver by using the `--cpus X` flag (where X is the number of cores). This makes OpenFOAM execute much faster!
+
 ### 4. CFD Simulation (Advanced)
 
 This project includes a base case setup for running a CFD simulation using OpenFOAM. For detailed instructions on how to set up and run the simulation, please see the [README.md in the `corkscrewFilter` directory](./corkscrewFilter/README.md).
