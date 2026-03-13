@@ -22,7 +22,7 @@ if(user_email != null)
 
     // 4. Fetch the static IFF roster
     // Replace the URL with the actual public URL where your static site hosts iff-roster.json
-    roster_url = "https://ideaforge.org/iff-roster.json";
+    roster_url = "https://idea-forge.org/iff-roster.json";
 
     iff_response = invokeurl
     [
