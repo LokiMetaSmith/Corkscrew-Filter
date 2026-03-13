@@ -152,8 +152,22 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
                     elapsed_phase = time.time() - state.phase_start_time
 
                     # 1 block per 2 seconds, cap at 30 blocks
-                    num_blocks = min(int(elapsed_phase / 2), 30)
-                    blocks_str = "█" * num_blocks
+                    interval = 2.0
+                    max_blocks = 30
+
+                    full_blocks = min(int(elapsed_phase / interval), max_blocks)
+                    remainder = (elapsed_phase % interval) / interval
+
+                    # Animation frames for the "filling" block
+                    fill_chars = ["_", "▃", "▄", "▆", "█"]
+
+                    if full_blocks >= max_blocks:
+                        blocks_str = "." * max_blocks
+                    else:
+                        # Determine which partial block to show based on the remainder
+                        fill_idx = min(int(remainder * len(fill_chars)), len(fill_chars) - 1)
+                        current_char = fill_chars[fill_idx]
+                        blocks_str = "." * full_blocks + current_char
 
                     # Also show elapsed time in seconds
                     time_str = f"{int(elapsed_phase)}s"
