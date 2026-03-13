@@ -58,17 +58,50 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
              sys.stdout.write(f"\rError: Executable '{cmd[0]}' not found.\n")
              raise
 
+        import re
+
+        # Object to share state between thread and main loop
+        class ProgressState:
+            def __init__(self):
+                self.current_time = 0.0
+                self.total_time = 0.0
+                self.start_wall_time = time.time()
+                self.is_openfoam = any("Foam" in arg or "Mesh" in arg or "topoSet" in arg or "createPatch" in arg for arg in cmd)
+
+        state = ProgressState()
+
+        # Try to parse endTime from controlDict if this looks like a solver
+        if state.is_openfoam and cwd and any("Foam" in arg for arg in cmd):
+            control_dict_path = os.path.join(cwd, "system", "controlDict")
+            if os.path.exists(control_dict_path):
+                try:
+                    with open(control_dict_path, 'r') as f:
+                        cd_content = f.read()
+                        m = re.search(r"endTime\s+([\d\.\-\+e]+);", cd_content)
+                        if m:
+                            state.total_time = float(m.group(1))
+                except Exception:
+                    pass
+
         # Thread function to read from stdout and write to log
-        def log_reader(proc, file_handle):
+        def log_reader(proc, file_handle, state):
             try:
                 for line in proc.stdout:
                     timestamp = datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S] ")
                     file_handle.write(f"{timestamp}{line}")
                     file_handle.flush()
+
+                    if state.is_openfoam:
+                        m = re.match(r"^Time = ([\d\.]+)", line.strip())
+                        if m:
+                            try:
+                                state.current_time = float(m.group(1))
+                            except ValueError:
+                                pass
             except Exception as e:
                 file_handle.write(f"\nError reading output: {e}\n")
 
-        reader_thread = threading.Thread(target=log_reader, args=(process, log_f))
+        reader_thread = threading.Thread(target=log_reader, args=(process, log_f, state))
         reader_thread.start()
 
         spinner = ["|", "/", "-", "\\"]
@@ -76,7 +109,27 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
 
         try:
             while process.poll() is None:
-                sys.stdout.write(f"\r{spinner[idx]} {description}...")
+                if state.is_openfoam and state.total_time > 0 and state.current_time > 0:
+                    elapsed = time.time() - state.start_wall_time
+                    progress = state.current_time / state.total_time
+
+                    if progress > 0.001 and progress < 1.0:
+                        total_estimated = elapsed / progress
+                        remaining = total_estimated - elapsed
+
+                        mins, secs = divmod(int(remaining), 60)
+                        hours, mins = divmod(mins, 60)
+
+                        time_str = f"{hours:02d}:{mins:02d}:{secs:02d}" if hours > 0 else f"{mins:02d}:{secs:02d}"
+
+                        progress_str = f" [{state.current_time:g}/{state.total_time:g} | Est. remaining: {time_str}]"
+                        sys.stdout.write(f"\r{spinner[idx]} {description}{progress_str}" + " " * 10)
+                    else:
+                        progress_str = f" [{state.current_time:g}/{state.total_time:g}]"
+                        sys.stdout.write(f"\r{spinner[idx]} {description}{progress_str}" + " " * 20)
+                else:
+                    sys.stdout.write(f"\r{spinner[idx]} {description}..." + " " * 30)
+
                 sys.stdout.flush()
                 idx = (idx + 1) % len(spinner)
                 time.sleep(0.1)
@@ -85,7 +138,7 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
             reader_thread.join()
 
             # Clear spinner line
-            sys.stdout.write(f"\r{' ' * (len(description) + 20)}\r")
+            sys.stdout.write(f"\r{' ' * (len(description) + 60)}\r")
             sys.stdout.flush()
 
             if process.returncode != 0:
