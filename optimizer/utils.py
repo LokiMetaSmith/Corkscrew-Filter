@@ -26,9 +26,10 @@ class Timer:
         if self.description:
             print(f"Finished {self.description} in {self.duration:.2f}s")
 
-def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processing"):
+def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processing", timeout=None):
     """
     Runs a command, streaming output to a log file with timestamps, while showing a spinner on the console.
+    Includes an optional timeout (in seconds) that will forcefully terminate the process.
     """
     # Ensure directory for log file exists
     log_dir = os.path.dirname(log_file_path)
@@ -129,8 +130,16 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
 
         try:
             while process.poll() is None:
+                elapsed_wall = time.time() - state.start_wall_time
+                if timeout and elapsed_wall > timeout:
+                    process.kill()
+                    reader_thread.join()
+                    sys.stdout.write(f"\nCommand timed out after {timeout} seconds: {' '.join(cmd)}\n")
+                    log_f.write(f"\n[ERROR] Command timed out after {timeout} seconds.\n")
+                    raise subprocess.TimeoutExpired(cmd, timeout)
+
                 if state.is_openfoam and state.total_time > 0 and state.current_time > 0:
-                    elapsed = time.time() - state.start_wall_time
+                    elapsed = elapsed_wall
                     progress = state.current_time / state.total_time
 
                     if progress > 0.001 and progress < 1.0:

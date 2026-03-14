@@ -73,6 +73,24 @@ def validate_parameters(params):
             if length <= 0:
                  return False, f"Insert length must be positive. Got {length}"
 
+        # 6. Cyclone / Manifold checks
+        if "cyclone_diameter" in params and "vortex_finder_diameter" in params and "inlet_width" in params:
+            cyclone_d = float(params.get("cyclone_diameter"))
+            vf_d = float(params.get("vortex_finder_diameter"))
+            inlet_w = float(params.get("inlet_width"))
+
+            # The inner edge of the inlet must not intersect or touch the vortex finder
+            # Inner edge radius = (cyclone_d / 2) - inlet_w
+            # Vortex finder outer radius = vf_d / 2
+            inner_inlet_r = (cyclone_d / 2.0) - inlet_w
+            vf_r = vf_d / 2.0
+
+            if inner_inlet_r <= vf_r:
+                return False, (
+                    f"Invalid Geometry: Inlet inner edge radius ({inner_inlet_r}mm) intersects or is coincident "
+                    f"with the vortex finder outer radius ({vf_r}mm). This guarantees meshing failure."
+                )
+
         return True, None
 
     except (ValueError, TypeError) as e:

@@ -168,7 +168,7 @@ class FoamDriver:
 
         return container_cmd
 
-    def run_command(self, cmd, log_file=None, description="Processing", ignore_error=False):
+    def run_command(self, cmd, log_file=None, description="Processing", ignore_error=False, timeout=None):
         """
         Executes a command, optionally wrapping it in a container.
         """
@@ -189,10 +189,17 @@ class FoamDriver:
                 full_cmd,
                 target_log,
                 cwd=cwd,
-                description=description
+                description=description,
+                timeout=timeout
             )
             return True
 
+        except subprocess.TimeoutExpired as e:
+            if not ignore_error:
+                print(f"\nTimeout executing {' '.join(cmd)} after {timeout} seconds.")
+                self._print_log_tail(target_log)
+                return False
+            return False
         except subprocess.CalledProcessError as e:
             if not ignore_error:
                 print(f"\nError executing {' '.join(cmd)}: {e}")
@@ -1763,7 +1770,7 @@ cloudFunctions
             if not success_decompose: return False
 
             cmd = ["mpirun", "-np", str(mesh_procs), "snappyHexMesh", "-overwrite", "-parallel"]
-            if not self.run_command(cmd, log_file=log_file, description="Meshing (snappyHexMesh Parallel)"):
+            if not self.run_command(cmd, log_file=log_file, description="Meshing (snappyHexMesh Parallel)", timeout=3600):
                 print("Error: Meshing failed. Boundary layers are critical, design rejected.")
                 return False
 
@@ -1778,7 +1785,7 @@ cloudFunctions
             if not self.run_command(["createPatch", "-overwrite"], log_file=log_file, description="Meshing (createPatch)"): return False
 
         else:
-            if not self.run_command(["snappyHexMesh", "-overwrite"], log_file=log_file, description="Meshing (snappyHexMesh)"):
+            if not self.run_command(["snappyHexMesh", "-overwrite"], log_file=log_file, description="Meshing (snappyHexMesh)", timeout=3600):
                 print("Error: Meshing failed. Boundary layers are critical, design rejected.")
                 return False
 
@@ -1886,13 +1893,13 @@ cloudFunctions
                 self._generate_decomposeParDict(num_processors=solve_procs, method=solve_method)
                 if not self.run_command(["decomposePar", "-force"], log_file=log_file, description="Decomposing Domain"): return False
                 cmd = ["mpirun", "-np", str(solve_procs), "simpleFoam", "-parallel"]
-                if not self.run_command(cmd, log_file=log_file, description=f"Solving CFD (Parallel {solve_procs} CPUs)"): return False
+                if not self.run_command(cmd, log_file=log_file, description=f"Solving CFD (Parallel {solve_procs} CPUs)", timeout=7200): return False
                 if not self.run_command(["reconstructPar", "-latestTime"], log_file=log_file, description="Reconstructing Domain"): return False
                 for proc_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
                     shutil.rmtree(proc_dir, ignore_errors=True)
                 return True
             else:
-                return self.run_command(["simpleFoam"], log_file=log_file, description="Solving CFD")
+                return self.run_command(["simpleFoam"], log_file=log_file, description="Solving CFD", timeout=7200)
 
         success = _execute()
 
@@ -2233,7 +2240,7 @@ boundaryField
             # Turbulence is KEPT ON for stochasticDispersionRAS
 
             # 4. Run Solver
-            return self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking")
+            return self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking", timeout=7200)
 
     def generate_vtk(self):
         """
