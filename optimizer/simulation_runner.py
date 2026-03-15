@@ -178,7 +178,13 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                             pass
 
                 # Estimate cell count to prevent OOM
-                BLOCK_MARGIN = np.array([1.2, 1.2, 0.95])
+                # Dynamically fetch block_margin from config to support various geometries
+                config_margin = foam_driver.config.get("geometry", {}).get("block_margin", [1.2, 1.2, 1.2])
+                try:
+                    BLOCK_MARGIN = np.array(config_margin)
+                except Exception:
+                    BLOCK_MARGIN = np.array([1.2, 1.2, 1.2])
+
                 # Ensure bounds are numpy arrays for subtraction
                 # bounds_arr is already scaled to meters
                 size = bounds_arr[1] - bounds_arr[0]
@@ -241,50 +247,31 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
 
                 # 1. Try to use MESH_ANCHOR from OpenSCAD script
                 custom_location = None
+                mesh_anchor_scaled = None
                 if 'mesh_anchor' in locals() and mesh_anchor:
-                    custom_location = [mesh_anchor[0] * SCALE_FACTOR, mesh_anchor[1] * SCALE_FACTOR, mesh_anchor[2] * SCALE_FACTOR]
-                    print(f"Using MESH_ANCHOR from OpenSCAD: {custom_location}")
+                    mesh_anchor_scaled = [mesh_anchor[0] * SCALE_FACTOR, mesh_anchor[1] * SCALE_FACTOR, mesh_anchor[2] * SCALE_FACTOR]
+                    print(f"Verifying MESH_ANCHOR from OpenSCAD: {mesh_anchor_scaled}")
+
+                # 2. Ray trace/Grid search to verify or find a new internal point
+                # Pass mesh_anchor_scaled as the given point so it's checked first
+                custom_location = scad_driver.get_internal_point(stl_path, given_point=mesh_anchor_scaled)
+
+                if custom_location:
+                    print(f"Using verified internal point: {custom_location}")
                 else:
-                    # 2. Fallback to ray tracing
-                    custom_location = scad_driver.get_internal_point(stl_path)
+                    print("ERROR: Could not find ANY point strictly inside the mesh.")
+                    print("This usually means the geometry is completely non-manifold, zero-thickness, or inverted.")
+                    print("Rejecting geometry to prevent snappyHexMesh segfault (Exit 139).")
 
-                    if custom_location:
-                        print(f"Using ray-traced internal point: {custom_location}")
-                    else:
-                        print("Warning: Could not find internal point using ray tracing. Attempting fallback calculation.")
+                    error_details = "Geometry generated a completely invalid volume (no internal point found). This leads to snappyHexMesh segfaults."
+                    metrics = {
+                        "error": "geometry_invalid_volume",
+                        "penalty": 1e9,
+                        "details": error_details
+                    }
+                    return metrics, [], None, None, None
 
-                        # 3. Fallback to analytic calculation
-                        part = params.get("part_to_generate", scad_driver.fluid_volume_module)
-                        if part == "modular_filter_assembly":
-                            try:
-                                L = float(params.get("insert_length_mm", 50))
-                                revs = float(params.get("number_of_complete_revolutions", 2))
-                                path_r = float(params.get("helix_path_radius_mm", 1.8))
-
-                                # Calculate twist angle at Z=0 (center)
-                                # The helix rotates by total_twist over height H.
-                                # Total height of helix is L + 2 (from MasterHollowHelix logic).
-                                # Twist rate = 360 * revs / L.
-                                # Total twist = twist_rate * (L + 2).
-                                # At center (Z=0), rotation is total_twist / 2 (assuming linear_extrude center=true).
-
-                                twist_rate = 360.0 * revs / L
-                                total_twist = twist_rate * (L + 2.0)
-                                angle_at_center_deg = total_twist / 2.0
-
-                                theta_rad = math.radians(angle_at_center_deg)
-
-                                # Calculate position
-                                x = path_r * math.cos(theta_rad)
-                                y = path_r * math.sin(theta_rad)
-                                z = 0.0
-                                # Scale fallback calculation to meters
-                                custom_location = (x * SCALE_FACTOR, y * SCALE_FACTOR, z * SCALE_FACTOR)
-                                print(f"Calculated custom seed location for channel: {custom_location}")
-                            except Exception as e:
-                                print(f"Warning: Failed to calculate custom location: {e}")
-
-                # Update location (if custom_location is None, foam_driver defaults to bounds-based logic)
+                # Update location
                 foam_driver.update_snappyHexMesh_location(bounds_arr, custom_location=custom_location)
         else:
             print("[Reuse Mesh] Skipping BlockMesh update.")

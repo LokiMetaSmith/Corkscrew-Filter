@@ -21,7 +21,7 @@ RAS
 {
     model           RNGkEpsilon;
 
-    turbulence      on;
+    turbulence      off;
 
     printCoeffs     on;
 }
