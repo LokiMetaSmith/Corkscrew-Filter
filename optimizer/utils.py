@@ -119,8 +119,14 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
                                     state.current_phase = new_phase
                                     state.phase_start_time = time.time()
 
+            except ValueError:
+                # File was closed by the main thread before the process finished.
+                pass
             except Exception as e:
-                file_handle.write(f"\nError reading output: {e}\n")
+                try:
+                    file_handle.write(f"\nError reading output: {e}\n")
+                except ValueError:
+                    pass
 
         reader_thread = threading.Thread(target=log_reader, args=(process, log_f, state))
         reader_thread.start()
@@ -182,7 +188,18 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
                     time_str = f"{int(elapsed_phase)}s"
 
                     progress_str = f" [{state.current_phase}: {blocks_str} {time_str}]"
-                    sys.stdout.write(f"\r{spinner[idx]} {description}{progress_str}" + " " * 20)
+
+                    try:
+                        sys.stdout.write(f"\r{spinner[idx]} {description}{progress_str}" + " " * 20)
+                    except UnicodeEncodeError:
+                        # Fallback for Windows/terminals that don't support the block characters
+                        fallback_chars = ["_", ".", "-", "=", "#"]
+                        fill_idx = min(int(remainder * len(fallback_chars)), len(fallback_chars) - 1)
+                        current_char = fallback_chars[fill_idx]
+                        blocks_str = "." * full_blocks + current_char
+                        progress_str = f" [{state.current_phase}: {blocks_str} {time_str}]"
+                        sys.stdout.write(f"\r{spinner[idx]} {description}{progress_str}" + " " * 20)
+
                 else:
                     sys.stdout.write(f"\r{spinner[idx]} {description}..." + " " * 30)
 
@@ -202,10 +219,15 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
                 # Caller usually catches CalledProcessError
                 raise subprocess.CalledProcessError(process.returncode, cmd)
 
-        except KeyboardInterrupt:
+        except (Exception, KeyboardInterrupt) as e:
+            # Catch all exceptions so we can safely kill the process and join the thread
+            # before the file descriptor is closed.
             process.kill()
             reader_thread.join()
-            sys.stdout.write("\nProcess interrupted by user.\n")
+            if isinstance(e, KeyboardInterrupt):
+                sys.stdout.write("\nProcess interrupted by user.\n")
+            else:
+                sys.stdout.write(f"\nUnexpected error executing {' '.join(cmd)}: {e}\n")
             raise
 
 def get_container_memory_gb(container_tool=None):
