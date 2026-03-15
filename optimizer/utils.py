@@ -158,10 +158,10 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
                         time_str = f"{hours:02d}:{mins:02d}:{secs:02d}" if hours > 0 else f"{mins:02d}:{secs:02d}"
 
                         progress_str = f" [{state.current_time:g}/{state.total_time:g} | Est. remaining: {time_str}]"
-                        sys.stdout.write(f"\r{spinner[idx]} {description}{progress_str}" + " " * 10)
+                        sys.stdout.write(f"\r\033[K{spinner[idx]} {description}{progress_str}")
                     else:
                         progress_str = f" [{state.current_time:g}/{state.total_time:g}]"
-                        sys.stdout.write(f"\r{spinner[idx]} {description}{progress_str}" + " " * 20)
+                        sys.stdout.write(f"\r\033[K{spinner[idx]} {description}{progress_str}")
                 elif state.is_meshing and state.current_phase:
                     # Meshing block characters representation
                     elapsed_phase = time.time() - state.phase_start_time
@@ -183,6 +183,7 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
                         fill_idx = min(int(remainder * len(fill_chars)), len(fill_chars) - 1)
                         current_char = fill_chars[fill_idx]
                         blocks_str = "." * full_blocks + current_char
+                        blocks_str = blocks_str.ljust(max_blocks, ' ')
 
                     # Also show elapsed time in seconds
                     time_str = f"{int(elapsed_phase)}s"
@@ -190,18 +191,19 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
                     progress_str = f" [{state.current_phase}: {blocks_str} {time_str}]"
 
                     try:
-                        sys.stdout.write(f"\r{spinner[idx]} {description}{progress_str}" + " " * 20)
+                        sys.stdout.write(f"\r\033[K{spinner[idx]} {description}{progress_str}")
                     except UnicodeEncodeError:
                         # Fallback for Windows/terminals that don't support the block characters
                         fallback_chars = ["_", ".", "-", "=", "#"]
                         fill_idx = min(int(remainder * len(fallback_chars)), len(fallback_chars) - 1)
                         current_char = fallback_chars[fill_idx]
                         blocks_str = "." * full_blocks + current_char
+                        blocks_str = blocks_str.ljust(max_blocks, ' ')
                         progress_str = f" [{state.current_phase}: {blocks_str} {time_str}]"
-                        sys.stdout.write(f"\r{spinner[idx]} {description}{progress_str}" + " " * 20)
+                        sys.stdout.write(f"\r\033[K{spinner[idx]} {description}{progress_str}")
 
                 else:
-                    sys.stdout.write(f"\r{spinner[idx]} {description}..." + " " * 30)
+                    sys.stdout.write(f"\r\033[K{spinner[idx]} {description}...")
 
                 sys.stdout.flush()
                 idx = (idx + 1) % len(spinner)
@@ -211,7 +213,7 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
             reader_thread.join()
 
             # Clear spinner line
-            sys.stdout.write(f"\r{' ' * (len(description) + 60)}\r")
+            sys.stdout.write(f"\r\033[K")
             sys.stdout.flush()
 
             if process.returncode != 0:
