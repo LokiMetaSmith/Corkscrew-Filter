@@ -134,6 +134,8 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
         spinner = ["|", "/", "-", "\\"]
         idx = 0
 
+        import shutil
+
         try:
             while process.poll() is None:
                 elapsed_wall = time.time() - state.start_wall_time
@@ -143,6 +145,8 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
                     sys.stdout.write(f"\nCommand timed out after {timeout} seconds: {' '.join(cmd)}\n")
                     log_f.write(f"\n[ERROR] Command timed out after {timeout} seconds.\n")
                     raise subprocess.TimeoutExpired(cmd, timeout)
+
+                output_str = f"{spinner[idx]} {description}..."
 
                 if state.is_openfoam and state.total_time > 0 and state.current_time > 0:
                     elapsed = elapsed_wall
@@ -158,10 +162,10 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
                         time_str = f"{hours:02d}:{mins:02d}:{secs:02d}" if hours > 0 else f"{mins:02d}:{secs:02d}"
 
                         progress_str = f" [{state.current_time:g}/{state.total_time:g} | Est. remaining: {time_str}]"
-                        sys.stdout.write(f"\r\033[K{spinner[idx]} {description}{progress_str}")
+                        output_str = f"{spinner[idx]} {description}{progress_str}"
                     else:
                         progress_str = f" [{state.current_time:g}/{state.total_time:g}]"
-                        sys.stdout.write(f"\r\033[K{spinner[idx]} {description}{progress_str}")
+                        output_str = f"{spinner[idx]} {description}{progress_str}"
                 elif state.is_meshing and state.current_phase:
                     # Meshing block characters representation
                     elapsed_phase = time.time() - state.phase_start_time
@@ -175,37 +179,48 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
 
                     # Animation frames for the "filling" block
                     fill_chars = ["_", "▃", "▄", "▆", "█"]
+                    fallback_chars = ["_", ".", "-", "=", "#"]
 
                     if full_blocks >= max_blocks:
                         blocks_str = "." * max_blocks
+                        fallback_blocks_str = blocks_str
                     else:
                         # Determine which partial block to show based on the remainder
                         fill_idx = min(int(remainder * len(fill_chars)), len(fill_chars) - 1)
-                        current_char = fill_chars[fill_idx]
-                        blocks_str = "." * full_blocks + current_char
+                        blocks_str = "." * full_blocks + fill_chars[fill_idx]
                         blocks_str = blocks_str.ljust(max_blocks, ' ')
+
+                        fallback_idx = min(int(remainder * len(fallback_chars)), len(fallback_chars) - 1)
+                        fallback_blocks_str = "." * full_blocks + fallback_chars[fallback_idx]
+                        fallback_blocks_str = fallback_blocks_str.ljust(max_blocks, ' ')
 
                     # Also show elapsed time in seconds
                     time_str = f"{int(elapsed_phase)}s"
-
                     progress_str = f" [{state.current_phase}: {blocks_str} {time_str}]"
+                    output_str = f"{spinner[idx]} {description}{progress_str}"
 
                     try:
-                        sys.stdout.write(f"\r\033[K{spinner[idx]} {description}{progress_str}")
+                        output_str.encode('utf-8')
                     except UnicodeEncodeError:
-                        # Fallback for Windows/terminals that don't support the block characters
-                        fallback_chars = ["_", ".", "-", "=", "#"]
-                        fill_idx = min(int(remainder * len(fallback_chars)), len(fallback_chars) - 1)
-                        current_char = fallback_chars[fill_idx]
-                        blocks_str = "." * full_blocks + current_char
-                        blocks_str = blocks_str.ljust(max_blocks, ' ')
-                        progress_str = f" [{state.current_phase}: {blocks_str} {time_str}]"
-                        sys.stdout.write(f"\r\033[K{spinner[idx]} {description}{progress_str}")
+                        progress_str = f" [{state.current_phase}: {fallback_blocks_str} {time_str}]"
+                        output_str = f"{spinner[idx]} {description}{progress_str}"
 
-                else:
-                    sys.stdout.write(f"\r\033[K{spinner[idx]} {description}...")
+                # Calculate terminal width and pad/truncate to exactly fit one line
+                # Default to 80 if it can't be determined
+                term_width = shutil.get_terminal_size((80, 20)).columns
 
+                # We leave 1 char buffer to prevent implicit wrapping on exact width
+                max_len = term_width - 1
+
+                if len(output_str) > max_len:
+                    output_str = output_str[:max_len-3] + "..."
+
+                # Pad to overwrite any trailing characters from previous longer lines
+                padded_output = output_str.ljust(max_len)
+
+                sys.stdout.write(f"\r{padded_output}")
                 sys.stdout.flush()
+
                 idx = (idx + 1) % len(spinner)
                 time.sleep(0.1)
 
@@ -213,7 +228,8 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
             reader_thread.join()
 
             # Clear spinner line
-            sys.stdout.write(f"\r\033[K")
+            term_width = shutil.get_terminal_size((80, 20)).columns
+            sys.stdout.write(f"\r{' ' * (term_width - 1)}\r")
             sys.stdout.flush()
 
             if process.returncode != 0:
