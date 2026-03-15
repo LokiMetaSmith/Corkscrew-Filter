@@ -833,19 +833,38 @@ method          {method};
 
             extractors = self.config.get('optimization', {}).get('extractors', [])
 
+            physics_boundaries = self.config.get('physics', {}).get('boundaries', {})
             # Post process extractors slightly if needed (e.g., figure out patch names)
             for ext in extractors:
                 if 'patch_name' not in ext:
                     # Try to infer patch name from metric_name or function_name
-                    if 'in' in ext.get('metric_name', '').lower() or 'in' in ext.get('function_name', '').lower():
-                        ext['patch_name'] = 'inlet'
-                    elif 'out' in ext.get('metric_name', '').lower() or 'out' in ext.get('function_name', '').lower():
-                        if '1' in ext.get('metric_name', ''):
-                             ext['patch_name'] = 'outlet_1'
-                        elif '2' in ext.get('metric_name', ''):
-                             ext['patch_name'] = 'outlet_2'
+                    is_inlet = 'in' in ext.get('metric_name', '').lower() or 'in' in ext.get('function_name', '').lower()
+                    is_outlet = 'out' in ext.get('metric_name', '').lower() or 'out' in ext.get('function_name', '').lower()
+
+                    found_patch = None
+                    if is_inlet:
+                        for name in physics_boundaries:
+                            if 'inlet' in name.lower():
+                                found_patch = name
+                                break
+                        ext['patch_name'] = found_patch if found_patch else 'inlet'
+                    elif is_outlet:
+                        for name in physics_boundaries:
+                            if 'clean_outlet' in name.lower():
+                                found_patch = name
+                                break
+                            elif 'outlet' in name.lower() and not 'dust' in name.lower():
+                                found_patch = name
+
+                        if not found_patch:
+                            if '1' in ext.get('metric_name', ''):
+                                 ext['patch_name'] = 'outlet_1'
+                            elif '2' in ext.get('metric_name', ''):
+                                 ext['patch_name'] = 'outlet_2'
+                            else:
+                                 ext['patch_name'] = 'outlet'
                         else:
-                             ext['patch_name'] = 'outlet'
+                            ext['patch_name'] = found_patch
 
             template = jinja2.Template(template_str)
             content = template.render(extractors=extractors)
@@ -1143,7 +1162,7 @@ actions
             if opts.get("type") == "patch":
                 align = opts.get("alignment")
                 # Infer normal from alignment or name
-                if align == "vertical" and "in" in name.lower():
+                if align == "vertical" and "inlet" in name.lower():
                     normal = "(0 0 -1)"
                 elif align == "horizontal":
                     normal = "(0 0 1)"
@@ -1277,103 +1296,6 @@ patches
         area_ratio = inlet_area_m2 / baseline_area
         parcels_per_sec = int(5000 * area_ratio)
 
-        # 2. Generate dynamic injection models for however many sizes are requested
-        injections = ""
-        for d_um in sizes_um:
-            d_m = float(d_um) * 1e-6
-            model_name = f"model_{str(d_um).replace('.', '_')}um"
-
-            # Calculate precise mass flow rate for this specific dust density and volume
-            volume = (4.0/3.0) * math.pi * ((d_m / 2.0)**3)
-            mass_flow_rate = rho0_val * volume * parcels_per_sec
-
-            injections += f"""
-        {model_name}
-        {{
-            type            patchInjection;
-            patch           inlet;
-            parcelBasisType mass;
-            massTotal       {mass_flow_rate:.6e};
-            duration        1;
-            SOI             0;
-            parcelsPerSecond {parcels_per_sec};
-            flowRateProfile constant 1;
-            U0              (0 0 {fluid_velocity_z});
-            sizeDistribution
-            {{
-                type        fixedValue;
-                fixedValueDistribution
-                {{
-                    value   {d_m};
-                }}
-            }}
-        }}"""
-
-        # Patch Interaction
-        # Note: OpenFOAM usually processes patches in order or prioritizes specific matches.
-        # However, regex patches like "(.*)" can be tricky.
-        # If we put "(.*)" at the start, it acts as a default for anything NOT matched later?
-        # Actually, in standard OpenFOAM dictionary reading, later entries overwrite earlier ones
-        # IF they match the same key. But here keys are patch names.
-        # The PatchInteractionModel iterates over the *patches in the mesh*.
-        # For each mesh patch, it looks for a matching entry in the dictionary.
-        # If multiple entries match (e.g. "wall" matches "(.*)"), behavior depends on implementation.
-        # Standard wildcard matching usually prioritizes specific over wildcard, or first match.
-        # To be safe against "last match wins" or "wildcard overrides", we put the catch-all first.
-
-        common_catch_all = """
-            "(.*)"
-            {
-                type rebound;
-                e    0.80;  // Loses 20% of normal energy on bounce
-                mu   0.45;  // High friction for basalt dragging on plastic
-            }"""
-
-        patch_interactions = common_catch_all + """
-            corkscrew
-            {
-                type stick;
-            }
-            outlet
-            {
-                type escape;
-            }
-            inlet
-            {
-                type escape;
-            }"""
-
-        patch_list_str = "corkscrew inlet outlet"
-
-        if bin_config and bin_config.get("num_bins", 1) > 1:
-            num_bins = int(bin_config["num_bins"])
-
-            patch_interactions = common_catch_all + """
-            corkscrew
-            {
-                type stick;
-            }""" # Keep main wall just in case parts remain
-
-            patch_list_str = "corkscrew inlet outlet"
-
-            for i in range(num_bins):
-                patch_interactions += f"""
-            bin_{i+1}
-            {{
-                type stick;
-            }}"""
-                patch_list_str += f" bin_{i+1}"
-
-            patch_interactions += """
-            outlet
-            {
-                type escape;
-            }
-            inlet
-            {
-                type escape;
-            }"""
-
         template_str = """/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
@@ -1441,7 +1363,7 @@ subModels
         model_{{ injection.size_um }}um
         {
             type            patchInjection;
-            patch           inlet;
+            patch           {{ inlet_patch_name }};
             parcelBasisType mass;
             massTotal       {{ "%.6e"|format(injection.mass_flow_rate) }};
             duration        1;
@@ -1487,14 +1409,24 @@ subModels
             }
             {% endfor %}
             {% endif %}
-            outlet
+            {% for b in dynamic_boundaries %}
+            {% if b.is_outlet %}
+            {{ b.name }}
             {
                 type escape;
             }
-            inlet
+            {% elif b.is_inlet %}
+            {{ b.name }}
             {
                 type escape;
             }
+            {% else %}
+            {{ b.name }}
+            {
+                type stick;
+            }
+            {% endif %}
+            {% endfor %}
         );
     }
 
@@ -1601,6 +1533,28 @@ cloudFunctions
             disp_model = "stochasticDispersionRAS"
         # -----------------------------------------
 
+        dynamic_boundaries = []
+        physics_boundaries = self.config.get('physics', {}).get('boundaries', {})
+        inlet_patch_name = "inlet"
+
+        for name, opts in physics_boundaries.items():
+            if opts.get("type") == "patch":
+                is_inlet = "inlet" in name.lower()
+                is_outlet = "out" in name.lower()
+                if is_inlet:
+                    inlet_patch_name = name
+                dynamic_boundaries.append({
+                    "name": name,
+                    "is_inlet": is_inlet,
+                    "is_outlet": is_outlet
+                })
+
+        if not dynamic_boundaries:
+            dynamic_boundaries = [
+                {"name": "inlet", "is_inlet": True, "is_outlet": False},
+                {"name": "outlet", "is_inlet": False, "is_outlet": True}
+            ]
+
         template = jinja2.Template(template_str)
         content = template.render(
             rho0=rho0_val,
@@ -1609,7 +1563,9 @@ cloudFunctions
             parcels_per_sec=parcels_per_sec,
             fluid_velocity_z=fluid_velocity_z,
             turb_interpolation=turb_interpolation,
-            disp_model=disp_model
+            disp_model=disp_model,
+            dynamic_boundaries=dynamic_boundaries,
+            inlet_patch_name=inlet_patch_name
         )
 
         with open(os.path.join(self.case_dir, "constant", "kinematicCloudProperties"), 'w') as f:
