@@ -415,12 +415,15 @@ class ScadDriver:
             print(f"Error scaling mesh: {e}")
             return False
 
-    def get_internal_point(self, stl_path):
+    def get_internal_point(self, stl_path, given_point=None):
         """
-        Finds a point strictly inside the mesh using ray tracing.
+        Finds a point strictly inside the mesh using ray tracing and containment checking.
+        If given_point is provided, verifies if it's inside, and if so, returns it.
+        Otherwise, builds a grid of points within the bounding box and checks them.
 
         Args:
             stl_path (str): Path to the STL file.
+            given_point (list, optional): A point [x, y, z] to verify.
 
         Returns:
             list: [x, y, z] coordinate strictly inside the mesh, or None if failed.
@@ -431,22 +434,54 @@ class ScadDriver:
                 print(f"Could not load valid mesh from: {stl_path}")
                 return None
 
-            # robust ray casting
-            min_pt, max_pt = mesh.bounds
-            center = (min_pt + max_pt) / 2.0
+            # If the mesh is not watertight, contains() might give unpredictable results.
+            # We will still try, but let's be careful.
 
-            # Start a ray from outside the bounds
-            # Move significantly outside to ensure we are outside
-            start_point = min_pt - (max_pt - min_pt) * 0.5
-
-            # Aim at centroid
-            direction = center - start_point
-            direction = direction / np.linalg.norm(direction)
-
-            # Use ray-mesh intersection
-            # Suppress warnings during ray tracing (e.g., if sliver faces remain)
             with warnings.catch_warnings():
                 warnings.filterwarnings('ignore', category=RuntimeWarning, module='trimesh')
+
+                # Check given point first
+                if given_point is not None:
+                    # Trimesh contains expects a list of points
+                    if mesh.contains([given_point])[0]:
+                        return given_point
+                    else:
+                        print(f"Warning: The given point {given_point} is NOT inside the mesh. Re-ray-tracing...")
+
+                min_pt, max_pt = mesh.bounds
+
+                # We want to create a grid of points within the bounding box
+                # Let's shrink the bounds slightly to avoid surface points
+                margin = (max_pt - min_pt) * 0.05
+                safe_min = min_pt + margin
+                safe_max = max_pt - margin
+
+                # Generate a 5x5x5 grid of points
+                x_vals = np.linspace(safe_min[0], safe_max[0], 5)
+                y_vals = np.linspace(safe_min[1], safe_max[1], 5)
+                z_vals = np.linspace(safe_min[2], safe_max[2], 5)
+
+                # Create grid points
+                xv, yv, zv = np.meshgrid(x_vals, y_vals, z_vals)
+                grid_points = np.vstack([xv.ravel(), yv.ravel(), zv.ravel()]).T
+
+                # Check containment
+                is_inside = mesh.contains(grid_points)
+
+                inside_points = grid_points[is_inside]
+
+                if len(inside_points) > 0:
+                    # Pick the one closest to the center for safety
+                    center = (min_pt + max_pt) / 2.0
+                    dists = np.linalg.norm(inside_points - center, axis=1)
+                    best_point = inside_points[np.argmin(dists)]
+                    return best_point.tolist()
+
+                # Fallback to the old ray-tracing method if grid search fails
+                center = (min_pt + max_pt) / 2.0
+                start_point = min_pt - (max_pt - min_pt) * 0.5
+                direction = center - start_point
+                direction = direction / np.linalg.norm(direction)
 
                 intersector = trimesh.ray.ray_triangle.RayMeshIntersector(mesh)
                 locations, index_ray, index_tri = intersector.intersects_location(
@@ -454,31 +489,16 @@ class ScadDriver:
                     ray_directions=[direction]
                 )
 
-            if len(locations) >= 2:
-                # Sort intersections by distance from start
-                dists = np.linalg.norm(locations - start_point, axis=1)
-                sorted_indices = np.argsort(dists)
+                if len(locations) >= 2:
+                    dists = np.linalg.norm(locations - start_point, axis=1)
+                    sorted_indices = np.argsort(dists)
+                    p1 = locations[sorted_indices[0]]
+                    p2 = locations[sorted_indices[1]]
+                    midpoint = (p1 + p2) / 2.0
+                    if mesh.contains([midpoint])[0]:
+                        return midpoint.tolist()
 
-                # The ray enters at index 0, exits at index 1 (ideally)
-                p1 = locations[sorted_indices[0]]
-                p2 = locations[sorted_indices[1]]
-
-                # Midpoint should be inside
-                midpoint = (p1 + p2) / 2.0
-                return midpoint.tolist()
-
-            elif len(locations) == 1:
-                # Only found one intersection (maybe mesh is open or ray didn't exit)
-                # Step slightly past the intersection
-                p1 = locations[0]
-                # Step 1mm or 5% of bounding box diagonal
-                diag = np.linalg.norm(max_pt - min_pt)
-                step = max(0.1, diag * 0.01)
-
-                point = p1 + direction * step
-                return point.tolist()
-
-            print("Warning: Could not find intersection for internal point.")
+            print("Warning: Could not find any internal point inside the mesh.")
             return None
 
         except Exception as e:
