@@ -80,7 +80,24 @@ if (!$podmanInstalled) {
     Write-Host "Podman is already installed." -ForegroundColor Green
 }
 
-# 3. Kill lingering Podman and API proxy processes BEFORE attempting to delete files
+# 3. Try Safe Restart First
+Write-Host "Attempting safe restart of Podman machine..." -ForegroundColor Yellow
+if (Get-Command "podman" -ErrorAction SilentlyContinue) {
+    podman machine stop 2>$null
+    wsl --shutdown
+    Start-Sleep -Seconds 3
+    podman machine start
+    if ($LASTEXITCODE -eq 0) {
+        podman info >$null 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Safe restart successful. Podman is responsive." -ForegroundColor Green
+            exit 0
+        }
+    }
+}
+Write-Host "Safe restart failed or Podman not responsive. Proceeding with full repair..." -ForegroundColor Yellow
+
+# 4. Kill lingering Podman and API proxy processes BEFORE attempting to delete files
 Write-Host "Checking for lingering Podman and proxy processes..." -ForegroundColor Yellow
 $lingeringProcesses = Get-Process -Name "*sshproxy*", "*gvproxy*", "podman*" -ErrorAction SilentlyContinue
 if ($lingeringProcesses) {
@@ -90,7 +107,7 @@ if ($lingeringProcesses) {
     }
 }
 
-# 4. Stop and remove existing Podman machines
+# 5. Stop and remove existing Podman machines
 Write-Host "Cleaning up existing Podman machines..." -ForegroundColor Yellow
 if (Get-Command "podman" -ErrorAction SilentlyContinue) {
     $machines = podman machine list --format "{{.Name}}" 2>$null
@@ -112,7 +129,7 @@ if (Get-Command "podman" -ErrorAction SilentlyContinue) {
     }
 }
 
-# 5. Shut down WSL and ensure it is stopped
+# 6. Shut down WSL and ensure it is stopped
 Write-Host "Shutting down WSL to clear locks..." -ForegroundColor Yellow
 wsl --shutdown
 Start-Sleep -Seconds 3
@@ -129,7 +146,7 @@ while ($wslRetryCount -lt 5) {
     $wslRetryCount++
 }
 
-# 6. Dynamically find and unregister leftover Podman WSL distributions
+# 7. Dynamically find and unregister leftover Podman WSL distributions
 Write-Host "Checking for lingering Podman WSL distributions..." -ForegroundColor Yellow
 
 # Explicitly unregister known default names in case `wsl --list` fails or omits them
@@ -149,7 +166,7 @@ if ($wslList) {
     }
 }
 
-# 7. Forcefully clean up Windows Hyper-V VMs
+# 8. Forcefully clean up Windows Hyper-V VMs
 Write-Host "Checking for lingering Hyper-V VMs..." -ForegroundColor Yellow
 if (Get-Command "Get-VM" -ErrorAction SilentlyContinue) {
     $vms = Get-VM -Name "podman-machine-default*" -ErrorAction SilentlyContinue
@@ -162,7 +179,7 @@ if (Get-Command "Get-VM" -ErrorAction SilentlyContinue) {
     }
 }
 
-# 8. Forcefully clean Podman configuration directories
+# 9. Forcefully clean Podman configuration directories
 Write-Host "Cleaning up lingering Podman machine configuration files..." -ForegroundColor Yellow
 $localMachineConf = "$env:USERPROFILE\.local\share\containers\podman\machine"
 $configMachineConf = "$env:USERPROFILE\.config\containers\podman\machine"
@@ -174,7 +191,7 @@ if (Test-Path $configMachineConf) {
     Remove-Item -Recurse -Force $configMachineConf -ErrorAction SilentlyContinue
 }
 
-# 9. Forcefully clean lingering Podman system connections
+# 10. Forcefully clean lingering Podman system connections
 Write-Host "Cleaning up lingering Podman system connections..." -ForegroundColor Yellow
 if (Get-Command "podman" -ErrorAction SilentlyContinue) {
     $connections = podman system connection list --format "{{.Name}}" 2>$null
@@ -194,7 +211,7 @@ if (Get-Command "podman" -ErrorAction SilentlyContinue) {
     }
 }
 
-# 10. Initialize and start a fresh Podman machine
+# 11. Initialize and start a fresh Podman machine
 Write-Host "Initializing a fresh Podman machine..." -ForegroundColor Cyan
 podman machine init --memory 8192
 if ($LASTEXITCODE -ne 0) {
@@ -209,7 +226,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# 11. Verify functionality
+# 12. Verify functionality
 Write-Host "Verifying Podman installation and machine status..." -ForegroundColor Cyan
 podman info
 

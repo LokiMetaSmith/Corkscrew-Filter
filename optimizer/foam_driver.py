@@ -1849,13 +1849,13 @@ cloudFunctions
                 self._generate_decomposeParDict(num_processors=solve_procs, method=solve_method)
                 if not self.run_command(["decomposePar", "-force"], log_file=log_file, description="Decomposing Domain"): return False
                 cmd = ["mpirun", "-np", str(solve_procs), "simpleFoam", "-parallel"]
-                if not self.run_command(cmd, log_file=log_file, description=f"Solving CFD (Parallel {solve_procs} CPUs)", timeout=7200): return False
+                if not self.run_command(cmd, log_file=log_file, description=f"Solving CFD (Parallel {solve_procs} CPUs)", timeout=14400): return False
                 if not self.run_command(["reconstructPar", "-latestTime"], log_file=log_file, description="Reconstructing Domain"): return False
                 for proc_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
                     shutil.rmtree(proc_dir, ignore_errors=True)
                 return True
             else:
-                return self.run_command(["simpleFoam"], log_file=log_file, description="Solving CFD", timeout=7200)
+                return self.run_command(["simpleFoam"], log_file=log_file, description="Solving CFD", timeout=14400)
 
         success = _execute()
 
@@ -2196,7 +2196,7 @@ boundaryField
             # Turbulence is KEPT ON for stochasticDispersionRAS
 
             # 4. Run Solver
-            return self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking", timeout=7200)
+            return self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking", timeout=14400)
 
     def generate_vtk(self):
         """
