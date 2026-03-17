@@ -200,7 +200,8 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
                     output_str = f"{spinner[idx]} {description}{progress_str}"
 
                     try:
-                        output_str.encode('utf-8')
+                        encoding = sys.stdout.encoding or 'utf-8'
+                        output_str.encode(encoding)
                     except UnicodeEncodeError:
                         progress_str = f" [{state.current_phase}: {fallback_blocks_str} {time_str}]"
                         output_str = f"{spinner[idx]} {description}{progress_str}"
