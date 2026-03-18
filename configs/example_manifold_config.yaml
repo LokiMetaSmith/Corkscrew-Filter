@@ -65,6 +65,7 @@ cfd_settings:
       wallFunction: "epsilonWallFunction"
   relaxation_factors:
     p: 0.2
-    U: 0.3
-    k: 0.3
-    epsilon: 0.3
+    U: 0.5
+    k: 0.5
+    epsilon: 0.5
+    omega: 0.5
