@@ -2196,7 +2196,14 @@ boundaryField
             # Turbulence is KEPT ON for stochasticDispersionRAS
 
             # 4. Run Solver
-            return self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking", timeout=14400)
+            success = self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking", timeout=14400)
+
+            if not success and turbulence != "laminar" and turbulence != "kOmegaSST_disabled":
+                print("Particle tracking failed with turbulence. Attempting to recover by disabling dispersion model...")
+                self._generate_kinematicCloudProperties(bin_config, turbulence="laminar")
+                success = self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking (Recovery)", timeout=14400)
+
+            return success
 
     def generate_vtk(self):
         """
