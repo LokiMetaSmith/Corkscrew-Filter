@@ -25,7 +25,7 @@ gradSchemes
 divSchemes
 {
     default         none;
-    div(phi,U)      bounded Gauss linearUpwind grad(U);
+    div(phi,U)      bounded Gauss upwind;
     div(phi,k)      bounded Gauss upwind;
     div(phi,epsilon) bounded Gauss upwind;
     div((nuEff*dev2(T(grad(U))))) Gauss linear;
@@ -40,7 +40,8 @@ interpolationSchemes
 }
 snGradSchemes
 {
-    default         corrected;
+    // 0.33 limits the correction to heavily warped cells, improving stability
+    default         limited corrected 0.33;
 }
 wallDist
 {
