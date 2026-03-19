@@ -649,7 +649,7 @@ solvers
 
 SIMPLE
 {
-    nNonOrthogonalCorrectors 3; // Add 2 or 3 of these
+    nNonOrthogonalCorrectors 2; // Add 2 or 3 of these
     consistent      no;
     pRefCell        0;
     pRefValue       0;
