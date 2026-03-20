@@ -1725,7 +1725,7 @@ cloudFunctions
 
             if not success_decompose: return False
 
-            cmd = ["mpirun", "--allow-run-as-root", "-np", str(mesh_procs), "snappyHexMesh", "-overwrite", "-parallel"]
+            cmd = ["mpirun", "--allow-run-as-root", "--oversubscribe", "-np", str(mesh_procs), "snappyHexMesh", "-overwrite", "-parallel"]
             if not self.run_command(cmd, log_file=log_file, description="Meshing (snappyHexMesh Parallel)", timeout=3600):
                 print("Error: Meshing failed. Boundary layers are critical, design rejected.")
                 return False
@@ -1848,7 +1848,7 @@ cloudFunctions
             if solve_procs > 1:
                 self._generate_decomposeParDict(num_processors=solve_procs, method=solve_method)
                 if not self.run_command(["decomposePar", "-force"], log_file=log_file, description="Decomposing Domain"): return False
-                cmd = ["mpirun", "--allow-run-as-root", "-np", str(solve_procs), "simpleFoam", "-parallel"]
+                cmd = ["mpirun", "--allow-run-as-root", "--oversubscribe", "-np", str(solve_procs), "simpleFoam", "-parallel"]
                 if not self.run_command(cmd, log_file=log_file, description=f"Solving CFD (Parallel {solve_procs} CPUs)", timeout=14400): return False
                 if not self.run_command(["reconstructPar", "-latestTime"], log_file=log_file, description="Reconstructing Domain"): return False
                 for proc_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
