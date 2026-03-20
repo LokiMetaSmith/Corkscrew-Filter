@@ -32,7 +32,8 @@ divSchemes
 }
 laplacianSchemes
 {
-    default         Gauss linear limited corrected 0.5;
+    // Capped at 0.33 to prevent extreme cell warping from destroying the matrix
+    default         Gauss linear limited corrected 0.33;
 }
 interpolationSchemes
 {
