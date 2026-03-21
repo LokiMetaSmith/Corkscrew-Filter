@@ -327,13 +327,13 @@ class FoamDriver:
             elif field_name == "nut":
                 dimensions = "[0 2 -1 0 0 0 0]"
 
-            header = f"""/*--------------------------------*- C++ -*----------------------------------*\
+            header = f"""/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
 |  \\    /   O peration     | Version:  v2512                                 |
 |   \\  /    A nd           | Website:  www.openfoam.com                      |
 |    \\/     M anipulation  |                                                 |
-\*---------------------------------------------------------------------------*/
+\\*---------------------------------------------------------------------------*/
 FoamFile
 {{
     version     2.0;
@@ -512,6 +512,7 @@ boundaryField
 
         if turbulence == "laminar" or turbulence == "kOmegaSST_disabled":
             # Cleanly disable turbulence without removing the underlying model.
+            content = re.sub(r"simulationType\s+.*?;", "simulationType  RAS;", content)
             content = re.sub(r"turbulence\s+.*?;", "turbulence      off;", content)
         else:
             content = re.sub(r"simulationType\s+.*?;", "simulationType  RAS;", content)
@@ -1061,12 +1062,12 @@ method          {method};
         Generates system/topoSetDict using Jinja2.
         skip_io: if True, skips generation of inlet/outlet face sets.
         """
-        template_str = """/*--------------------------------*- C++ -*----------------------------------*\\
+        template_str = r"""/*--------------------------------*- C++ -*----------------------------------*\
 | =========                 |                                                 |
-| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \    /   O peration     | Version:  v2512                                 |
-|   \  /    A nd           | Website:  www.openfoam.com                      |
-|    \/     M anipulation  |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
 \*---------------------------------------------------------------------------*/
 FoamFile
 {
@@ -1270,7 +1271,7 @@ patches
         """
         Generates constant/kinematicCloudProperties with size binning and spatial binning using Jinja2.
         """
-        template_str = """/*--------------------------------*- C++ -*----------------------------------*\\
+        template_str = r"""/*--------------------------------*- C++ -*----------------------------------*\
         Generates constant/kinematicCloudProperties with dynamic size binning and spatial binning.
         """
         # Default fallback values
@@ -1296,7 +1297,7 @@ patches
         area_ratio = inlet_area_m2 / baseline_area
         parcels_per_sec = int(5000 * area_ratio)
 
-        template_str = """/*--------------------------------*- C++ -*----------------------------------*\\
+        template_str = r"""/*--------------------------------*- C++ -*----------------------------------*\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
 |  \\    /   O peration     | Version:  v2512                                 |
@@ -2211,6 +2212,7 @@ boundaryField
             if not success and was_using_dispersion:
                 print("Particle tracking failed with dispersion. Attempting to recover by disabling dispersion model...")
                 self._generate_kinematicCloudProperties(bin_config, turbulence="force_laminar_fallback")
+                self._update_turbulence_properties("laminar")
                 success = self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking (Recovery)", timeout=14400)
 
             return success
