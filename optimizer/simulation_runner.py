@@ -290,6 +290,11 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
     vtk_zip_path = None
 
     if not dry_run and not skip_cfd:
+        # Override turbulence if defined in config
+        cfd_settings = foam_driver.config.get('cfd_settings', {})
+        if cfd_settings and 'turbulence_model' in cfd_settings:
+            turbulence = cfd_settings['turbulence_model']
+
         foam_driver.prepare_case(keep_mesh=reuse_mesh, turbulence=turbulence)
 
         # Prepare Bin Configuration for Meshing/Tracking

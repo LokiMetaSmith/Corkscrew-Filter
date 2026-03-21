@@ -242,7 +242,10 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
             # Catch all exceptions so we can safely kill the process and join the thread
             # before the file descriptor is closed.
             process.kill()
-            reader_thread.join()
+            try:
+                reader_thread.join()
+            except Exception:
+                pass
             if isinstance(e, KeyboardInterrupt):
                 sys.stdout.write("\nProcess interrupted by user.\n")
             else:
