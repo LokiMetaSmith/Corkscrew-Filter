@@ -2161,10 +2161,12 @@ boundaryField
         with open(u_file, 'w') as f:
             f.write(content)
 
-    def run_particle_tracking(self, log_file=None, bin_config=None, turbulence="laminar", mesh_scaled_for_memory=False, **kwargs):
+    def run_particle_tracking(self, log_file=None, bin_config=None, turbulence=None, mesh_scaled_for_memory=False, **kwargs):
         """
         Runs particle tracking (Lagrangian) using a robust transient strategy on frozen flow.
         """
+        if turbulence is None:
+            turbulence = self.config.get('cfd_settings', {}).get('turbulence_model', 'laminar')
         # Find latest steady-state time directory
         dirs = [d for d in os.listdir(self.case_dir) if os.path.isdir(os.path.join(self.case_dir, d)) and d.replace('.', '', 1).isdigit()]
 
@@ -2210,6 +2212,7 @@ boundaryField
 
             if not success and was_using_dispersion:
                 print("Particle tracking failed with dispersion. Attempting to recover by disabling dispersion model...")
+                self._update_turbulence_properties("laminar")
                 self._generate_kinematicCloudProperties(bin_config, turbulence="force_laminar_fallback")
                 success = self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking (Recovery)", timeout=14400)
 
