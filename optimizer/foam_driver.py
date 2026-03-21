@@ -319,6 +319,15 @@ class FoamDriver:
             internal_field = field_config.get('internalField', 'uniform 0')
             wall_function = field_config.get('wallFunction', 'zeroGradient')
 
+            # Procedural override: Never use zeroGradient for k or epsilon to prevent stochasticDispersionRAS SIGFPE
+            if wall_function == "zeroGradient":
+                if field_name == "epsilon":
+                    wall_function = "epsilonWallFunction"
+                    print("Procedurally overriding epsilon initial wall function from zeroGradient to epsilonWallFunction to prevent SIGFPE.")
+                elif field_name == "k":
+                    wall_function = "kqRWallFunction"
+                    print("Procedurally overriding k initial wall function from zeroGradient to kqRWallFunction to prevent SIGFPE.")
+
             dimensions = "[0 2 -2 0 0 0 0]"
             if field_name == "epsilon":
                 dimensions = "[0 2 -3 0 0 0 0]"
@@ -364,7 +373,14 @@ boundaryField
                 elif "inlet" in patch_name.lower():
                     blocks.append(f"    {patch_name}\n    {{\n        type            fixedValue;\n        value           $internalField;\n    }}")
                 else:
-                    blocks.append(f"    {patch_name}\n    {{\n        type            zeroGradient;\n    }}")
+                    zg_type = "zeroGradient"
+                    if field_name == "epsilon":
+                        zg_type = "epsilonWallFunction"
+                        print(f"Procedurally overriding zeroGradient default for epsilon on {patch_name}.")
+                    elif field_name == "k":
+                        zg_type = "kqRWallFunction"
+                        print(f"Procedurally overriding zeroGradient default for k on {patch_name}.")
+                    blocks.append(f"    {patch_name}\n    {{\n        type            {zg_type};\n    }}")
 
             blocks_str = "\n".join(blocks)
             footer = "\n}\n"
@@ -484,6 +500,14 @@ boundaryField
                             new_block += "type            zeroGradient;\n"
                         else:
                             new_block += "type            calculated;\nvalue           uniform 0;\n"
+
+                # Procedural override: Never use zeroGradient for k or epsilon to prevent stochasticDispersionRAS SIGFPE
+                if field == "epsilon" and "type            zeroGradient;" in new_block:
+                    new_block = new_block.replace("type            zeroGradient;", "type            epsilonWallFunction;")
+                    print("Procedurally overriding epsilon boundary wall function from zeroGradient to epsilonWallFunction to prevent SIGFPE.")
+                elif field == "k" and "type            zeroGradient;" in new_block:
+                    new_block = new_block.replace("type            zeroGradient;", "type            kqRWallFunction;")
+                    print("Procedurally overriding k boundary wall function from zeroGradient to kqRWallFunction to prevent SIGFPE.")
 
                 blocks[patch_name] = new_block.strip()
 
@@ -1778,6 +1802,16 @@ cloudFunctions
         zero_dirs.extend(glob.glob(os.path.join(self.case_dir, "processor*", "0")))
 
         for field_name, new_wall_func in fallback_funcs.items():
+
+            # Procedural override: Never use zeroGradient for k or epsilon to prevent stochasticDispersionRAS SIGFPE
+            if new_wall_func == "zeroGradient":
+                if field_name == "epsilon":
+                    new_wall_func = "epsilonWallFunction"
+                    print("Procedurally overriding epsilon fallback wall function from zeroGradient to epsilonWallFunction to prevent SIGFPE.")
+                elif field_name == "k":
+                    new_wall_func = "kqRWallFunction"
+                    print("Procedurally overriding k fallback wall function from zeroGradient to kqRWallFunction to prevent SIGFPE.")
+
             for z_dir in zero_dirs:
                 field_path = os.path.join(z_dir, field_name)
                 if not os.path.exists(field_path):
