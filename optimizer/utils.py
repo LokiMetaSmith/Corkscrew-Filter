@@ -248,7 +248,7 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
                 pass
             if isinstance(e, KeyboardInterrupt):
                 sys.stdout.write("\nProcess interrupted by user.\n")
-            else:
+            elif not isinstance(e, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
                 sys.stdout.write(f"\nUnexpected error executing {' '.join(cmd)}: {e}\n")
             raise
 
