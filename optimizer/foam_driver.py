@@ -1515,6 +1515,9 @@ cloudFunctions
                 if "turbulence      off;" in t_content or "turbulence off;" in t_content:
                     is_laminar = True  # Treat as laminar for dispersion model purposes!
 
+        if turbulence == "force_laminar_fallback" or turbulence == "laminar":
+            is_laminar = True
+
         # Build the conditional strings
         if is_laminar:
             turb_interpolation = ""
@@ -2198,9 +2201,16 @@ boundaryField
             # 4. Run Solver
             success = self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking", timeout=14400)
 
-            if not success and turbulence != "laminar" and turbulence != "kOmegaSST_disabled":
-                print("Particle tracking failed with turbulence. Attempting to recover by disabling dispersion model...")
-                self._generate_kinematicCloudProperties(bin_config, turbulence="laminar")
+            c_path = os.path.join(self.case_dir, "constant", "kinematicCloudProperties")
+            was_using_dispersion = False
+            if os.path.exists(c_path):
+                with open(c_path, 'r') as f:
+                    if "stochasticDispersionRAS" in f.read():
+                        was_using_dispersion = True
+
+            if not success and was_using_dispersion:
+                print("Particle tracking failed with dispersion. Attempting to recover by disabling dispersion model...")
+                self._generate_kinematicCloudProperties(bin_config, turbulence="force_laminar_fallback")
                 success = self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking (Recovery)", timeout=14400)
 
             return success
