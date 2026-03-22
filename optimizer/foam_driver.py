@@ -373,18 +373,7 @@ boundaryField
                 elif "inlet" in patch_name.lower():
                     blocks.append(f"    {patch_name}\n    {{\n        type            fixedValue;\n        value           $internalField;\n    }}")
                 else:
-                    zg_type = "zeroGradient"
-                    if field_name == "epsilon":
-                        zg_type = "epsilonWallFunction"
-                        print(f"Procedurally overriding zeroGradient default for epsilon on {patch_name}.")
-                    elif field_name == "k":
-                        zg_type = "kqRWallFunction"
-                        print(f"Procedurally overriding zeroGradient default for k on {patch_name}.")
-
-                    if zg_type != "zeroGradient":
-                        blocks.append(f"    {patch_name}\n    {{\n        type            {zg_type};\n        value           $internalField;\n    }}")
-                    else:
-                        blocks.append(f"    {patch_name}\n    {{\n        type            {zg_type};\n    }}")
+                    blocks.append(f"    {patch_name}\n    {{\n        type            zeroGradient;\n    }}")
 
             blocks_str = "\n".join(blocks)
             footer = "\n}\n"
@@ -505,13 +494,15 @@ boundaryField
                         else:
                             new_block += "type            calculated;\nvalue           uniform 0;\n"
 
-                # Procedural override: Never use zeroGradient for k or epsilon to prevent stochasticDispersionRAS SIGFPE
-                if field == "epsilon" and "type            zeroGradient;" in new_block:
-                    new_block = new_block.replace("type            zeroGradient;", "type            epsilonWallFunction;\n        value           $internalField;")
-                    print("Procedurally overriding epsilon boundary wall function from zeroGradient to epsilonWallFunction to prevent SIGFPE.")
-                elif field == "k" and "type            zeroGradient;" in new_block:
-                    new_block = new_block.replace("type            zeroGradient;", "type            kqRWallFunction;\n        value           $internalField;")
-                    print("Procedurally overriding k boundary wall function from zeroGradient to kqRWallFunction to prevent SIGFPE.")
+                # Procedural override: Never use zeroGradient for k or epsilon on walls to prevent stochasticDispersionRAS SIGFPE
+                patch_type = patch_config.get('type')
+                if patch_type == 'wall' or patch_name == '.*':
+                    if field == "epsilon" and "type            zeroGradient;" in new_block:
+                        new_block = new_block.replace("type            zeroGradient;", "type            epsilonWallFunction;\n        value           $internalField;")
+                        print(f"Procedurally overriding epsilon boundary wall function from zeroGradient to epsilonWallFunction on {patch_name} to prevent SIGFPE.")
+                    elif field == "k" and "type            zeroGradient;" in new_block:
+                        new_block = new_block.replace("type            zeroGradient;", "type            kqRWallFunction;\n        value           $internalField;")
+                        print(f"Procedurally overriding k boundary wall function from zeroGradient to kqRWallFunction on {patch_name} to prevent SIGFPE.")
 
                 blocks[patch_name] = new_block.strip()
 
@@ -519,7 +510,7 @@ boundaryField
             new_boundary_field = "\n"
             for patch_name, block_content in blocks.items():
                 # Handle quotes for catch-all
-                display_name = f'"{patch_name}"' if patch_name in ['.*', '.*'] else patch_name
+                display_name = f'"{patch_name}"' if patch_name == '.*' else patch_name
                 new_boundary_field += f"    {display_name}\n    {{\n"
                 # preserve indentation
                 for line in block_content.split('\n'):
@@ -1856,7 +1847,9 @@ cloudFunctions
                     content = re.sub(r"type\s+zeroGradient;\s+value\s+\$internalField;", r"type            zeroGradient;", content, flags=re.MULTILINE)
                 elif old_wall_func == "zeroGradient":
                     # If we replaced zeroGradient with something else (like epsilonWallFunction), we must append the missing value field
-                    content = content.replace(f"type            {new_wall_func};", f"type            {new_wall_func};\n        value           $internalField;")
+                    # Use regex to only append if 'value' is missing from that block
+                    pattern = rf"(type\s+{new_wall_func};)(?!\s*value\s+)"
+                    content = re.sub(pattern, rf"\1\n        value           $internalField;", content)
 
                 with open(field_path, "w") as f:
                     f.write(content)
