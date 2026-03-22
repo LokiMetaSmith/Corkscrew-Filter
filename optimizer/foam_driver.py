@@ -380,7 +380,11 @@ boundaryField
                     elif field_name == "k":
                         zg_type = "kqRWallFunction"
                         print(f"Procedurally overriding zeroGradient default for k on {patch_name}.")
-                    blocks.append(f"    {patch_name}\n    {{\n        type            {zg_type};\n    }}")
+
+                    if zg_type != "zeroGradient":
+                        blocks.append(f"    {patch_name}\n    {{\n        type            {zg_type};\n        value           $internalField;\n    }}")
+                    else:
+                        blocks.append(f"    {patch_name}\n    {{\n        type            {zg_type};\n    }}")
 
             blocks_str = "\n".join(blocks)
             footer = "\n}\n"
@@ -503,10 +507,10 @@ boundaryField
 
                 # Procedural override: Never use zeroGradient for k or epsilon to prevent stochasticDispersionRAS SIGFPE
                 if field == "epsilon" and "type            zeroGradient;" in new_block:
-                    new_block = new_block.replace("type            zeroGradient;", "type            epsilonWallFunction;")
+                    new_block = new_block.replace("type            zeroGradient;", "type            epsilonWallFunction;\n        value           $internalField;")
                     print("Procedurally overriding epsilon boundary wall function from zeroGradient to epsilonWallFunction to prevent SIGFPE.")
                 elif field == "k" and "type            zeroGradient;" in new_block:
-                    new_block = new_block.replace("type            zeroGradient;", "type            kqRWallFunction;")
+                    new_block = new_block.replace("type            zeroGradient;", "type            kqRWallFunction;\n        value           $internalField;")
                     print("Procedurally overriding k boundary wall function from zeroGradient to kqRWallFunction to prevent SIGFPE.")
 
                 blocks[patch_name] = new_block.strip()
@@ -1850,6 +1854,9 @@ cloudFunctions
                 if new_wall_func == "zeroGradient":
                     content = re.sub(r"type\s+zeroGradient;\s+value\s+uniform\s+[\d\.\-e\+]+;", r"type            zeroGradient;", content, flags=re.MULTILINE)
                     content = re.sub(r"type\s+zeroGradient;\s+value\s+\$internalField;", r"type            zeroGradient;", content, flags=re.MULTILINE)
+                elif old_wall_func == "zeroGradient":
+                    # If we replaced zeroGradient with something else (like epsilonWallFunction), we must append the missing value field
+                    content = content.replace(f"type            {new_wall_func};", f"type            {new_wall_func};\n        value           $internalField;")
 
                 with open(field_path, "w") as f:
                     f.write(content)
