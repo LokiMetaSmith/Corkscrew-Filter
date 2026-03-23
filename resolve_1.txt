@@ -1,0 +1,268 @@
+        if q["non_orth"] > 75 or q["skewness"] > 4:
+            return "terrible"
+        elif q["non_orth"] > 65 or q["skewness"] > 2.5:
+            return "bad"
+        elif q["non_orth"] > 50 or q["skewness"] > 1.5:
+            return "moderate"
+        else:
+            return "good"
+
+    def _update_fvSchemes(self, turbulence):
+<<<<<<< HEAD
+        quality_output = self._run_checkMesh()
+        q = self._parse_mesh_quality(quality_output)
+
+        # Check for degenerate cells first
+        if q["min_vol"] < 1e-15:
+            print(f"🚨 Degenerate cells detected (min_vol = {q['min_vol']:.3e}) → forcing laminar")
+            turbulence = "laminar"
+
+        mesh_class = self._classify_mesh(q)
+
+        print(f"[Mesh Quality] {mesh_class} | {q}")
+
+        # Base config
+        snGrad = "limited corrected 0.33"
+        laplacian = "Gauss linear limited corrected 0.33"
+        div_u = "bounded Gauss upwind"
+
+        # Adapt based on mesh
+        if mesh_class == "good":
+            snGrad = "corrected"
+            laplacian = "Gauss linear corrected"
+            div_u = "Gauss linearUpwind grad(U)"
+
+        elif mesh_class == "moderate":
+            snGrad = "limited corrected 0.5"
+            laplacian = "Gauss linear limited corrected 0.5"
+            div_u = "bounded Gauss linearUpwind grad(U)"
+
+        elif mesh_class == "bad":
+            snGrad = "limited corrected 0.33"
+            laplacian = "Gauss linear limited corrected 0.33"
+            div_u = "bounded Gauss upwind"
+
+        elif mesh_class == "terrible":
+            print("⚠️ Mesh is terrible → forcing laminar + max stability")
+            turbulence = "laminar"
+            snGrad = "limited corrected 0.2"
+            laplacian = "Gauss linear limited corrected 0.2"
+            div_u = "bounded Gauss upwind"
+
+        # --- Build fvSchemes cleanly ---
+        content = f"""/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \    /   O peration     | Version:  v2512                                 |
+|   \  /    A nd           | Website:  www.openfoam.com                      |
+|    \/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSchemes;
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+ddtSchemes
+{{
+    default         steadyState;
+}}
+
+gradSchemes
+{{
+    default         Gauss linear;
+    grad(p)         Gauss linear;
+}}
+
+divSchemes
+{{
+    default         none;
+    div(phi,U)      {div_u};
+"""
+
+        if turbulence != "laminar" and turbulence != "kOmegaSST_disabled":
+            if turbulence == "RNGkEpsilon":
+                content += """    div(phi,k)      bounded Gauss upwind;
+    div(phi,epsilon) bounded Gauss upwind;
+"""
+            elif turbulence == "kOmegaSST":
+                content += """    div(phi,k)      bounded Gauss upwind;
+    div(phi,omega) bounded Gauss upwind;
+"""
+
+        content += """}
+
+laplacianSchemes
+{
+    default         """ + laplacian + """;
+}
+
+interpolationSchemes
+{
+    default         linear;
+}
+
+snGradSchemes
+{
+    default         """ + snGrad + """;
+}
+
+wallDist
+{
+    method meshWave;
+}
+
+// ************************************************************************* //
+"""
+
+=======
+        import os
+        import re
+        import shutil
+
+        template_path = os.path.join(self.case_dir, "system", "fvSchemes.template")
+>>>>>>> origin/main
+        target_path = os.path.join(self.case_dir, "system", "fvSchemes")
+        with open(target_path, "w", newline='\n') as f:
+            f.write(content)
+
+        return turbulence
+
+<<<<<<< HEAD
+    def _update_fvSolution(self, turbulence, cfd_settings=None, relaxation_override=None):
+=======
+        if os.path.exists(template_path):
+            with open(template_path, "r") as f:
+                content = f.read()
+        else:
+            if not os.path.exists(target_path):
+                return
+            with open(target_path, "r") as f:
+                content = f.read()
+
+        # --- Ensure required sections exist ---
+        def ensure_section(name, default_body):
+            if name not in content:
+                return content + f"\n{name}\n{{\n{default_body}\n}}\n"
+            return content
+
+        content = ensure_section("divSchemes", "    default none;")
+        content = ensure_section("snGradSchemes", "    default corrected;")
+        content = ensure_section("laplacianSchemes", "    default Gauss linear corrected;")
+
+        # Apply limited correctors for high-skew automated meshes
+        # This prevents SIGFPEs in snGrad and laplacian calculations
+        content = re.sub(r"(snGradSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>limited corrected 0.33;", content)
+        content = re.sub(r"(laplacianSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>Gauss linear limited corrected 0.33;", content)
+
+        if turbulence == "laminar":
+            content = re.sub(r"div\(phi,k\).*?;", "", content)
+            content = re.sub(r"div\(phi,epsilon\).*?;", "", content)
+            content = re.sub(r"div\(phi,omega\).*?;", "", content)
+            content = re.sub(r"div\(phi,R\).*?;", "", content)
+            # Switch to upwind for U to ensure stability on coarse mesh without turbulent viscosity
+            content = re.sub(r"div\(phi,U\).*?;", "div(phi,U)      bounded Gauss upwind;", content)
+        elif turbulence == "RNGkEpsilon":
+            content = re.sub(r"div\(phi,omega\).*?;", "", content)
+            content = re.sub(r"div\(phi,R\).*?;", "", content)
+            # Upwind U to ensure stability on coarse/scaled meshes with turbulence enabled
+            content = re.sub(r"div\(phi,U\).*?;", "div(phi,U)      bounded Gauss upwind;", content)
+
+        # 1. snGradSchemes → limited corrected
+        content = re.sub(
+            r"(snGradSchemes\s*\{[^}]*?default\s+)[^;]+;",
+            r"\g<1>limited corrected 0.33;",
+            content,
+            flags=re.DOTALL
+        )
+
+        # 2. laplacianSchemes → limited corrected
+        content = re.sub(
+            r"(laplacianSchemes\s*\{[^}]*?default\s+)[^;]+;",
+            r"\g<1>Gauss linear limited corrected 0.33;",
+            content,
+            flags=re.DOTALL
+        )
+
+        # --- Prevent Duplication & Apply DivSchemes ---
+        # Strip existing div(phi, X) lines cleanly
+        for field in ["U", "k", "epsilon", "omega", "R"]:
+            content = re.sub(rf"^\s*div\(phi,{field}\).*?;\n?", "", content, flags=re.MULTILINE)
+
+        # 3. divSchemes stabilization
+        if turbulence == "laminar":
+            content = re.sub(
+                r"(divSchemes\s*\{)",
+                r"\g<1>\n    div(phi,U)      bounded Gauss upwind;",
+                content,
+                count=1
+            )
+        elif turbulence == "RNGkEpsilon":
+            content = re.sub(
+                r"(divSchemes\s*\{)",
+                r"\g<1>\n    div(phi,U)      bounded Gauss upwind;\n    div(phi,k)      bounded Gauss upwind;\n    div(phi,epsilon) bounded Gauss upwind;",
+                content,
+                count=1
+            )
+        elif turbulence == "kOmegaSST" or turbulence == "kOmegaSST_disabled":
+            content = re.sub(
+                r"(divSchemes\s*\{)",
+                r"\g<1>\n    div(phi,U)      bounded Gauss upwind;\n    div(phi,k)      bounded Gauss upwind;\n    div(phi,omega) bounded Gauss upwind;",
+                content,
+                count=1
+            )
+        else:
+            # Fallback
+            content = re.sub(
+                r"(divSchemes\s*\{)",
+                r"\g<1>\n    div(phi,U)      bounded Gauss upwind;\n    div(phi,k)      bounded Gauss upwind;\n    div(phi,epsilon) bounded Gauss upwind;",
+                content,
+                count=1
+            )
+
+        with open(target_path, "w", newline="\n") as f:
+            # Clean up empty lines created by regex sub and enforce Unix line endings
+            cleaned = "\n".join([s for s in content.splitlines() if s.strip()])
+            f.write(cleaned + "\n")
+
+        # If we had to synthesize the file from scratch because template was corrupted, save it
+        if not os.path.exists(template_path):
+            shutil.copy2(target_path, template_path)
+
+
+    def _update_fvSolution(self, turbulence, cfd_settings=None):
+>>>>>>> origin/main
+        import shutil
+        template_path = os.path.join(self.case_dir, "system", "fvSolution.template")
+        target_path = os.path.join(self.case_dir, "system", "fvSolution")
+
+        default_base_template = """/*--------------------------------*- C++ -*----------------------------------*\\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSolution;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+solvers
+{
+    p
+    {
+        solver          PCG;
+        preconditioner  DIC;
+        tolerance       1e-6;
+        relTol          0.01;
+    }

@@ -706,6 +706,7 @@ wallDist
         return turbulence
 
     def _update_fvSolution(self, turbulence, cfd_settings=None, relaxation_override=None):
+
         import shutil
         template_path = os.path.join(self.case_dir, "system", "fvSolution.template")
         target_path = os.path.join(self.case_dir, "system", "fvSolution")
@@ -2107,6 +2108,7 @@ cloudFunctions
             if i > 0:
                 for d in os.listdir(self.case_dir):
                     path = os.path.join(self.case_dir, d)
+
                     try:
                         if d != "0" and os.path.isdir(path):
                             float(d)
@@ -2150,6 +2152,7 @@ cloudFunctions
 
         print("💀 All strategies failed")
         return False
+
 
     def _create_constant_field(self, time_dir, field_name, value, dimensions, class_type="volScalarField", boundary_type="fixedValue"):
         """
