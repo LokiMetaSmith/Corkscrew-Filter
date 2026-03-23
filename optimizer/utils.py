@@ -310,3 +310,18 @@ def get_container_memory_gb(container_tool=None):
             print(f"Warning: Failed to query Docker memory: {e}")
 
     return mem_gb
+
+def safe_print(text: str):
+    """
+    Safely prints text containing emojis or special characters.
+    Gracefully degrades to the terminal encoding if it (like cp1252 on Windows)
+    does not support them, preventing UnicodeEncodeError crashes.
+    """
+    try:
+        encoding = sys.stdout.encoding or 'utf-8'
+        text.encode(encoding)
+        print(text)
+    except UnicodeEncodeError:
+        # Strip characters that can't be encoded
+        safe_text = text.encode(encoding, 'ignore').decode(encoding)
+        print(safe_text)

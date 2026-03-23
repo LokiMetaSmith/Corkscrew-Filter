@@ -9,7 +9,7 @@ import contextlib
 import shlex
 import numpy as np
 import jinja2
-from utils import run_command_with_spinner
+from utils import run_command_with_spinner, safe_print
 
 class FoamDriver:
     def __init__(self, case_dir, config=None, template_dir=None, container_engine="auto", num_processors=1, verbose=False):
@@ -2057,7 +2057,7 @@ cloudFunctions
 
         best = None
         for strategy in STRATEGIES:
-            print(f"\n🚀 Trying solver strategy: {strategy['name']}")
+            safe_print(f"\n🚀 Trying solver strategy: {strategy['name']}")
 
             # 1. Configure turbulence model
             self._update_turbulence_properties(strategy["turbulence"])
@@ -2121,12 +2121,12 @@ cloudFunctions
             print(f"Strategy {strategy['name']} completed with score={score:.1f} (success={success})")
 
             if success and score > 80:
-                print("✅ High quality run found, exiting early.")
+                safe_print("✅ High quality run found, exiting early.")
                 break
 
         if results:
             best = max(results, key=lambda r: r["score"])
-            print(f"🏆 Best run: {best['strategy']} (score={best['score']:.1f})")
+            safe_print(f"🏆 Best run: {best['strategy']} (score={best['score']:.1f})")
 
             import json
             with open(os.path.join(self.case_dir, "run_results.json"), "w") as f:
