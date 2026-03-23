@@ -541,7 +541,10 @@ boundaryField
             f.write(content)
 
     def _update_fvSchemes(self, turbulence):
+        import os
+        import re
         import shutil
+
         template_path = os.path.join(self.case_dir, "system", "fvSchemes.template")
         target_path = os.path.join(self.case_dir, "system", "fvSchemes")
 
@@ -550,41 +553,79 @@ boundaryField
             shutil.copy2(target_path, template_path)
 
         if os.path.exists(template_path):
-            shutil.copy2(template_path, target_path)
+            with open(template_path, "r") as f:
+                content = f.read()
+        else:
+            if not os.path.exists(target_path):
+                return
+            with open(target_path, "r") as f:
+                content = f.read()
 
-        if not os.path.exists(target_path): return
+        # --- Ensure required sections exist ---
+        def ensure_section(name, default_body):
+            if name not in content:
+                return content + f"\n{name}\n{{\n{default_body}\n}}\n"
+            return content
 
-        with open(target_path, 'r') as f:
-            content = f.read()
+        content = ensure_section("divSchemes", "    default none;")
+        content = ensure_section("snGradSchemes", "    default corrected;")
+        content = ensure_section("laplacianSchemes", "    default Gauss linear corrected;")
 
+        # --- Apply stability fixes ---
+
+        # 1. snGradSchemes → limited corrected
+        content = re.sub(
+            r"(snGradSchemes\s*\{[^}]*?default\s+)[^;]+;",
+            r"\g<1>limited corrected 0.33;",
+            content,
+            flags=re.DOTALL
+        )
+
+        # 2. laplacianSchemes → limited corrected
+        content = re.sub(
+            r"(laplacianSchemes\s*\{[^}]*?default\s+)[^;]+;",
+            r"\g<1>Gauss linear limited corrected 0.33;",
+            content,
+            flags=re.DOTALL
+        )
+
+        # --- Prevent Duplication & Apply DivSchemes ---
+        # Strip existing div(phi, X) lines cleanly
+        for field in ["U", "k", "epsilon", "omega", "R"]:
+            content = re.sub(rf"^\s*div\(phi,{field}\).*?;\n?", "", content, flags=re.MULTILINE)
+
+        # 3. divSchemes stabilization
         if turbulence == "laminar":
-            content = re.sub(r"div\(phi,k\).*?;", "", content)
-            content = re.sub(r"div\(phi,epsilon\).*?;", "", content)
-            content = re.sub(r"div\(phi,omega\).*?;", "", content)
-            content = re.sub(r"div\(phi,R\).*?;", "", content)
-            # Switch to upwind for U to ensure stability on coarse mesh without turbulent viscosity
-            content = re.sub(r"div\(phi,U\).*?;", "div(phi,U)      bounded Gauss upwind;", content)
+            content = re.sub(
+                r"(divSchemes\s*\{)",
+                r"\g<1>\n    div(phi,U)      bounded Gauss upwind;",
+                content,
+                count=1
+            )
         elif turbulence == "RNGkEpsilon":
-            content = re.sub(r"div\(phi,omega\).*?;", "", content)
-            content = re.sub(r"div\(phi,R\).*?;", "", content)
-            # Upwind U to ensure stability on coarse/scaled meshes with turbulence enabled
-            content = re.sub(r"div\(phi,U\).*?;", "div(phi,U)      bounded Gauss upwind;", content)
-
-            # Robustly inject if missing due to prior corrupted files (handles Windows CRLF and arbitrary spacing)
-            if "div(phi,k)" not in content and "divSchemes" in content:
-                content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,k)      bounded Gauss upwind;", content, count=1)
-            if "div(phi,epsilon)" not in content and "divSchemes" in content:
-                content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,epsilon) bounded Gauss upwind;", content, count=1)
-
+            content = re.sub(
+                r"(divSchemes\s*\{)",
+                r"\g<1>\n    div(phi,U)      bounded Gauss upwind;\n    div(phi,k)      bounded Gauss upwind;\n    div(phi,epsilon) bounded Gauss upwind;",
+                content,
+                count=1
+            )
         elif turbulence == "kOmegaSST" or turbulence == "kOmegaSST_disabled":
-            content = re.sub(r"div\(phi,R\).*?;", "", content)
+            content = re.sub(
+                r"(divSchemes\s*\{)",
+                r"\g<1>\n    div(phi,U)      bounded Gauss upwind;\n    div(phi,k)      bounded Gauss upwind;\n    div(phi,omega) bounded Gauss upwind;",
+                content,
+                count=1
+            )
+        else:
+            # Fallback
+            content = re.sub(
+                r"(divSchemes\s*\{)",
+                r"\g<1>\n    div(phi,U)      bounded Gauss upwind;\n    div(phi,k)      bounded Gauss upwind;\n    div(phi,epsilon) bounded Gauss upwind;",
+                content,
+                count=1
+            )
 
-            if "div(phi,k)" not in content and "divSchemes" in content:
-                content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,k)      bounded Gauss upwind;", content, count=1)
-            if "div(phi,omega)" not in content and "divSchemes" in content:
-                content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,omega) bounded Gauss upwind;", content, count=1)
-
-        with open(target_path, 'w', newline='\n') as f:
+        with open(target_path, "w", newline="\n") as f:
             # Clean up empty lines created by regex sub and enforce Unix line endings
             cleaned = "\n".join([s for s in content.splitlines() if s.strip()])
             f.write(cleaned + "\n")
@@ -592,6 +633,7 @@ boundaryField
         # If we had to synthesize the file from scratch because template was corrupted, save it
         if not os.path.exists(template_path):
             shutil.copy2(target_path, template_path)
+
 
     def _update_fvSolution(self, turbulence, cfd_settings=None):
         import shutil
