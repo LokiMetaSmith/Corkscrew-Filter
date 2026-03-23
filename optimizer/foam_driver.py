@@ -316,7 +316,7 @@ class FoamDriver:
         for field_name, field_config in initial_fields.items():
             field_path = os.path.join(zero_dir, field_name)
 
-            internal_field = field_config.get('internalField', 'uniform 0')
+            internal_field = field_config.get('internalField', 'uniform 1e-7')
             wall_function = field_config.get('wallFunction', 'zeroGradient')
 
             # Procedural override: Never use zeroGradient for k or epsilon to prevent stochasticDispersionRAS SIGFPE
@@ -484,12 +484,14 @@ boundaryField
                             new_block += "type            zeroGradient;\n"
                         elif field in ['k', 'epsilon', 'omega', 'nut']:
                             # Should use calculated/zeroGradient if we don't know
-                            new_block += "type            calculated;\nvalue           uniform 0;\n"
+                            new_block += "type            calculated;\nvalue           uniform 1e-7;\n"
                         else:
                             new_block += "type            calculated;\nvalue           uniform 0;\n"
                     else:
                         if field in ['U', 'p']:
                             new_block += "type            zeroGradient;\n"
+                        elif field in ['k', 'epsilon', 'omega', 'nut']:
+                            new_block += "type            calculated;\nvalue           uniform 1e-7;\n"
                         else:
                             new_block += "type            calculated;\nvalue           uniform 0;\n"
 
@@ -556,6 +558,11 @@ boundaryField
 
         with open(target_path, 'r') as f:
             content = f.read()
+
+        # Apply limited correctors for high-skew automated meshes
+        # This prevents SIGFPEs in snGrad and laplacian calculations
+        content = re.sub(r"(snGradSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>limited corrected 0.33;", content)
+        content = re.sub(r"(laplacianSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>Gauss linear limited corrected 0.33;", content)
 
         if turbulence == "laminar":
             content = re.sub(r"div\(phi,k\).*?;", "", content)
@@ -1915,14 +1922,14 @@ cloudFunctions
 
         # If it failed, and we haven't applied fallback wall functions yet, try doing so to recover from unstable baseline!
         if not success and not mesh_scaled_for_memory:
-            print("Solver failed on standard mesh. Attempting to recover by disabling turbulence (laminar fallback) and applying fallback wall functions...")
+            print("Solver failed on standard mesh. Attempting to recover by disabling turbulence...")
 
             # Cleanly disable turbulence to prevent epsilonWallFunction FPEs on bad mesh boundary cells
             self._update_turbulence_properties("laminar")
             self._update_fvSchemes("laminar")
             self._update_fvSolution("laminar", self.config.get('cfd_settings', {}))
 
-            self._apply_fallback_wall_functions()
+            # Since turbulence is off, wall functions should NOT be applied
 
             # Clean up any crashed time directories to ensure a fresh start from 0
             for d in os.listdir(self.case_dir):
