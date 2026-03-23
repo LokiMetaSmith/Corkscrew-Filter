@@ -309,6 +309,7 @@ class FoamDriver:
 
         self._generate_turbulence_fields(zero, cfd_settings)
         self._apply_boundary_conditions(zero)
+        self._sanitize_fields(zero)
         self._update_turbulence_properties(turbulence)
         self._update_fvSchemes(turbulence)
         self._update_fvSolution(turbulence, cfd_settings)
@@ -334,7 +335,8 @@ class FoamDriver:
         for field_name, field_config in initial_fields.items():
             field_path = os.path.join(zero_dir, field_name)
 
-            internal_field = field_config.get('internalField', 'uniform 1e-7')
+            default_internal = 'uniform 1e-7' if field_name == 'nut' else 'uniform 1e-6'
+            internal_field = field_config.get('internalField', default_internal)
             wall_function = field_config.get('wallFunction', 'zeroGradient')
 
             # Procedural override: Never use zeroGradient for k or epsilon to prevent stochasticDispersionRAS SIGFPE
@@ -405,6 +407,39 @@ boundaryField
 
             with open(field_path, 'w') as f:
                 f.write(header + blocks_str + footer)
+
+
+    def _sanitize_fields(self, zero_dir):
+        """
+        Global invariant enforcer: ensure no turbulence fields fall to 0.
+        Particularly enforces nut >= 1e-7.
+        """
+        for field in ["k", "epsilon", "omega", "nut"]:
+            field_path = os.path.join(zero_dir, field)
+            if not os.path.exists(field_path):
+                continue
+
+            with open(field_path, 'r') as f:
+                content = f.read()
+
+            default_val = "1e-7" if field == "nut" else "1e-6"
+
+            # Sanitize internalField
+            content = re.sub(
+                r"internalField\s+uniform\s+0(\.0*)?\s*;",
+                f"internalField   uniform {default_val};",
+                content
+            )
+
+            # Sanitize boundary values that are exactly 0
+            content = re.sub(
+                r"value\s+uniform\s+0(\.0*)?\s*;",
+                f"value           uniform {default_val};",
+                content
+            )
+
+            with open(field_path, 'w') as f:
+                f.write(content)
 
     def _apply_boundary_conditions(self, zero_dir):
         """
@@ -502,14 +537,16 @@ boundaryField
                             new_block += "type            zeroGradient;\n"
                         elif field in ['k', 'epsilon', 'omega', 'nut']:
                             # Should use calculated/zeroGradient if we don't know
-                            new_block += "type            calculated;\nvalue           uniform 1e-7;\n"
+                            default_val = '1e-7' if field == 'nut' else '1e-6'
+                            new_block += f"type            calculated;\nvalue           uniform {default_val};\n"
                         else:
                             new_block += "type            calculated;\nvalue           uniform 0;\n"
                     else:
                         if field in ['U', 'p']:
                             new_block += "type            zeroGradient;\n"
                         elif field in ['k', 'epsilon', 'omega', 'nut']:
-                            new_block += "type            calculated;\nvalue           uniform 1e-7;\n"
+                            default_val = '1e-7' if field == 'nut' else '1e-6'
+                            new_block += f"type            calculated;\nvalue           uniform {default_val};\n"
                         else:
                             new_block += "type            calculated;\nvalue           uniform 0;\n"
 
