@@ -2650,10 +2650,6 @@ boundaryField
 
         return None
 
-if __name__ == "__main__":
-    driver = FoamDriver("corkscrewFilter")
-    print("FoamDriver initialized.")
-
     def _execute_simpleFoam(self, return_output=False, log_file=None, solve_procs=1, solve_method="scotch"):
         """Executes simpleFoam and optionally returns standard output."""
         output = ""
@@ -2916,3 +2912,7 @@ if __name__ == "__main__":
 
             return best["success"]
         return False
+
+if __name__ == "__main__":
+    driver = FoamDriver("corkscrewFilter")
+    print("FoamDriver initialized.")
