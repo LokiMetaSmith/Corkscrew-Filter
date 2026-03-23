@@ -420,6 +420,20 @@ boundaryField
                 content
             )
 
+            # Sanitize tiny scientific notation values in internalField
+            content = re.sub(
+                r"internalField\s+uniform\s+1e-\d+\s*;",
+                f"internalField   uniform {default_val};",
+                content
+            )
+
+            # Sanitize tiny scientific notation values in boundaries
+            content = re.sub(
+                r"value\s+uniform\s+1e-\d+\s*;",
+                f"value           uniform {default_val};",
+                content
+            )
+
             with open(field_path, 'w') as f:
                 f.write(content)
 
@@ -605,8 +619,15 @@ boundaryField
             content = re.sub(r"(snGradSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>limited corrected 0.5;", content)
             content = re.sub(r"(laplacianSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>Gauss linear limited corrected 0.5;", content)
         else: # 'bad'
-            content = re.sub(r"(snGradSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>limited corrected 0.33;", content)
-            content = re.sub(r"(laplacianSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>Gauss linear limited corrected 0.33;", content)
+            content = re.sub(r"(snGradSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>limited corrected 0.2;", content)
+            content = re.sub(r"(laplacianSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>Gauss linear limited corrected 0.2;", content)
+
+            # Additional aggressive damping for BAD meshes: ensure bounded upwind for velocity and turbulence
+            content = re.sub(r"div\(phi,U\).*?;", "div(phi,U)      bounded Gauss upwind;", content)
+            content = re.sub(r"div\(phi,k\).*?;", "div(phi,k)      bounded Gauss upwind;", content)
+            content = re.sub(r"div\(phi,epsilon\).*?;", "div(phi,epsilon) bounded Gauss upwind;", content)
+            content = re.sub(r"div\(phi,omega\).*?;", "div(phi,omega) bounded Gauss upwind;", content)
+            content = re.sub(r"(gradSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>cellLimited Gauss linear 0.5;", content)
 
         if turbulence == "laminar":
             content = re.sub(r"div\(phi,k\).*?;", "", content)
@@ -746,15 +767,15 @@ relaxationFactors
 {
     fields
     {
-        p               0.2;
+        p               0.3;
     }
     equations
     {
-        U               0.5;
-        k               0.5;
-        epsilon         0.5;
-        omega           0.5;
-        R               0.5;
+        U               0.3;
+        k               0.2;
+        epsilon         0.2;
+        omega           0.2;
+        R               0.2;
     }
 }
 
@@ -1448,7 +1469,7 @@ subModels
             SOI             0;
             parcelsPerSecond 5000;
             flowRateProfile constant 1;
-            U0              (0 0 5);
+            U0              (-5 0 0);
             sizeDistribution
             {
                 type        fixedValue;
@@ -1611,7 +1632,7 @@ cloudFunctions
             if turbulence_model != "RNGkEpsilon":
                 turb_interpolation += "\n        omega           cellPoint;"
 
-            disp_model = "stochasticDispersionRAS"
+            disp_model = "none" # Temporarily disabled for stability ("stochasticDispersionRAS")
         # -----------------------------------------
 
         dynamic_boundaries = []
@@ -2043,37 +2064,67 @@ cloudFunctions
 
         # If it failed, and we haven't applied fallback wall functions yet, try doing so to recover from unstable baseline!
         if not success and not mesh_scaled_for_memory:
-            print("Solver failed on standard mesh. Attempting to recover by disabling turbulence...")
+            fallbacks = []
+            if turbulence == "RNGkEpsilon":
+                fallbacks.append("kOmegaSST")
+            fallbacks.append("laminar")
 
-            # Cleanly disable turbulence to prevent epsilonWallFunction FPEs on bad mesh boundary cells
-            self._update_turbulence_properties("laminar")
-            self._update_fvSchemes("laminar")
-            self._update_fvSolution("laminar", self.config.get('cfd_settings', {}))
+            for fallback in fallbacks:
+                print(f"Solver failed on standard mesh. Attempting to recover by switching to {fallback}...")
 
-            # DO NOT call self._apply_fallback_wall_functions() here
+                # Regenerate base fields to ensure missing ones (like omega for kOmegaSST) exist
+                # First clean the 0 dir except for U and p
+                zero_dir = os.path.join(self.case_dir, "0")
+                if os.path.exists(zero_dir):
+                    for field_file in os.listdir(zero_dir):
+                        if os.path.isfile(os.path.join(zero_dir, field_file)) and field_file not in ["U", "p"]:
+                            os.remove(os.path.join(zero_dir, field_file))
 
-            # Clean up any crashed time directories to ensure a fresh start from 0
-            for d in os.listdir(self.case_dir):
-                path = os.path.join(self.case_dir, d)
-                try:
-                    if d != "0" and os.path.isdir(path):
-                        float(d)  # Check if it's a numeric time directory
-                        shutil.rmtree(path, ignore_errors=True)
-                except ValueError:
-                    pass
+                import copy
+                # We need a proxy config to generate fields for the fallback
+                fallback_config = copy.deepcopy(cfd_settings)
+                fallback_config['turbulence_model'] = fallback
+                # Add default omega initial field if missing
+                if 'initial_fields' not in fallback_config:
+                    fallback_config['initial_fields'] = {}
+                if 'omega' not in fallback_config['initial_fields']:
+                     fallback_config['initial_fields']['omega'] = {'internalField': 'uniform 1e-6', 'wallFunction': 'omegaWallFunction'}
 
-            # Also clean up processor time directories if running in parallel
-            for p_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
-                for d in os.listdir(p_dir):
-                    path = os.path.join(p_dir, d)
+                self._generate_turbulence_fields(zero_dir, fallback_config)
+                self._apply_boundary_conditions(zero_dir)
+                self._sanitize_fields(zero_dir)
+
+                self._update_turbulence_properties(fallback)
+                self._update_fvSchemes(fallback, mesh_class)
+                self._update_fvSolution(fallback, self.config.get('cfd_settings', {}))
+
+                # DO NOT call self._apply_fallback_wall_functions() here
+
+                # Clean up any crashed time directories to ensure a fresh start from 0
+                for d in os.listdir(self.case_dir):
+                    path = os.path.join(self.case_dir, d)
                     try:
                         if d != "0" and os.path.isdir(path):
-                            float(d)
+                            float(d)  # Check if it's a numeric time directory
                             shutil.rmtree(path, ignore_errors=True)
                     except ValueError:
                         pass
 
-            success = _execute()
+                # Also clean up processor time directories if running in parallel
+                for p_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
+                    for d in os.listdir(p_dir):
+                        path = os.path.join(p_dir, d)
+                        try:
+                            if d != "0" and os.path.isdir(path):
+                                float(d)
+                                shutil.rmtree(path, ignore_errors=True)
+                        except ValueError:
+                            pass
+
+                success = _execute()
+                if success:
+                    # Successfully recovered
+                    break
 
         return success
 

@@ -49,7 +49,8 @@ class TestCloudConfig(unittest.TestCase):
         with open(config_path, 'r') as f:
             content2 = f.read()
 
-        self.assertIn("dispersionModel stochasticDispersionRAS;", content2) if "dispersionModel stochasticDispersionRAS;" in content2 else self.assertIn("dispersionModel {\"stochasticDispersionRAS\" if turbulence != \"laminar\" and turbulence != \"kOmegaSST_disabled\" else \"none\"}", content2)
+        # dispersionModel was disabled for stability
+        self.assertIn("dispersionModel none", content2)
         self.assertIn("k               cellPoint;", content2)
         # Verify cloudFunctions block exists and is empty or has commented out functionality
         # as patchPostProcessing is buggy in OpenFOAM v2512.
@@ -66,9 +67,9 @@ class TestCloudConfig(unittest.TestCase):
         self.assertNotIn("\n    patchPostProcessing1", block_content, "patchPostProcessing1 should not be active")
 
         # We can also check that the dynamically calculated parcelsPerSecond and U0 are present in the injections block
-        # For default (32mm tube_od_mm), area ratio is 1, so parcelsPerSecond is 5000 and U0 is 5.0
+        # For default (32mm tube_od_mm), area ratio is 1, so parcelsPerSecond is 5000 and U0 is (-5 0 0)
         self.assertIn("parcelsPerSecond 5000;", content)
-        self.assertIn("U0              (0 0 5);", content)
+        self.assertIn("U0              (-5 0 0);", content)
 
 if __name__ == '__main__':
     unittest.main()
