@@ -168,7 +168,7 @@ class FoamDriver:
 
         return container_cmd
 
-    def run_command(self, cmd, log_file=None, description="Processing", ignore_error=False, timeout=None):
+    def run_command(self, cmd, log_file=None, description="Processing", ignore_error=False, timeout=None, capture_output=False):
         """
         Executes a command, optionally wrapping it in a container.
         """
@@ -185,34 +185,52 @@ class FoamDriver:
         target_log = log_file if log_file else self.log_file
 
         try:
-            run_command_with_spinner(
-                full_cmd,
-                target_log,
-                cwd=cwd,
-                description=description,
-                timeout=timeout
-            )
-            return True
+            output_str = ""
+            if capture_output:
+                # Use subprocess directly to capture output without spinner
+                result = subprocess.run(
+                    full_cmd,
+                    cwd=cwd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    timeout=timeout
+                )
+                output_str = result.stdout
+                if result.returncode != 0 and not ignore_error:
+                    print(f"\nError executing {' '.join(cmd)}: {result.returncode}")
+                    self._print_log_tail(target_log)
+                    return False, output_str
+                return True, output_str
+            else:
+                run_command_with_spinner(
+                    full_cmd,
+                    target_log,
+                    cwd=cwd,
+                    description=description,
+                    timeout=timeout
+                )
+                return True
 
         except subprocess.TimeoutExpired as e:
             if not ignore_error:
                 print(f"\nTimeout executing {' '.join(cmd)} after {timeout} seconds.")
                 self._print_log_tail(target_log)
-                return False
-            return False
+                return (False, "") if capture_output else False
+            return (False, "") if capture_output else False
         except subprocess.CalledProcessError as e:
             if not ignore_error:
                 print(f"\nError executing {' '.join(cmd)}: {e}")
                 self._print_log_tail(target_log)
-                return False
-            return False
+                return (False, "") if capture_output else False
+            return (False, "") if capture_output else False
         except Exception as e:
             if not ignore_error:
                 print(f"\nUnexpected error executing {' '.join(cmd)}: {e}")
                 if self.verbose:
                     self._print_log_tail(target_log)
-                return False
-            return False
+                return (False, "") if capture_output else False
+            return (False, "") if capture_output else False
 
     def _print_log_tail(self, log_file, lines=30):
         """Prints the last N lines of the log file to stdout."""
@@ -542,65 +560,152 @@ boundaryField
         with open(tp_path, 'w') as f:
             f.write(content)
 
+    def _run_checkMesh(self):
+        success, output = self.run_command(
+            ["checkMesh", "-allGeometry", "-allTopology"],
+            capture_output=True
+        )
+        return output if success else ""
+
+    def _parse_mesh_quality(self, output):
+        def extract(pattern, default=0.0):
+            m = re.search(pattern, output)
+            return float(m.group(1)) if m else default
+
+        return {
+            "non_orth": extract(r"max non-orthogonality = ([\d\.]+)"),
+            "skewness": extract(r"max skewness = ([\d\.]+)"),
+            "min_vol": extract(r"min volume = ([\deE\+\-\.]+)", 1.0),
+        }
+
+    def _classify_mesh(self, q):
+        if q["non_orth"] > 75 or q["skewness"] > 4:
+            return "terrible"
+        elif q["non_orth"] > 65 or q["skewness"] > 2.5:
+            return "bad"
+        elif q["non_orth"] > 50 or q["skewness"] > 1.5:
+            return "moderate"
+        else:
+            return "good"
+
     def _update_fvSchemes(self, turbulence):
-        import shutil
-        template_path = os.path.join(self.case_dir, "system", "fvSchemes.template")
+        quality_output = self._run_checkMesh()
+        q = self._parse_mesh_quality(quality_output)
+
+        # Check for degenerate cells first
+        if q["min_vol"] < 1e-15:
+            print(f"🚨 Degenerate cells detected (min_vol = {q['min_vol']:.3e}) → forcing laminar")
+            turbulence = "laminar"
+
+        mesh_class = self._classify_mesh(q)
+
+        print(f"[Mesh Quality] {mesh_class} | {q}")
+
+        # Base config
+        snGrad = "limited corrected 0.33"
+        laplacian = "Gauss linear limited corrected 0.33"
+        div_u = "bounded Gauss upwind"
+
+        # Adapt based on mesh
+        if mesh_class == "good":
+            snGrad = "corrected"
+            laplacian = "Gauss linear corrected"
+            div_u = "Gauss linearUpwind grad(U)"
+
+        elif mesh_class == "moderate":
+            snGrad = "limited corrected 0.5"
+            laplacian = "Gauss linear limited corrected 0.5"
+            div_u = "bounded Gauss linearUpwind grad(U)"
+
+        elif mesh_class == "bad":
+            snGrad = "limited corrected 0.33"
+            laplacian = "Gauss linear limited corrected 0.33"
+            div_u = "bounded Gauss upwind"
+
+        elif mesh_class == "terrible":
+            print("⚠️ Mesh is terrible → forcing laminar + max stability")
+            turbulence = "laminar"
+            snGrad = "limited corrected 0.2"
+            laplacian = "Gauss linear limited corrected 0.2"
+            div_u = "bounded Gauss upwind"
+
+        # --- Build fvSchemes cleanly ---
+        content = f"""/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \    /   O peration     | Version:  v2512                                 |
+|   \  /    A nd           | Website:  www.openfoam.com                      |
+|    \/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSchemes;
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+ddtSchemes
+{{
+    default         steadyState;
+}}
+
+gradSchemes
+{{
+    default         Gauss linear;
+    grad(p)         Gauss linear;
+}}
+
+divSchemes
+{{
+    default         none;
+    div(phi,U)      {div_u};
+"""
+
+        if turbulence != "laminar" and turbulence != "kOmegaSST_disabled":
+            if turbulence == "RNGkEpsilon":
+                content += """    div(phi,k)      bounded Gauss upwind;
+    div(phi,epsilon) bounded Gauss upwind;
+"""
+            elif turbulence == "kOmegaSST":
+                content += """    div(phi,k)      bounded Gauss upwind;
+    div(phi,omega) bounded Gauss upwind;
+"""
+
+        content += """}
+
+laplacianSchemes
+{
+    default         """ + laplacian + """;
+}
+
+interpolationSchemes
+{
+    default         linear;
+}
+
+snGradSchemes
+{
+    default         """ + snGrad + """;
+}
+
+wallDist
+{
+    method meshWave;
+}
+
+// ************************************************************************* //
+"""
+
         target_path = os.path.join(self.case_dir, "system", "fvSchemes")
+        with open(target_path, "w", newline='\n') as f:
+            f.write(content)
 
-        # Recover from permanent modification if user lacks template
-        if not os.path.exists(template_path) and os.path.exists(target_path):
-            shutil.copy2(target_path, template_path)
+        return turbulence
 
-        if os.path.exists(template_path):
-            shutil.copy2(template_path, target_path)
-
-        if not os.path.exists(target_path): return
-
-        with open(target_path, 'r') as f:
-            content = f.read()
-
-        # Apply limited correctors for high-skew automated meshes
-        # This prevents SIGFPEs in snGrad and laplacian calculations
-        content = re.sub(r"(snGradSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>limited corrected 0.33;", content)
-        content = re.sub(r"(laplacianSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>Gauss linear limited corrected 0.33;", content)
-
-        if turbulence == "laminar":
-            content = re.sub(r"div\(phi,k\).*?;", "", content)
-            content = re.sub(r"div\(phi,epsilon\).*?;", "", content)
-            content = re.sub(r"div\(phi,omega\).*?;", "", content)
-            content = re.sub(r"div\(phi,R\).*?;", "", content)
-            # Switch to upwind for U to ensure stability on coarse mesh without turbulent viscosity
-            content = re.sub(r"div\(phi,U\).*?;", "div(phi,U)      bounded Gauss upwind;", content)
-        elif turbulence == "RNGkEpsilon":
-            content = re.sub(r"div\(phi,omega\).*?;", "", content)
-            content = re.sub(r"div\(phi,R\).*?;", "", content)
-            # Upwind U to ensure stability on coarse/scaled meshes with turbulence enabled
-            content = re.sub(r"div\(phi,U\).*?;", "div(phi,U)      bounded Gauss upwind;", content)
-
-            # Robustly inject if missing due to prior corrupted files (handles Windows CRLF and arbitrary spacing)
-            if "div(phi,k)" not in content and "divSchemes" in content:
-                content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,k)      bounded Gauss upwind;", content, count=1)
-            if "div(phi,epsilon)" not in content and "divSchemes" in content:
-                content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,epsilon) bounded Gauss upwind;", content, count=1)
-
-        elif turbulence == "kOmegaSST" or turbulence == "kOmegaSST_disabled":
-            content = re.sub(r"div\(phi,R\).*?;", "", content)
-
-            if "div(phi,k)" not in content and "divSchemes" in content:
-                content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,k)      bounded Gauss upwind;", content, count=1)
-            if "div(phi,omega)" not in content and "divSchemes" in content:
-                content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,omega) bounded Gauss upwind;", content, count=1)
-
-        with open(target_path, 'w', newline='\n') as f:
-            # Clean up empty lines created by regex sub and enforce Unix line endings
-            cleaned = "\n".join([s for s in content.splitlines() if s.strip()])
-            f.write(cleaned + "\n")
-
-        # If we had to synthesize the file from scratch because template was corrupted, save it
-        if not os.path.exists(template_path):
-            shutil.copy2(target_path, template_path)
-
-    def _update_fvSolution(self, turbulence, cfd_settings=None):
+    def _update_fvSolution(self, turbulence, cfd_settings=None, relaxation_override=None):
         import shutil
         template_path = os.path.join(self.case_dir, "system", "fvSolution.template")
         target_path = os.path.join(self.case_dir, "system", "fvSolution")
@@ -761,8 +866,8 @@ relaxationFactors
             for field in ["epsilon", "R"]:
                 content = remove_block(content, field)
 
-        if cfd_settings and 'relaxation_factors' in cfd_settings:
-            relax_factors = cfd_settings['relaxation_factors']
+        relax_factors = relaxation_override or (cfd_settings.get('relaxation_factors', {}) if cfd_settings else {})
+        if relax_factors:
             parts = content.split("relaxationFactors", 1)
             if len(parts) > 1:
                 relax_block = parts[1]
@@ -1879,12 +1984,74 @@ cloudFunctions
 
             print(f"Applied fallback wall function {new_wall_func} to {field_name} due to mesh scaling.")
 
+    def _sanitize_fields(self, turbulence):
+        zero_dir = os.path.join(self.case_dir, "0")
+
+        def fix_internal_field(file, min_val):
+            path = os.path.join(zero_dir, file)
+            if not os.path.exists(path):
+                return
+
+            with open(path, "r") as f:
+                content = f.read()
+
+            import re
+
+            content = re.sub(
+                r"internalField\s+uniform\s+([-\deE\.]+);",
+                lambda m: f"internalField uniform {max(float(m.group(1)), min_val)};",
+                content
+            )
+
+            with open(path, "w") as f:
+                f.write(content)
+
+        if turbulence != "laminar":
+            fix_internal_field("k", 1e-6)
+            fix_internal_field("epsilon", 1e-6)
+            fix_internal_field("omega", 1e-6)
+            fix_internal_field("nut", 1e-7)
+
+    def _execute_simpleFoam(self, solve_procs=1, solve_method='scotch', log_file=None):
+        if solve_procs > 1:
+            self._generate_decomposeParDict(num_processors=solve_procs, method=solve_method)
+            if not self.run_command(["decomposePar", "-force"], log_file=log_file, description="Decomposing Domain"): return False
+            cmd = ["mpirun", "--allow-run-as-root", "--oversubscribe", "-np", str(solve_procs), "simpleFoam", "-parallel"]
+            success, output = self.run_command(cmd, log_file=log_file, description=f"Solving CFD (Parallel {solve_procs} CPUs)", timeout=14400, capture_output=True)
+        else:
+            success, output = self.run_command(["simpleFoam"], log_file=log_file, description="Solving CFD", timeout=14400, capture_output=True)
+
+        failure_signals = [
+            "floating point exception",
+            "segmentation fault",
+            "nan",
+            "diverging",
+            "foam fatal error",
+            "foam aborting"
+        ]
+
+        if not success:
+            return False
+
+        out = output.lower()
+        if any(sig in out for sig in failure_signals):
+            return False
+
+        if "end" in out:
+            if solve_procs > 1:
+                import glob, shutil
+                if not self.run_command(["reconstructPar", "-latestTime"], log_file=log_file, description="Reconstructing Domain"): return False
+                for proc_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
+                    shutil.rmtree(proc_dir, ignore_errors=True)
+            return True
+
+        return False
+
     def run_solver(self, log_file=None, mesh_scaled_for_memory=False, **kwargs):
         """
-        Runs the solver.
+        Runs the solver using a strategy ladder with progressive degradation.
         """
         cfd_settings = self.config.get('cfd_settings', {})
-        mesh_procs = cfd_settings.get('mesh_processors', self.num_processors)
         solve_procs = cfd_settings.get('solve_processors', self.num_processors)
         solve_method = cfd_settings.get('solve_decompose_method', 'scotch')
 
@@ -1892,6 +2059,8 @@ cloudFunctions
             self._apply_fallback_wall_functions()
 
         # Clean up any crashed or old time directories to ensure a fresh start from 0 for the new mesh
+        import shutil
+        import glob
         for d in os.listdir(self.case_dir):
             path = os.path.join(self.case_dir, d)
             try:
@@ -1905,56 +2074,82 @@ cloudFunctions
         for p_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
             shutil.rmtree(p_dir, ignore_errors=True)
 
-        def _execute():
-            if solve_procs > 1:
-                self._generate_decomposeParDict(num_processors=solve_procs, method=solve_method)
-                if not self.run_command(["decomposePar", "-force"], log_file=log_file, description="Decomposing Domain"): return False
-                cmd = ["mpirun", "--allow-run-as-root", "--oversubscribe", "-np", str(solve_procs), "simpleFoam", "-parallel"]
-                if not self.run_command(cmd, log_file=log_file, description=f"Solving CFD (Parallel {solve_procs} CPUs)", timeout=14400): return False
-                if not self.run_command(["reconstructPar", "-latestTime"], log_file=log_file, description="Reconstructing Domain"): return False
-                for proc_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
-                    shutil.rmtree(proc_dir, ignore_errors=True)
-                return True
-            else:
-                return self.run_command(["simpleFoam"], log_file=log_file, description="Solving CFD", timeout=14400)
+        STRATEGIES = [
+            {
+                "name": "RNGkEpsilon",
+                "turbulence": "RNGkEpsilon",
+                "relaxation": {"p": 0.2, "U": 0.5, "k": 0.5, "epsilon": 0.5},
+            },
+            {
+                "name": "kOmegaSST",
+                "turbulence": "kOmegaSST",
+                "relaxation": {"p": 0.15, "U": 0.4, "k": 0.4, "omega": 0.4},
+            },
+            {
+                "name": "laminar",
+                "turbulence": "laminar",
+                "relaxation": {"p": 0.1, "U": 0.3},
+            },
+        ]
 
-        success = _execute()
+        # Use the requested turbulence model first if provided
+        configured_model = cfd_settings.get('turbulence_model', "RNGkEpsilon")
 
-        # If it failed, and we haven't applied fallback wall functions yet, try doing so to recover from unstable baseline!
-        if not success and not mesh_scaled_for_memory:
-            print("Solver failed on standard mesh. Attempting to recover by disabling turbulence...")
+        # Reorder strategies so the configured one is tried first
+        configured_idx = next((i for i, s in enumerate(STRATEGIES) if s["turbulence"] == configured_model), 0)
+        if configured_idx != 0:
+             STRATEGIES.insert(0, STRATEGIES.pop(configured_idx))
 
-            # Cleanly disable turbulence to prevent epsilonWallFunction FPEs on bad mesh boundary cells
-            self._update_turbulence_properties("laminar")
-            self._update_fvSchemes("laminar")
-            self._update_fvSolution("laminar", self.config.get('cfd_settings', {}))
+        for i, strategy in enumerate(STRATEGIES):
+            print(f"\n🚀 Attempt {i+1}: {strategy['name']}")
 
-            # Since turbulence is off, wall functions should NOT be applied
-
-            # Clean up any crashed time directories to ensure a fresh start from 0
-            for d in os.listdir(self.case_dir):
-                path = os.path.join(self.case_dir, d)
-                try:
-                    if d != "0" and os.path.isdir(path):
-                        float(d)  # Check if it's a numeric time directory
-                        shutil.rmtree(path, ignore_errors=True)
-                except ValueError:
-                    pass
-
-            # Also clean up processor time directories if running in parallel
-            for p_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
-                for d in os.listdir(p_dir):
-                    path = os.path.join(p_dir, d)
+            # Clean time dirs again before retrying
+            if i > 0:
+                for d in os.listdir(self.case_dir):
+                    path = os.path.join(self.case_dir, d)
                     try:
                         if d != "0" and os.path.isdir(path):
                             float(d)
                             shutil.rmtree(path, ignore_errors=True)
                     except ValueError:
                         pass
+                for p_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
+                    for d in os.listdir(p_dir):
+                        path = os.path.join(p_dir, d)
+                        try:
+                            if d != "0" and os.path.isdir(path):
+                                float(d)
+                                shutil.rmtree(path, ignore_errors=True)
+                        except ValueError:
+                            pass
 
-            success = _execute()
+            # 1. Configure turbulence model
+            self._update_turbulence_properties(strategy["turbulence"])
 
-        return success
+            # 2. Adaptive fvSchemes (mesh-aware)
+            adapted_turbulence = self._update_fvSchemes(strategy["turbulence"])
+
+            # 3. fvSolution (relaxation tuning)
+            self._update_fvSolution(
+                adapted_turbulence,
+                cfd_settings,
+                relaxation_override=strategy["relaxation"]
+            )
+
+            # 4. Ensure fields are sane
+            self._sanitize_fields(adapted_turbulence)
+
+            # 5. Run solver
+            success = self._execute_simpleFoam(solve_procs=solve_procs, solve_method=solve_method, log_file=log_file)
+
+            if success:
+                print(f"✅ SUCCESS with {strategy['name']}")
+                return True
+
+            print(f"❌ Failed: {strategy['name']}")
+
+        print("💀 All strategies failed")
+        return False
 
     def _create_constant_field(self, time_dir, field_name, value, dimensions, class_type="volScalarField", boundary_type="fixedValue"):
         """
