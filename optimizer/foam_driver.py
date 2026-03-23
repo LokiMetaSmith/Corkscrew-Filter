@@ -291,6 +291,7 @@ class FoamDriver:
 
         self._generate_turbulence_fields(zero, cfd_settings)
         self._apply_boundary_conditions(zero)
+        self._sanitize_fields(zero)
         self._update_turbulence_properties(turbulence)
         self._update_fvSchemes(turbulence)
         self._update_fvSolution(turbulence, cfd_settings)
@@ -316,7 +317,8 @@ class FoamDriver:
         for field_name, field_config in initial_fields.items():
             field_path = os.path.join(zero_dir, field_name)
 
-            internal_field = field_config.get('internalField', 'uniform 1e-7')
+            default_internal = 'uniform 1e-7' if field_name == 'nut' else 'uniform 1e-6'
+            internal_field = field_config.get('internalField', default_internal)
             wall_function = field_config.get('wallFunction', 'zeroGradient')
 
             # Procedural override: Never use zeroGradient for k or epsilon to prevent stochasticDispersionRAS SIGFPE
@@ -387,6 +389,39 @@ boundaryField
 
             with open(field_path, 'w') as f:
                 f.write(header + blocks_str + footer)
+
+
+    def _sanitize_fields(self, zero_dir):
+        """
+        Global invariant enforcer: ensure no turbulence fields fall to 0.
+        Particularly enforces nut >= 1e-7.
+        """
+        for field in ["k", "epsilon", "omega", "nut"]:
+            field_path = os.path.join(zero_dir, field)
+            if not os.path.exists(field_path):
+                continue
+
+            with open(field_path, 'r') as f:
+                content = f.read()
+
+            default_val = "1e-7" if field == "nut" else "1e-6"
+
+            # Sanitize internalField
+            content = re.sub(
+                r"internalField\s+uniform\s+0(\.0*)?\s*;",
+                f"internalField   uniform {default_val};",
+                content
+            )
+
+            # Sanitize boundary values that are exactly 0
+            content = re.sub(
+                r"value\s+uniform\s+0(\.0*)?\s*;",
+                f"value           uniform {default_val};",
+                content
+            )
+
+            with open(field_path, 'w') as f:
+                f.write(content)
 
     def _apply_boundary_conditions(self, zero_dir):
         """
@@ -484,14 +519,16 @@ boundaryField
                             new_block += "type            zeroGradient;\n"
                         elif field in ['k', 'epsilon', 'omega', 'nut']:
                             # Should use calculated/zeroGradient if we don't know
-                            new_block += "type            calculated;\nvalue           uniform 1e-7;\n"
+                            default_val = '1e-7' if field == 'nut' else '1e-6'
+                            new_block += f"type            calculated;\nvalue           uniform {default_val};\n"
                         else:
                             new_block += "type            calculated;\nvalue           uniform 0;\n"
                     else:
                         if field in ['U', 'p']:
                             new_block += "type            zeroGradient;\n"
                         elif field in ['k', 'epsilon', 'omega', 'nut']:
-                            new_block += "type            calculated;\nvalue           uniform 1e-7;\n"
+                            default_val = '1e-7' if field == 'nut' else '1e-6'
+                            new_block += f"type            calculated;\nvalue           uniform {default_val};\n"
                         else:
                             new_block += "type            calculated;\nvalue           uniform 0;\n"
 
@@ -542,7 +579,7 @@ boundaryField
         with open(tp_path, 'w') as f:
             f.write(content)
 
-    def _update_fvSchemes(self, turbulence):
+    def _update_fvSchemes(self, turbulence, mesh_class='bad'):
         import shutil
         template_path = os.path.join(self.case_dir, "system", "fvSchemes.template")
         target_path = os.path.join(self.case_dir, "system", "fvSchemes")
@@ -559,10 +596,17 @@ boundaryField
         with open(target_path, 'r') as f:
             content = f.read()
 
-        # Apply limited correctors for high-skew automated meshes
-        # This prevents SIGFPEs in snGrad and laplacian calculations
-        content = re.sub(r"(snGradSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>limited corrected 0.33;", content)
-        content = re.sub(r"(laplacianSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>Gauss linear limited corrected 0.33;", content)
+        # Adaptive fvSchemes based on mesh classification
+        # Adjust limited correctors to prevent SIGFPEs in snGrad and laplacian calculations
+        if mesh_class == 'good':
+            content = re.sub(r"(snGradSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>limited corrected 0.7;", content)
+            content = re.sub(r"(laplacianSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>Gauss linear limited corrected 0.7;", content)
+        elif mesh_class == 'marginal':
+            content = re.sub(r"(snGradSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>limited corrected 0.5;", content)
+            content = re.sub(r"(laplacianSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>Gauss linear limited corrected 0.5;", content)
+        else: # 'bad'
+            content = re.sub(r"(snGradSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>limited corrected 0.33;", content)
+            content = re.sub(r"(laplacianSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>Gauss linear limited corrected 0.33;", content)
 
         if turbulence == "laminar":
             content = re.sub(r"div\(phi,k\).*?;", "", content)
@@ -577,6 +621,10 @@ boundaryField
             # Upwind U to ensure stability on coarse/scaled meshes with turbulence enabled
             content = re.sub(r"div\(phi,U\).*?;", "div(phi,U)      bounded Gauss upwind;", content)
 
+            # Enforce bounded upwind for turbulence fields
+            content = re.sub(r"div\(phi,k\).*?;", "div(phi,k)      bounded Gauss upwind;", content)
+            content = re.sub(r"div\(phi,epsilon\).*?;", "div(phi,epsilon) bounded Gauss upwind;", content)
+
             # Robustly inject if missing due to prior corrupted files (handles Windows CRLF and arbitrary spacing)
             if "div(phi,k)" not in content and "divSchemes" in content:
                 content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,k)      bounded Gauss upwind;", content, count=1)
@@ -585,6 +633,10 @@ boundaryField
 
         elif turbulence == "kOmegaSST" or turbulence == "kOmegaSST_disabled":
             content = re.sub(r"div\(phi,R\).*?;", "", content)
+
+            # Enforce bounded upwind for turbulence fields
+            content = re.sub(r"div\(phi,k\).*?;", "div(phi,k)      bounded Gauss upwind;", content)
+            content = re.sub(r"div\(phi,omega\).*?;", "div(phi,omega) bounded Gauss upwind;", content)
 
             if "div(phi,k)" not in content and "divSchemes" in content:
                 content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,k)      bounded Gauss upwind;", content, count=1)
@@ -1879,6 +1931,65 @@ cloudFunctions
 
             print(f"Applied fallback wall function {new_wall_func} to {field_name} due to mesh scaling.")
 
+
+    def _run_checkMesh(self, log_file=None):
+        """
+        Runs checkMesh and parses the output for quality metrics.
+        Returns a dictionary with parsed metrics.
+        """
+        print("Running checkMesh to evaluate mesh quality...")
+        temp_log = log_file if log_file else os.path.join(self.case_dir, "log.checkMesh")
+
+        # Run checkMesh, ignoring errors because checkMesh often returns non-zero for marginal meshes
+        self.run_command(["checkMesh"], log_file=temp_log, description="Quality Check (checkMesh)", ignore_error=True)
+
+        metrics = {
+            "max_non_orthogonality": 0.0,
+            "max_skewness": 0.0,
+            "failed_checks": False
+        }
+
+        if os.path.exists(temp_log):
+            with open(temp_log, 'r') as f:
+                log_content = f.read()
+
+            # Parse Max non-orthogonality
+            m_ortho = re.search(r"Mesh non-orthogonality Max:\s*([\d\.]+)", log_content)
+            if m_ortho:
+                metrics["max_non_orthogonality"] = float(m_ortho.group(1))
+
+            # Parse Max skewness
+            m_skew = re.search(r"Max skewness\s*=\s*([\d\.]+)", log_content)
+            if m_skew:
+                metrics["max_skewness"] = float(m_skew.group(1))
+
+            # Check if it failed
+            if "Failed 1 mesh checks" in log_content or "Failed" in log_content.split("Mesh OK.")[-1]:
+                metrics["failed_checks"] = True
+
+        return metrics
+
+    def _classify_mesh(self, metrics):
+        """
+        Classifies mesh quality based on parsed metrics.
+        Returns 'good', 'marginal', or 'bad'.
+        """
+        ortho = metrics.get("max_non_orthogonality", 0.0)
+        skew = metrics.get("max_skewness", 0.0)
+        failed = metrics.get("failed_checks", False)
+
+        print(f"Mesh Quality Metrics - Max Non-Ortho: {ortho:.2f}, Max Skewness: {skew:.2f}")
+
+        if ortho > 75.0 or skew > 6.0 or failed:
+            print("Mesh classification: BAD (requires aggressive stabilization)")
+            return "bad"
+        elif ortho > 65.0 or skew > 4.0:
+            print("Mesh classification: MARGINAL (requires moderate stabilization)")
+            return "marginal"
+        else:
+            print("Mesh classification: GOOD")
+            return "good"
+
     def run_solver(self, log_file=None, mesh_scaled_for_memory=False, **kwargs):
         """
         Runs the solver.
@@ -1890,6 +2001,16 @@ cloudFunctions
 
         if mesh_scaled_for_memory:
             self._apply_fallback_wall_functions()
+
+        # Phase 2: Mesh-Quality Feedback Loop
+        # Run checkMesh, parse quality, and classify mesh
+        mesh_metrics = self._run_checkMesh()
+        mesh_class = self._classify_mesh(mesh_metrics)
+
+        # Re-apply fvSchemes with the new mesh classification
+        # (This overrides the initial generic call made during prepare_case)
+        turbulence = cfd_settings.get('turbulence_model', 'laminar')
+        self._update_fvSchemes(turbulence, mesh_class)
 
         # Clean up any crashed or old time directories to ensure a fresh start from 0 for the new mesh
         for d in os.listdir(self.case_dir):
@@ -1929,7 +2050,7 @@ cloudFunctions
             self._update_fvSchemes("laminar")
             self._update_fvSolution("laminar", self.config.get('cfd_settings', {}))
 
-            # Since turbulence is off, wall functions should NOT be applied
+            # DO NOT call self._apply_fallback_wall_functions() here
 
             # Clean up any crashed time directories to ensure a fresh start from 0
             for d in os.listdir(self.case_dir):

@@ -51,3 +51,17 @@ This file tracks planned enhancements and future work for the OpenAuto-CFD frame
 - [x] **Stricter Geometry Validation:** Enhance the Python `Validator` to check STLs for non-manifold edges and self-intersections (using `trimesh`) before attempting to mesh them in OpenFOAM.
 - [x] **Hardcode Safety Margins:** In OpenSCAD modules (e.g., `assemblies.scad`), enforce minimum geometric tolerances mathematically to prevent CGAL precondition violations, regardless of LLM parameter suggestions (e.g., explicitly prevent `helix_profile_radius` from equaling `helix_path_radius`).
 - [ ] **Improved LLM Feedback:** Update the LLM error feedback mechanism to provide specific, geometric reasons for simulation failures (e.g., "The mesh quality check failed due to high non-orthogonality near the slit") instead of generic OpenFOAM solver crash logs.
+
+## CFD Resilient Execution Engine (Post-Review Architecture)
+- [ ] **Phase 1: Immediate Stability Fixes (Numerical Stability)**
+    - [x] Fix `nut` invariant: Ensure `nut >= 1e-7` globally, replacing any `uniform 0` in `internalField` or fallback boundaries.
+    - [x] Fix `fvSchemes`: Enforce `limited corrected 0.33` for `snGradSchemes` and `laplacianSchemes` on harsh meshes.
+    - [x] Fix `fvSchemes`: Ensure bounded upwind schemes (`bounded Gauss upwind`) are used for all turbulence parameters (`k`, `epsilon`, `omega`).
+    - [x] Remove wall function applications during laminar fallback to prevent solver instability.
+- [ ] **Phase 2: Mesh-Quality Feedback Loop**
+    - [ ] Implement `checkMesh` parsing to extract `Max non-orthogonality` and `Max skewness`.
+    - [ ] Classify mesh quality (e.g., `good`, `marginal`, `bad`).
+    - [ ] Dynamically adapt `fvSchemes` limiters based on mesh classification before running the solver.
+- [ ] **Phase 3: Full Orchestration System**
+    - [ ] Implement multi-stage Retry Ladder: Try `RNG k-epsilon` -> degrade to `k-omega SST` -> fallback to `laminar`.
+    - [ ] Implement proactive Field Clamping: Sanitize fields to prevent them from becoming 0, NaN, or extremely small before the solver runs.
