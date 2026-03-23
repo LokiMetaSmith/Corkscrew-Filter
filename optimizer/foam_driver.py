@@ -168,7 +168,7 @@ class FoamDriver:
 
         return container_cmd
 
-    def run_command(self, cmd, log_file=None, description="Processing", ignore_error=False, timeout=None):
+    def run_command(self, cmd, log_file=None, description="Processing", ignore_error=False, timeout=None, capture_output=False):
         """
         Executes a command, optionally wrapping it in a container.
         """
@@ -185,33 +185,53 @@ class FoamDriver:
         target_log = log_file if log_file else self.log_file
 
         try:
-            run_command_with_spinner(
-                full_cmd,
-                target_log,
-                cwd=cwd,
-                description=description,
-                timeout=timeout
-            )
-            return True
+            if capture_output:
+                result = subprocess.run(
+                    full_cmd,
+                    cwd=cwd,
+                    timeout=timeout,
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+                with open(target_log, "a") as f:
+                    f.write(f"\n--- Output of {' '.join(cmd)} ---\n")
+                    f.write(result.stdout)
+                return True, result.stdout
+            else:
+                run_command_with_spinner(
+                    full_cmd,
+                    target_log,
+                    cwd=cwd,
+                    description=description,
+                    timeout=timeout
+                )
+                return True
 
         except subprocess.TimeoutExpired as e:
             if not ignore_error:
                 print(f"\nTimeout executing {' '.join(cmd)} after {timeout} seconds.")
                 self._print_log_tail(target_log)
-                return False
+            if capture_output:
+                return False, ""
             return False
         except subprocess.CalledProcessError as e:
             if not ignore_error:
                 print(f"\nError executing {' '.join(cmd)}: {e}")
+                if capture_output and e.output:
+                    with open(target_log, "a") as f:
+                        f.write(e.output)
                 self._print_log_tail(target_log)
-                return False
+            if capture_output:
+                return False, e.output or ""
             return False
         except Exception as e:
             if not ignore_error:
                 print(f"\nUnexpected error executing {' '.join(cmd)}: {e}")
                 if self.verbose:
                     self._print_log_tail(target_log)
-                return False
+            if capture_output:
+                return False, ""
             return False
 
     def _print_log_tail(self, log_file, lines=30):
