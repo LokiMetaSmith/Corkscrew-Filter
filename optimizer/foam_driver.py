@@ -381,8 +381,7 @@ boundaryField
             blocks_str += f"""
     ".*"
     {{
-        type            {wall_function};
-        value           $internalField;
+        type            zeroGradient;
     }}
 """
 
@@ -496,7 +495,7 @@ boundaryField
 
                 # Procedural override: Never use zeroGradient for k or epsilon on walls to prevent stochasticDispersionRAS SIGFPE
                 patch_type = patch_config.get('type')
-                if patch_type == 'wall' or patch_name == '.*':
+                if patch_type == 'wall':
                     if field == "epsilon" and "type            zeroGradient;" in new_block:
                         new_block = new_block.replace("type            zeroGradient;", "type            epsilonWallFunction;\n        value           $internalField;")
                         print(f"Procedurally overriding epsilon boundary wall function from zeroGradient to epsilonWallFunction on {patch_name} to prevent SIGFPE.")
@@ -1821,35 +1820,52 @@ cloudFunctions
                 if field_name in initial_fields:
                     old_wall_func = initial_fields[field_name].get('wallFunction')
 
-                # If we know the old one, we could replace it specifically,
-                # or we just try replacing known common ones like nutkRoughWallFunction
-                # if the file specifically uses it. Let's do a generic replace of the type.
-                # But the user might have Ks and Cs fields that need to be removed.
+                # Only apply fallback to patches defined as type "wall" (and the catch-all ".*")
+                physics = self.config.get('physics', {})
+                boundaries = physics.get('boundaries', {})
 
-                if old_wall_func:
-                    content = content.replace(f"type            {old_wall_func};", f"type            {new_wall_func};")
+                wall_patches = ['".*"']
+                if boundaries:
+                    for patch_name, patch_config in boundaries.items():
+                        if patch_config.get('type') == 'wall':
+                            wall_patches.append(patch_name)
                 else:
-                    # If we don't know the exact old wall function, we just try to catch the roughness one for nut
-                    if field_name == "nut":
-                         content = content.replace("type            nutkRoughWallFunction;", f"type            {new_wall_func};")
-                    elif field_name == "epsilon":
-                         content = content.replace("type            epsilonWallFunction;", f"type            {new_wall_func};")
-                    elif field_name == "k":
-                         content = content.replace("type            kqRWallFunction;", f"type            {new_wall_func};")
+                    wall_patches.append("corkscrew")
 
-                # Clean up roughness constants just in case we are replacing a rough wall function
-                if "nut" in field_name or new_wall_func == "nutkWallFunction":
-                    content = re.sub(r"^\s*Ks\s+.*?$\n?", "", content, flags=re.MULTILINE)
-                    content = re.sub(r"^\s*Cs\s+.*?$\n?", "", content, flags=re.MULTILINE)
+                for patch in wall_patches:
+                    escaped_patch = re.escape(patch)
 
-                if new_wall_func == "zeroGradient":
-                    content = re.sub(r"type\s+zeroGradient;\s+value\s+uniform\s+[\d\.\-e\+]+;", r"type            zeroGradient;", content, flags=re.MULTILINE)
-                    content = re.sub(r"type\s+zeroGradient;\s+value\s+\$internalField;", r"type            zeroGradient;", content, flags=re.MULTILINE)
-                elif old_wall_func == "zeroGradient":
-                    # If we replaced zeroGradient with something else (like epsilonWallFunction), we must append the missing value field
-                    # Use regex to only append if 'value' is missing from that block
-                    pattern = rf"(type\s+{new_wall_func};)(?!\s*value\s+)"
-                    content = re.sub(pattern, rf"\1\n        value           $internalField;", content)
+                    if old_wall_func:
+                        pattern = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?type\s+){old_wall_func}(;)', re.DOTALL)
+                        content = pattern.sub(rf'\g<1>{new_wall_func}\g<2>', content)
+                    else:
+                        if field_name == "nut":
+                            pattern = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?type\s+)nutkRoughWallFunction(;)', re.DOTALL)
+                            content = pattern.sub(rf'\g<1>{new_wall_func}\g<2>', content)
+                        elif field_name == "epsilon":
+                            pattern = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?type\s+)epsilonWallFunction(;)', re.DOTALL)
+                            content = pattern.sub(rf'\g<1>{new_wall_func}\g<2>', content)
+                        elif field_name == "k":
+                            pattern = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?type\s+)kqRWallFunction(;)', re.DOTALL)
+                            content = pattern.sub(rf'\g<1>{new_wall_func}\g<2>', content)
+
+                    # Clean up roughness constants just in case we are replacing a rough wall function
+                    if "nut" in field_name or new_wall_func == "nutkWallFunction":
+                        pattern_ks = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?)\s*Ks\s+.*?;\n?', re.DOTALL)
+                        content = pattern_ks.sub(r'\g<1>', content)
+                        pattern_cs = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?)\s*Cs\s+.*?;\n?', re.DOTALL)
+                        content = pattern_cs.sub(r'\g<1>', content)
+
+                    if new_wall_func == "zeroGradient":
+                        pattern_val1 = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?type\s+zeroGradient;\s+)value\s+uniform\s+[\d\.\-e\+]+;\n?', re.DOTALL)
+                        content = pattern_val1.sub(r'\g<1>', content)
+                        pattern_val2 = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?type\s+zeroGradient;\s+)value\s+\$internalField;\n?', re.DOTALL)
+                        content = pattern_val2.sub(r'\g<1>', content)
+                    elif old_wall_func == "zeroGradient":
+                        # If we replaced zeroGradient with something else (like epsilonWallFunction), we must append the missing value field
+                        # Use regex to only append if 'value' is missing from that block
+                        pattern = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?type\s+{new_wall_func};)(?!\s*value\s+)', re.DOTALL)
+                        content = pattern.sub(rf'\g<1>\n        value           $internalField;', content)
 
                 with open(field_path, "w") as f:
                     f.write(content)
