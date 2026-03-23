@@ -291,6 +291,7 @@ class FoamDriver:
 
         self._generate_turbulence_fields(zero, cfd_settings)
         self._apply_boundary_conditions(zero)
+        self._sanitize_fields(zero)
         self._update_turbulence_properties(turbulence)
         self._update_fvSchemes(turbulence)
         self._update_fvSolution(turbulence, cfd_settings)
@@ -316,7 +317,8 @@ class FoamDriver:
         for field_name, field_config in initial_fields.items():
             field_path = os.path.join(zero_dir, field_name)
 
-            internal_field = field_config.get('internalField', 'uniform 1e-7')
+            default_internal = 'uniform 1e-7' if field_name == 'nut' else 'uniform 1e-6'
+            internal_field = field_config.get('internalField', default_internal)
             wall_function = field_config.get('wallFunction', 'zeroGradient')
 
             # Procedural override: Never use zeroGradient for k or epsilon to prevent stochasticDispersionRAS SIGFPE
@@ -387,6 +389,39 @@ boundaryField
 
             with open(field_path, 'w') as f:
                 f.write(header + blocks_str + footer)
+
+
+    def _sanitize_fields(self, zero_dir):
+        """
+        Global invariant enforcer: ensure no turbulence fields fall to 0.
+        Particularly enforces nut >= 1e-7.
+        """
+        for field in ["k", "epsilon", "omega", "nut"]:
+            field_path = os.path.join(zero_dir, field)
+            if not os.path.exists(field_path):
+                continue
+
+            with open(field_path, 'r') as f:
+                content = f.read()
+
+            default_val = "1e-7" if field == "nut" else "1e-6"
+
+            # Sanitize internalField
+            content = re.sub(
+                r"internalField\s+uniform\s+0(\.0*)?\s*;",
+                f"internalField   uniform {default_val};",
+                content
+            )
+
+            # Sanitize boundary values that are exactly 0
+            content = re.sub(
+                r"value\s+uniform\s+0(\.0*)?\s*;",
+                f"value           uniform {default_val};",
+                content
+            )
+
+            with open(field_path, 'w') as f:
+                f.write(content)
 
     def _apply_boundary_conditions(self, zero_dir):
         """
@@ -484,14 +519,16 @@ boundaryField
                             new_block += "type            zeroGradient;\n"
                         elif field in ['k', 'epsilon', 'omega', 'nut']:
                             # Should use calculated/zeroGradient if we don't know
-                            new_block += "type            calculated;\nvalue           uniform 1e-7;\n"
+                            default_val = '1e-7' if field == 'nut' else '1e-6'
+                            new_block += f"type            calculated;\nvalue           uniform {default_val};\n"
                         else:
                             new_block += "type            calculated;\nvalue           uniform 0;\n"
                     else:
                         if field in ['U', 'p']:
                             new_block += "type            zeroGradient;\n"
                         elif field in ['k', 'epsilon', 'omega', 'nut']:
-                            new_block += "type            calculated;\nvalue           uniform 1e-7;\n"
+                            default_val = '1e-7' if field == 'nut' else '1e-6'
+                            new_block += f"type            calculated;\nvalue           uniform {default_val};\n"
                         else:
                             new_block += "type            calculated;\nvalue           uniform 0;\n"
 
@@ -542,11 +579,8 @@ boundaryField
         with open(tp_path, 'w') as f:
             f.write(content)
 
-    def _update_fvSchemes(self, turbulence):
-        import os
-        import re
+    def _update_fvSchemes(self, turbulence, mesh_class='bad'):
         import shutil
-
         template_path = os.path.join(self.case_dir, "system", "fvSchemes.template")
         target_path = os.path.join(self.case_dir, "system", "fvSchemes")
 
@@ -555,28 +589,24 @@ boundaryField
             shutil.copy2(target_path, template_path)
 
         if os.path.exists(template_path):
-            with open(template_path, "r") as f:
-                content = f.read()
-        else:
-            if not os.path.exists(target_path):
-                return
-            with open(target_path, "r") as f:
-                content = f.read()
+            shutil.copy2(template_path, target_path)
 
-        # --- Ensure required sections exist ---
-        def ensure_section(name, default_body):
-            if name not in content:
-                return content + f"\n{name}\n{{\n{default_body}\n}}\n"
-            return content
+        if not os.path.exists(target_path): return
 
-        content = ensure_section("divSchemes", "    default none;")
-        content = ensure_section("snGradSchemes", "    default corrected;")
-        content = ensure_section("laplacianSchemes", "    default Gauss linear corrected;")
+        with open(target_path, 'r') as f:
+            content = f.read()
 
-        # Apply limited correctors for high-skew automated meshes
-        # This prevents SIGFPEs in snGrad and laplacian calculations
-        content = re.sub(r"(snGradSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>limited corrected 0.33;", content)
-        content = re.sub(r"(laplacianSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>Gauss linear limited corrected 0.33;", content)
+        # Adaptive fvSchemes based on mesh classification
+        # Adjust limited correctors to prevent SIGFPEs in snGrad and laplacian calculations
+        if mesh_class == 'good':
+            content = re.sub(r"(snGradSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>limited corrected 0.7;", content)
+            content = re.sub(r"(laplacianSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>Gauss linear limited corrected 0.7;", content)
+        elif mesh_class == 'marginal':
+            content = re.sub(r"(snGradSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>limited corrected 0.5;", content)
+            content = re.sub(r"(laplacianSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>Gauss linear limited corrected 0.5;", content)
+        else: # 'bad'
+            content = re.sub(r"(snGradSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>limited corrected 0.33;", content)
+            content = re.sub(r"(laplacianSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>Gauss linear limited corrected 0.33;", content)
 
         if turbulence == "laminar":
             content = re.sub(r"div\(phi,k\).*?;", "", content)
@@ -591,59 +621,29 @@ boundaryField
             # Upwind U to ensure stability on coarse/scaled meshes with turbulence enabled
             content = re.sub(r"div\(phi,U\).*?;", "div(phi,U)      bounded Gauss upwind;", content)
 
-        # 1. snGradSchemes → limited corrected
-        content = re.sub(
-            r"(snGradSchemes\s*\{[^}]*?default\s+)[^;]+;",
-            r"\g<1>limited corrected 0.33;",
-            content,
-            flags=re.DOTALL
-        )
+            # Enforce bounded upwind for turbulence fields
+            content = re.sub(r"div\(phi,k\).*?;", "div(phi,k)      bounded Gauss upwind;", content)
+            content = re.sub(r"div\(phi,epsilon\).*?;", "div(phi,epsilon) bounded Gauss upwind;", content)
 
-        # 2. laplacianSchemes → limited corrected
-        content = re.sub(
-            r"(laplacianSchemes\s*\{[^}]*?default\s+)[^;]+;",
-            r"\g<1>Gauss linear limited corrected 0.33;",
-            content,
-            flags=re.DOTALL
-        )
+            # Robustly inject if missing due to prior corrupted files (handles Windows CRLF and arbitrary spacing)
+            if "div(phi,k)" not in content and "divSchemes" in content:
+                content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,k)      bounded Gauss upwind;", content, count=1)
+            if "div(phi,epsilon)" not in content and "divSchemes" in content:
+                content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,epsilon) bounded Gauss upwind;", content, count=1)
 
-        # --- Prevent Duplication & Apply DivSchemes ---
-        # Strip existing div(phi, X) lines cleanly
-        for field in ["U", "k", "epsilon", "omega", "R"]:
-            content = re.sub(rf"^\s*div\(phi,{field}\).*?;\n?", "", content, flags=re.MULTILINE)
-
-        # 3. divSchemes stabilization
-        if turbulence == "laminar":
-            content = re.sub(
-                r"(divSchemes\s*\{)",
-                r"\g<1>\n    div(phi,U)      bounded Gauss upwind;",
-                content,
-                count=1
-            )
-        elif turbulence == "RNGkEpsilon":
-            content = re.sub(
-                r"(divSchemes\s*\{)",
-                r"\g<1>\n    div(phi,U)      bounded Gauss upwind;\n    div(phi,k)      bounded Gauss upwind;\n    div(phi,epsilon) bounded Gauss upwind;",
-                content,
-                count=1
-            )
         elif turbulence == "kOmegaSST" or turbulence == "kOmegaSST_disabled":
-            content = re.sub(
-                r"(divSchemes\s*\{)",
-                r"\g<1>\n    div(phi,U)      bounded Gauss upwind;\n    div(phi,k)      bounded Gauss upwind;\n    div(phi,omega) bounded Gauss upwind;",
-                content,
-                count=1
-            )
-        else:
-            # Fallback
-            content = re.sub(
-                r"(divSchemes\s*\{)",
-                r"\g<1>\n    div(phi,U)      bounded Gauss upwind;\n    div(phi,k)      bounded Gauss upwind;\n    div(phi,epsilon) bounded Gauss upwind;",
-                content,
-                count=1
-            )
+            content = re.sub(r"div\(phi,R\).*?;", "", content)
 
-        with open(target_path, "w", newline="\n") as f:
+            # Enforce bounded upwind for turbulence fields
+            content = re.sub(r"div\(phi,k\).*?;", "div(phi,k)      bounded Gauss upwind;", content)
+            content = re.sub(r"div\(phi,omega\).*?;", "div(phi,omega) bounded Gauss upwind;", content)
+
+            if "div(phi,k)" not in content and "divSchemes" in content:
+                content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,k)      bounded Gauss upwind;", content, count=1)
+            if "div(phi,omega)" not in content and "divSchemes" in content:
+                content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,omega) bounded Gauss upwind;", content, count=1)
+
+        with open(target_path, 'w', newline='\n') as f:
             # Clean up empty lines created by regex sub and enforce Unix line endings
             cleaned = "\n".join([s for s in content.splitlines() if s.strip()])
             f.write(cleaned + "\n")
@@ -651,7 +651,6 @@ boundaryField
         # If we had to synthesize the file from scratch because template was corrupted, save it
         if not os.path.exists(template_path):
             shutil.copy2(target_path, template_path)
-
 
     def _update_fvSolution(self, turbulence, cfd_settings=None):
         import shutil
@@ -1932,6 +1931,65 @@ cloudFunctions
 
             print(f"Applied fallback wall function {new_wall_func} to {field_name} due to mesh scaling.")
 
+
+    def _run_checkMesh(self, log_file=None):
+        """
+        Runs checkMesh and parses the output for quality metrics.
+        Returns a dictionary with parsed metrics.
+        """
+        print("Running checkMesh to evaluate mesh quality...")
+        temp_log = log_file if log_file else os.path.join(self.case_dir, "log.checkMesh")
+
+        # Run checkMesh, ignoring errors because checkMesh often returns non-zero for marginal meshes
+        self.run_command(["checkMesh"], log_file=temp_log, description="Quality Check (checkMesh)", ignore_error=True)
+
+        metrics = {
+            "max_non_orthogonality": 0.0,
+            "max_skewness": 0.0,
+            "failed_checks": False
+        }
+
+        if os.path.exists(temp_log):
+            with open(temp_log, 'r') as f:
+                log_content = f.read()
+
+            # Parse Max non-orthogonality
+            m_ortho = re.search(r"Mesh non-orthogonality Max:\s*([\d\.]+)", log_content)
+            if m_ortho:
+                metrics["max_non_orthogonality"] = float(m_ortho.group(1))
+
+            # Parse Max skewness
+            m_skew = re.search(r"Max skewness\s*=\s*([\d\.]+)", log_content)
+            if m_skew:
+                metrics["max_skewness"] = float(m_skew.group(1))
+
+            # Check if it failed
+            if "Failed 1 mesh checks" in log_content or "Failed" in log_content.split("Mesh OK.")[-1]:
+                metrics["failed_checks"] = True
+
+        return metrics
+
+    def _classify_mesh(self, metrics):
+        """
+        Classifies mesh quality based on parsed metrics.
+        Returns 'good', 'marginal', or 'bad'.
+        """
+        ortho = metrics.get("max_non_orthogonality", 0.0)
+        skew = metrics.get("max_skewness", 0.0)
+        failed = metrics.get("failed_checks", False)
+
+        print(f"Mesh Quality Metrics - Max Non-Ortho: {ortho:.2f}, Max Skewness: {skew:.2f}")
+
+        if ortho > 75.0 or skew > 6.0 or failed:
+            print("Mesh classification: BAD (requires aggressive stabilization)")
+            return "bad"
+        elif ortho > 65.0 or skew > 4.0:
+            print("Mesh classification: MARGINAL (requires moderate stabilization)")
+            return "marginal"
+        else:
+            print("Mesh classification: GOOD")
+            return "good"
+
     def run_solver(self, log_file=None, mesh_scaled_for_memory=False, **kwargs):
         """
         Runs the solver.
@@ -1943,6 +2001,16 @@ cloudFunctions
 
         if mesh_scaled_for_memory:
             self._apply_fallback_wall_functions()
+
+        # Phase 2: Mesh-Quality Feedback Loop
+        # Run checkMesh, parse quality, and classify mesh
+        mesh_metrics = self._run_checkMesh()
+        mesh_class = self._classify_mesh(mesh_metrics)
+
+        # Re-apply fvSchemes with the new mesh classification
+        # (This overrides the initial generic call made during prepare_case)
+        turbulence = cfd_settings.get('turbulence_model', 'laminar')
+        self._update_fvSchemes(turbulence, mesh_class)
 
         # Clean up any crashed or old time directories to ensure a fresh start from 0 for the new mesh
         for d in os.listdir(self.case_dir):
@@ -1958,28 +2026,31 @@ cloudFunctions
         for p_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
             shutil.rmtree(p_dir, ignore_errors=True)
 
-        results = []
+        def _execute():
+            if solve_procs > 1:
+                self._generate_decomposeParDict(num_processors=solve_procs, method=solve_method)
+                if not self.run_command(["decomposePar", "-force"], log_file=log_file, description="Decomposing Domain"): return False
+                cmd = ["mpirun", "--allow-run-as-root", "--oversubscribe", "-np", str(solve_procs), "simpleFoam", "-parallel"]
+                if not self.run_command(cmd, log_file=log_file, description=f"Solving CFD (Parallel {solve_procs} CPUs)", timeout=14400): return False
+                if not self.run_command(["reconstructPar", "-latestTime"], log_file=log_file, description="Reconstructing Domain"): return False
+                for proc_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
+                    shutil.rmtree(proc_dir, ignore_errors=True)
+                return True
+            else:
+                return self.run_command(["simpleFoam"], log_file=log_file, description="Solving CFD", timeout=14400)
 
-        STRATEGIES = [
-            {"name": "RNGkEpsilon", "turbulence": "RNGkEpsilon"},
-            {"name": "kOmegaSST", "turbulence": "kOmegaSST"},
-            {"name": "laminar", "turbulence": "laminar"}
-        ]
+        success = _execute()
 
-        # Determine base turbulence based on cfd_settings config. If we want it to be dynamic, we could just fallback to config here.
-        initial_turbulence = self.config.get('cfd_settings', {}).get('turbulence_model', 'RNGkEpsilon')
+        # If it failed, and we haven't applied fallback wall functions yet, try doing so to recover from unstable baseline!
+        if not success and not mesh_scaled_for_memory:
+            print("Solver failed on standard mesh. Attempting to recover by disabling turbulence...")
 
-        # We need to make sure we run the configured model first
-        # Sort strategies so the configured one is first
-        STRATEGIES.sort(key=lambda x: 0 if x["turbulence"] == initial_turbulence else 1)
+            # Cleanly disable turbulence to prevent epsilonWallFunction FPEs on bad mesh boundary cells
+            self._update_turbulence_properties("laminar")
+            self._update_fvSchemes("laminar")
+            self._update_fvSolution("laminar", self.config.get('cfd_settings', {}))
 
-        best = None
-        for strategy in STRATEGIES:
-            print(f"Trying solver strategy: {strategy['name']}")
-
-            self._update_turbulence_properties(strategy["turbulence"])
-            self._update_fvSchemes(strategy["turbulence"])
-            self._update_fvSolution(strategy["turbulence"], self.config.get('cfd_settings', {}))
+            # DO NOT call self._apply_fallback_wall_functions() here
 
             # Clean up any crashed time directories to ensure a fresh start from 0
             for d in os.listdir(self.case_dir):
@@ -2002,144 +2073,9 @@ cloudFunctions
                     except ValueError:
                         pass
 
-            success, output = self._execute_simpleFoam(return_output=True, log_file=log_file, solve_procs=solve_procs, solve_method=solve_method)
+            success = _execute()
 
-            metrics = self._parse_solver_metrics(output)
-            score = self._score_run(metrics)
-
-            if strategy["turbulence"] == "laminar":
-                score *= 0.85 # Penalize laminar
-
-            # Extract run time from log if possible for time-to-solution weighting
-            if output:
-                runtime_match = re.search(r"ExecutionTime = ([\deE\+\-\.]+) s", output)
-                if runtime_match:
-                    runtime_seconds = float(runtime_match.group(1))
-                    score -= runtime_seconds * 0.01
-
-            results.append({
-                "strategy": strategy["name"],
-                "score": score,
-                "metrics": metrics,
-                "success": success
-            })
-
-            print(f"Strategy {strategy['name']} completed with score={score:.1f} (success={success})")
-
-            if success and score > 80:
-                print("High quality run found, exiting early.")
-                break
-
-        if results:
-            best = max(results, key=lambda r: r["score"])
-            print(f"🏆 Best run: {best['strategy']} (score={best['score']:.1f})")
-
-            import json
-            with open(os.path.join(self.case_dir, "run_results.json"), "w") as f:
-                json.dump(results, f, indent=2)
-
-            return best["success"]
-        return False
-
-    def _execute_simpleFoam(self, return_output=False, log_file=None, solve_procs=1, solve_method="scotch"):
-        """Executes simpleFoam and optionally returns standard output."""
-        output = ""
-        success = False
-        target_log = log_file if log_file else self.log_file
-
-        if solve_procs > 1:
-            self._generate_decomposeParDict(num_processors=solve_procs, method=solve_method)
-            if not self.run_command(["decomposePar", "-force"], log_file=target_log, description="Decomposing Domain"):
-                return (False, "") if return_output else False
-
-            cmd = ["mpirun", "--allow-run-as-root", "--oversubscribe", "-np", str(solve_procs), "simpleFoam", "-parallel"]
-            success = self.run_command(cmd, log_file=target_log, description=f"Solving CFD (Parallel {solve_procs} CPUs)", timeout=14400)
-
-            if success:
-                if not self.run_command(["reconstructPar", "-latestTime"], log_file=target_log, description="Reconstructing Domain"):
-                    return (False, "") if return_output else False
-
-            for proc_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
-                shutil.rmtree(proc_dir, ignore_errors=True)
-        else:
-            success = self.run_command(["simpleFoam"], log_file=target_log, description="Solving CFD", timeout=14400)
-
-        if return_output and os.path.exists(target_log):
-            with open(target_log, 'r', encoding='utf-8', errors='replace') as f:
-                output = f.read()
-
-        return (success, output) if return_output else success
-
-    def _parse_solver_metrics(self, log):
-        import re
-
-        metrics = {
-            "final_residuals": {},
-            "continuity_error": None,
-            "has_nan": False,
-            "iterations": 0,
-        }
-
-        if not log:
-            return metrics
-
-        log_lower = log.lower()
-
-        # Detect NaNs / divergence
-        if "nan" in log_lower or "floating point exception" in log_lower or "sigfpe" in log_lower:
-            metrics["has_nan"] = True
-
-        # Extract residuals (last occurrence)
-        residual_pattern = re.findall(
-            r"Solving for (\w+), Initial residual = ([\deE\+\-\.]+), Final residual = ([\deE\+\-\.]+)",
-            log
-        )
-
-        for field, _, final in residual_pattern:
-            metrics["final_residuals"][field] = float(final)
-
-        # Continuity error
-        cont_match = re.findall(
-            r"time step continuity errors : sum local = ([\deE\+\-\.]+)",
-            log
-        )
-        if cont_match:
-            metrics["continuity_error"] = float(cont_match[-1])
-
-        # Iteration count
-        metrics["iterations"] = log.count("Time =")
-
-        return metrics
-
-    def _score_run(self, metrics):
-        score = 100.0
-
-        # Hard failure penalties
-        if metrics["has_nan"]:
-            return 0
-
-        # --- Residual scoring ---
-        for field, res in metrics["final_residuals"].items():
-            if res > 1e-2:
-                score -= 30
-            elif res > 1e-3:
-                score -= 15
-            elif res > 1e-4:
-                score -= 5
-
-        # --- Continuity error ---
-        ce = metrics["continuity_error"]
-        if ce is not None:
-            if ce > 1e-2:
-                score -= 25
-            elif ce > 1e-3:
-                score -= 10
-
-        # --- Iteration sanity ---
-        if metrics["iterations"] < 10:
-            score -= 20  # likely premature failure
-
-        return max(score, 0)
+        return success
 
     def _create_constant_field(self, time_dir, field_name, value, dimensions, class_type="volScalarField", boundary_type="fixedValue"):
         """
