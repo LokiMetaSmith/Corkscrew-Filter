@@ -828,8 +828,11 @@ relaxationFactors
             content = f.read()
 
         def remove_block(text, block_name):
-            pattern_solver = r"\s*\b" + block_name + r"\b\s*\{[^}]+\}"
-            text = re.sub(pattern_solver, "", text)
+            # 1. Remove from solvers block
+            pattern_solver = r"^\s*\b" + block_name + r"\b\s*\{[^}]+\}"
+            text = re.sub(pattern_solver, "", text, flags=re.MULTILINE)
+
+            # 2. Remove from residualControl AND relaxationFactors
             pattern_line = r"^\s*\b" + block_name + r"\b\s+[\d\.e\-\+]+;\s*$"
             text = re.sub(pattern_line, "", text, flags=re.MULTILINE)
             return text
@@ -2102,6 +2105,8 @@ cloudFunctions
                 strategy_config['initial_fields'] = {}
             if 'omega' not in strategy_config['initial_fields']:
                  strategy_config['initial_fields']['omega'] = {'internalField': 'uniform 1e-6', 'wallFunction': 'omegaWallFunction'}
+            if 'nut' not in strategy_config['initial_fields']:
+                 strategy_config['initial_fields']['nut'] = {'internalField': 'uniform 1e-7', 'wallFunction': 'nutkWallFunction'}
 
 
             self._generate_turbulence_fields(zero_dir, strategy_config)
