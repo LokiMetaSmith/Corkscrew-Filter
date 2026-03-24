@@ -352,6 +352,21 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                     particle_metrics = foam_driver.get_metrics(log_file=solver_log)
                     metrics.update(particle_metrics)
 
+                # Flow Sanity Check: Only run particles if the flow field is valid
+                delta_p = metrics.get('delta_p')
+                residuals = metrics.get('residuals')
+                if delta_p is None or (residuals is not None and residuals > 1e-3):
+                    print(f"Skipping particle tracking: flow field appears invalid or unconverged (delta_p={delta_p}, residuals={residuals}).")
+                else:
+                    # Attempt particle tracking
+                    with Timer("Particle Tracking"):
+                        # Pass bin config for injection/interaction setup
+                        foam_driver.run_particle_tracking(log_file=solver_log, bin_config=bin_config, turbulence=turbulence, mesh_scaled_for_memory=_scaled)
+
+                    # Update metrics with particle stats
+                    particle_metrics = foam_driver.get_metrics(log_file=solver_log)
+                    metrics.update(particle_metrics)
+
                 # Generate VTK
                 vtk_dir = foam_driver.generate_vtk()
                 if vtk_dir:
