@@ -1,6 +1,0 @@
-simulationType  RAS;
-RAS
-{
-    model           kOmegaSST;
-    turbulence      off;
-}
