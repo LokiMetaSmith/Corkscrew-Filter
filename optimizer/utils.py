@@ -87,10 +87,13 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
                 except Exception:
                     pass
 
+        captured_output = []
+
         # Thread function to read from stdout and write to log
-        def log_reader(proc, file_handle, state):
+        def log_reader(proc, file_handle, state, output_list):
             try:
                 for line in proc.stdout:
+                    output_list.append(line)
                     timestamp = datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S] ")
                     file_handle.write(f"{timestamp}{line}")
                     file_handle.flush()
@@ -128,7 +131,7 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
                 except ValueError:
                     pass
 
-        reader_thread = threading.Thread(target=log_reader, args=(process, log_f, state))
+        reader_thread = threading.Thread(target=log_reader, args=(process, log_f, state, captured_output))
         reader_thread.start()
 
         spinner = ["|", "/", "-", "\\"]
@@ -233,10 +236,14 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
             sys.stdout.write(f"\r{' ' * (term_width - 1)}\r")
             sys.stdout.flush()
 
+            full_output = "".join(captured_output)
+
             if process.returncode != 0:
                 # We don't print Error here to let caller handle it, but we can hint
                 # Caller usually catches CalledProcessError
-                raise subprocess.CalledProcessError(process.returncode, cmd)
+                raise subprocess.CalledProcessError(process.returncode, cmd, output=full_output)
+
+            return full_output
 
         except (Exception, KeyboardInterrupt) as e:
             # Catch all exceptions so we can safely kill the process and join the thread
