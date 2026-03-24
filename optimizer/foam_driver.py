@@ -359,7 +359,6 @@ class FoamDriver:
                 dimensions = "[0 2 -1 0 0 0 0]"
 
             header = f"""/*--------------------------------*- C++ -*----------------------------------*\\
-| =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
 |  \\    /   O peration     | Version:  v2512                                 |
 |   \\  /    A nd           | Website:  www.openfoam.com                      |
@@ -680,7 +679,6 @@ boundaryField
         target_path = os.path.join(self.case_dir, "system", "fvSolution")
 
         default_base_template = """/*--------------------------------*- C++ -*----------------------------------*\\
-| =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
 |  \\    /   O peration     | Version:  v2512                                 |
 |   \\  /    A nd           | Website:  www.openfoam.com                      |
@@ -893,7 +891,6 @@ hierarchicalCoeffs
 """
 
         template_str = f"""/*--------------------------------*- C++ -*----------------------------------*\\
-| =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
 |  \\    /   O peration     | Version:  v2512                                 |
 |   \\  /    A nd           | Website:  www.openfoam.com                      |
@@ -1162,7 +1159,6 @@ method          {method};
         skip_io: if True, skips generation of inlet/outlet face sets.
         """
         template_str = r"""/*--------------------------------*- C++ -*----------------------------------*\
-| =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
 |  \\    /   O peration     | Version:  v2512                                 |
 |   \\  /    A nd           | Website:  www.openfoam.com                      |
@@ -1290,7 +1286,6 @@ actions
         Generates system/createPatchDict using Jinja2.
         """
         template_str = """/*--------------------------------*- C++ -*----------------------------------*\\
-| =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
 |  \\    /   O peration     | Version:  v2512                                 |
 |   \\  /    A nd           | Website:  www.openfoam.com                      |
@@ -1397,7 +1392,6 @@ patches
         parcels_per_sec = int(5000 * area_ratio)
 
         template_str = r"""/*--------------------------------*- C++ -*----------------------------------*\
-| =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
 |  \\    /   O peration     | Version:  v2512                                 |
 |   \\  /    A nd           | Website:  www.openfoam.com                      |
@@ -2087,6 +2081,7 @@ cloudFunctions
                     if os.path.isfile(os.path.join(zero_dir, field_file)) and field_file not in ["U", "p"]:
                         os.remove(os.path.join(zero_dir, field_file))
 
+
             import copy
             # We need a proxy config to generate fields for the strategy
             strategy_config = copy.deepcopy(cfd_settings)
@@ -2096,6 +2091,7 @@ cloudFunctions
                 strategy_config['initial_fields'] = {}
             if 'omega' not in strategy_config['initial_fields']:
                  strategy_config['initial_fields']['omega'] = {'internalField': 'uniform 1e-6', 'wallFunction': 'omegaWallFunction'}
+
 
             self._generate_turbulence_fields(zero_dir, strategy_config)
             self._apply_boundary_conditions(zero_dir)
@@ -2127,16 +2123,11 @@ cloudFunctions
                 except ValueError:
                     pass
 
-            # Also clean up processor time directories if running in parallel
+            # For parallel execution, the new `0` directory fields must be forcefully redistributed.
+            # `_execute_simpleFoam` calls `decomposePar -force`, but to ensure absolutely no conflicts
+            # with stale parallel boundary fields, it's safer to wipe processor directories completely before solving.
             for p_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
-                for d in os.listdir(p_dir):
-                    path = os.path.join(p_dir, d)
-                    try:
-                        if d != "0" and os.path.isdir(path):
-                            float(d)
-                            shutil.rmtree(path, ignore_errors=True)
-                    except ValueError:
-                        pass
+                shutil.rmtree(p_dir, ignore_errors=True)
 
             success, output = self._execute_simpleFoam(return_output=True, log_file=log_file, solve_procs=solve_procs, solve_method=solve_method)
 
@@ -2183,7 +2174,6 @@ cloudFunctions
         Used to create 'rho' and 'mu' for particle tracking.
         """
         header = f"""/*--------------------------------*- C++ -*----------------------------------*\\
-| =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
 |  \\    /   O peration     | Version:  v2512                                 |
 |   \\  /    A nd           | Website:  www.openfoam.com                      |

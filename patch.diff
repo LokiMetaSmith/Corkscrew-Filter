@@ -1,0 +1,29 @@
+--- optimizer/foam_driver.py
++++ optimizer/foam_driver.py
+@@ -2086,25 +2086,13 @@
+                     if os.path.isfile(os.path.join(zero_dir, field_file)) and field_file not in ["U", "p"]:
+                         os.remove(os.path.join(zero_dir, field_file))
+-<<<<<<< Updated upstream
+-
+-=======
+-
+->>>>>>> Stashed changes
++
+             import copy
+             # We need a proxy config to generate fields for the strategy
+             strategy_config = copy.deepcopy(cfd_settings)
+             strategy_config['turbulence_model'] = strategy["turbulence"]
+             # Add default omega initial field if missing
+             if 'initial_fields' not in strategy_config:
+                 strategy_config['initial_fields'] = {}
+             if 'omega' not in strategy_config['initial_fields']:
+                  strategy_config['initial_fields']['omega'] = {'internalField': 'uniform 1e-6', 'wallFunction': 'omegaWallFunction'}
+-<<<<<<< Updated upstream
+-
+-=======
+-
+->>>>>>> Stashed changes
++
+             self._generate_turbulence_fields(zero_dir, strategy_config)
+             self._apply_boundary_conditions(zero_dir)
+             self._sanitize_fields(zero_dir)
