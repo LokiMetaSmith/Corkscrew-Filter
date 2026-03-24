@@ -760,8 +760,6 @@ SIMPLE
 {
     nNonOrthogonalCorrectors 2; // Add 2 or 3 of these
     consistent      no;
-    pRefCell        0;
-    pRefValue       0;
     residualControl
     {
         p               1e-4;
@@ -2066,12 +2064,12 @@ cloudFunctions
             {
                 "name": "kOmegaSST",
                 "turbulence": "kOmegaSST",
-                "relaxation": {"p": 0.15, "U": 0.4, "k": 0.4, "omega": 0.4},
+                "relaxation": {"p": 0.2, "U": 0.5, "k": 0.5, "omega": 0.5},
             },
             {
                 "name": "laminar",
                 "turbulence": "laminar",
-                "relaxation": {"p": 0.1, "U": 0.3},
+                "relaxation": {"p": 0.2, "U": 0.5},
             },
         ]
 
