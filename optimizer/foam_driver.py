@@ -744,7 +744,7 @@ solvers
 
 SIMPLE
 {
-    nNonOrthogonalCorrectors 2; // Add 2 or 3 of these
+    nNonOrthogonalCorrectors 3; // Add 2 or 3 of these
     consistent      no;
     residualControl
     {
@@ -2045,17 +2045,17 @@ cloudFunctions
             {
                 "name": "RNGkEpsilon",
                 "turbulence": "RNGkEpsilon",
-                "relaxation": {"p": 0.2, "U": 0.5, "k": 0.5, "epsilon": 0.5},
+                "relaxation": {"p": 0.15, "U": 0.4, "k": 0.4, "epsilon": 0.4},
             },
             {
                 "name": "kOmegaSST",
                 "turbulence": "kOmegaSST",
-                "relaxation": {"p": 0.2, "U": 0.5, "k": 0.5, "omega": 0.5},
+                "relaxation": {"p": 0.1, "U": 0.3, "k": 0.3, "omega": 0.3},
             },
             {
                 "name": "laminar",
                 "turbulence": "laminar",
-                "relaxation": {"p": 0.2, "U": 0.5},
+                "relaxation": {"p": 0.1, "U": 0.2},
             },
         ]
 
