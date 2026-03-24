@@ -587,8 +587,8 @@ boundaryField
             content = f.read()
 
         if turbulence == "laminar" or turbulence == "kOmegaSST_disabled":
-            # Cleanly disable turbulence without removing the underlying model.
-            content = re.sub(r"simulationType\s+.*?;", "simulationType  RAS;", content)
+            # Cleanly disable turbulence by switching model to laminar and turbulence off.
+            content = re.sub(r"simulationType\s+.*?;", "simulationType  laminar;", content)
             content = re.sub(r"turbulence\s+.*?;", "turbulence      off;", content)
         else:
             content = re.sub(r"simulationType\s+.*?;", "simulationType  RAS;", content)
@@ -624,8 +624,19 @@ boundaryField
             content = re.sub(r"(snGradSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>limited corrected 0.5;", content)
             content = re.sub(r"(laplacianSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>Gauss linear limited corrected 0.5;", content)
         else: # 'bad'
-            content = re.sub(r"(snGradSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>limited corrected 0.33;", content)
-            content = re.sub(r"(laplacianSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>Gauss linear limited corrected 0.33;", content)
+            content = re.sub(r"(snGradSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>limited corrected 0.2;", content)
+            content = re.sub(r"(laplacianSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>Gauss linear limited corrected 0.2;", content)
+
+            # Additional aggressive damping for BAD meshes: ensure bounded upwind for velocity and turbulence
+            content = re.sub(r"div\(phi,U\).*?;", "div(phi,U)      bounded Gauss upwind;", content)
+            content = re.sub(r"div\(phi,k\).*?;", "div(phi,k)      bounded Gauss upwind;", content)
+            content = re.sub(r"div\(phi,epsilon\).*?;", "div(phi,epsilon) bounded Gauss upwind;", content)
+            content = re.sub(r"div\(phi,omega\).*?;", "div(phi,omega) bounded Gauss upwind;", content)
+
+            # Use careful replacement to prevent stripping structure
+            grad_schemes_pattern = re.compile(r"(gradSchemes\s*\{[^}]*?default\s+)[^;]+;")
+            if grad_schemes_pattern.search(content):
+                content = grad_schemes_pattern.sub(r"\g<1>cellLimited Gauss linear 0.5;", content)
 
         if turbulence == "laminar":
             content = re.sub(r"div\(phi,k\).*?;", "", content)
@@ -766,15 +777,15 @@ relaxationFactors
 {
     fields
     {
-        p               0.2;
+        p               0.3;
     }
     equations
     {
-        U               0.5;
-        k               0.5;
-        epsilon         0.5;
-        omega           0.5;
-        R               0.5;
+        U               0.3;
+        k               0.2;
+        epsilon         0.2;
+        omega           0.2;
+        R               0.2;
     }
 }
 
