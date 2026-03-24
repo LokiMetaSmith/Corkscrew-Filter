@@ -185,28 +185,16 @@ class FoamDriver:
         target_log = log_file if log_file else self.log_file
 
         try:
+            output = run_command_with_spinner(
+                full_cmd,
+                target_log,
+                cwd=cwd,
+                description=description,
+                timeout=timeout
+            )
             if capture_output:
-                result = subprocess.run(
-                    full_cmd,
-                    cwd=cwd,
-                    timeout=timeout,
-                    capture_output=True,
-                    text=True,
-                    check=True
-                )
-                with open(target_log, "a") as f:
-                    f.write(f"\n--- Output of {' '.join(cmd)} ---\n")
-                    f.write(result.stdout)
-                return True, result.stdout
-            else:
-                run_command_with_spinner(
-                    full_cmd,
-                    target_log,
-                    cwd=cwd,
-                    description=description,
-                    timeout=timeout
-                )
-                return True
+                return True, output
+            return True
 
         except subprocess.TimeoutExpired as e:
             if not ignore_error:
@@ -218,9 +206,7 @@ class FoamDriver:
         except subprocess.CalledProcessError as e:
             if not ignore_error:
                 print(f"\nError executing {' '.join(cmd)}: {e}")
-                if capture_output and e.output:
-                    with open(target_log, "a") as f:
-                        f.write(e.output)
+                # We don't need to append output to the log since the spinner already streams it in real-time
                 self._print_log_tail(target_log)
             if capture_output:
                 return False, e.output or ""
