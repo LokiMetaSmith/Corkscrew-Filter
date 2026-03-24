@@ -1470,7 +1470,7 @@ subModels
             SOI             0;
             parcelsPerSecond 5000;
             flowRateProfile constant 1;
-            U0              (0 0 5);
+            U0              (-5 0 0);
             sizeDistribution
             {
                 type        fixedValue;
@@ -1633,7 +1633,7 @@ cloudFunctions
             if turbulence_model != "RNGkEpsilon":
                 turb_interpolation += "\n        omega           cellPoint;"
 
-            disp_model = "stochasticDispersionRAS"
+            disp_model = "none" # Temporarily disabled for stability ("stochasticDispersionRAS")
         # -----------------------------------------
 
         dynamic_boundaries = []
@@ -2079,21 +2079,43 @@ cloudFunctions
         for strategy in STRATEGIES:
             safe_print(f"\n🚀 Trying solver strategy: {strategy['name']}")
 
-            # 1. Configure turbulence model
+            # 1. Regenerate base fields to ensure missing ones (like omega for kOmegaSST) exist
+            # First clean the 0 dir except for U and p
+            zero_dir = os.path.join(self.case_dir, "0")
+            if os.path.exists(zero_dir):
+                for field_file in os.listdir(zero_dir):
+                    if os.path.isfile(os.path.join(zero_dir, field_file)) and field_file not in ["U", "p"]:
+                        os.remove(os.path.join(zero_dir, field_file))
+
+            import copy
+            # We need a proxy config to generate fields for the strategy
+            strategy_config = copy.deepcopy(cfd_settings)
+            strategy_config['turbulence_model'] = strategy["turbulence"]
+            # Add default omega initial field if missing
+            if 'initial_fields' not in strategy_config:
+                strategy_config['initial_fields'] = {}
+            if 'omega' not in strategy_config['initial_fields']:
+                 strategy_config['initial_fields']['omega'] = {'internalField': 'uniform 1e-6', 'wallFunction': 'omegaWallFunction'}
+
+            self._generate_turbulence_fields(zero_dir, strategy_config)
+            self._apply_boundary_conditions(zero_dir)
+            self._sanitize_fields(zero_dir)
+
+            # 2. Configure turbulence model
             self._update_turbulence_properties(strategy["turbulence"])
 
-            # 2. Adaptive fvSchemes (mesh-aware)
-            adapted_turbulence = self._update_fvSchemes(strategy["turbulence"], mesh_class)
+            # 3. Adaptive fvSchemes (mesh-aware)
+            self._update_fvSchemes(strategy["turbulence"], mesh_class)
 
-            # 3. fvSolution (relaxation tuning)
+            # 4. fvSolution (relaxation tuning)
             self._update_fvSolution(
-                adapted_turbulence,
+                strategy["turbulence"],
                 cfd_settings,
                 relaxation_override=strategy["relaxation"]
             )
 
-            # 4. Ensure fields are sane
-            self._sanitize_fields(adapted_turbulence)
+            # 5. Ensure fields are sane
+            self._sanitize_fields(zero_dir)
 
             # Clean up any crashed time directories to ensure a fresh start from 0
             for d in os.listdir(self.case_dir):
