@@ -523,16 +523,22 @@ boundaryField
                         elif field == 'p':
                             new_block += "type            zeroGradient;\n"
                         elif field in ['k', 'epsilon', 'omega', 'nut']:
-                            # Should use calculated/zeroGradient if we don't know
+                            # Using zeroGradient for unknown fields on walls, though wall functions are typically applied
+                            # later by the procedural override block or initial_fields.
                             default_val = '1e-7' if field == 'nut' else '1e-6'
-                            new_block += f"type            calculated;\nvalue           uniform {default_val};\n"
+                            new_block += f"type            zeroGradient;\nvalue           uniform {default_val};\n"
                         else:
                             new_block += "type            calculated;\nvalue           uniform 0;\n"
                     else:
                         if field in ['U', 'p']:
                             new_block += "type            zeroGradient;\n"
-                        elif field in ['k', 'epsilon', 'omega', 'nut']:
-                            default_val = '1e-7' if field == 'nut' else '1e-6'
+                        elif field in ['k', 'epsilon', 'omega']:
+                            # For turbulence fields on non-wall patches (e.g. outlets), inletOutlet or zeroGradient
+                            # is strictly necessary to prevent SIGFPE multiplication errors on backflow.
+                            default_val = '1e-6'
+                            new_block += f"type            inletOutlet;\ninletValue      uniform {default_val};\nvalue           uniform {default_val};\n"
+                        elif field == 'nut':
+                            default_val = '1e-7'
                             new_block += f"type            calculated;\nvalue           uniform {default_val};\n"
                         else:
                             new_block += "type            calculated;\nvalue           uniform 0;\n"
@@ -2793,11 +2799,16 @@ boundaryField
             pass
 
         out = output.lower()
-        if any(sig in out for sig in failure_signals):
+
+        # Verify simpleFoam finished natively by checking its specific "End" message signature
+        # as opposed to an OpenMPI crash report that simply contains the word "end".
+        if "time = " in out and "\nend" in out:
+            pass # Keep whatever success flag run_command returned
+        elif "end" not in out:
             success = False
 
-        if "end" in out:
-            success = True
+        if any(sig in out for sig in failure_signals):
+            success = False
 
         if return_output:
             if not output and os.path.exists(target_log):
