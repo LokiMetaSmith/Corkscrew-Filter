@@ -1984,8 +1984,11 @@ cloudFunctions
                 metrics["max_skewness"] = float(m_skew.group(1))
 
             # Check if it failed
-            if "Failed 1 mesh checks" in log_content or "Failed" in log_content.split("Mesh OK.")[-1]:
-                metrics["failed_checks"] = True
+            if "Failed" in log_content:
+                # Check if it failed any checks
+                m_failed = re.search(r"Failed\s+(\d+)\s+mesh checks", log_content)
+                if m_failed and int(m_failed.group(1)) > 0:
+                    metrics["failed_checks"] = True
 
         return metrics
 
