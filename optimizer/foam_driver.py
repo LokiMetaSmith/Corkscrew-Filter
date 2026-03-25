@@ -539,7 +539,7 @@ boundaryField
                             new_block += f"type            inletOutlet;\ninletValue      uniform {default_val};\nvalue           uniform {default_val};\n"
                         elif field == 'nut':
                             default_val = '1e-7'
-                            new_block += f"type            calculated;\nvalue           uniform {default_val};\n"
+                            new_block += f"type            inletOutlet;\ninletValue      uniform {default_val};\nvalue           uniform {default_val};\n"
                         else:
                             new_block += "type            calculated;\nvalue           uniform 0;\n"
 
@@ -547,10 +547,14 @@ boundaryField
                 patch_type = patch_config.get('type')
                 if patch_type == 'wall':
                     if field == "epsilon" and "type            zeroGradient;" in new_block:
-                        new_block = new_block.replace("type            zeroGradient;", "type            epsilonWallFunction;\n        value           $internalField;")
+                        pattern = re.compile(r'type\s+zeroGradient;\n?(?!.*value)', re.DOTALL)
+                        new_block = pattern.sub(r'type            epsilonWallFunction;\n        value           $internalField;\n', new_block)
+                        new_block = re.sub(r'type\s+zeroGradient;', r'type            epsilonWallFunction;', new_block)
                         print(f"Procedurally overriding epsilon boundary wall function from zeroGradient to epsilonWallFunction on {patch_name} to prevent SIGFPE.")
                     elif field == "k" and "type            zeroGradient;" in new_block:
-                        new_block = new_block.replace("type            zeroGradient;", "type            kqRWallFunction;\n        value           $internalField;")
+                        pattern = re.compile(r'type\s+zeroGradient;\n?(?!.*value)', re.DOTALL)
+                        new_block = pattern.sub(r'type            kqRWallFunction;\n        value           $internalField;\n', new_block)
+                        new_block = re.sub(r'type\s+zeroGradient;', r'type            kqRWallFunction;', new_block)
                         print(f"Procedurally overriding k boundary wall function from zeroGradient to kqRWallFunction on {patch_name} to prevent SIGFPE.")
 
                 blocks[patch_name] = new_block.strip()
@@ -843,11 +847,11 @@ relaxationFactors
             if len(parts) > 1:
                 relax_block = parts[1]
                 for factor_name, factor_value in relax_factors.items():
-                    relax_block = re.sub(rf"\b{factor_name}\s+[\d\.\-e\+]+;", f"{factor_name}               {factor_value};", relax_block)
+                    relax_block = re.sub(rf"^\s*\b{factor_name}\b\s+[\d\.\-e\+]+;", f"        {factor_name}               {factor_value};", relax_block, flags=re.MULTILINE)
                 content = parts[0] + "relaxationFactors" + relax_block
             else:
                 for factor_name, factor_value in relax_factors.items():
-                    content = re.sub(rf"\b{factor_name}\s+[\d\.\-e\+]+;", f"{factor_name}               {factor_value};", content)
+                    content = re.sub(rf"^\s*\b{factor_name}\b\s+[\d\.\-e\+]+;", f"        {factor_name}               {factor_value};", content, flags=re.MULTILINE)
 
         # Clean up empty lines created by regex sub and enforce Unix line endings for OpenFOAM in Podman
         cleaned = "\n".join([s for s in content.splitlines() if s.strip()])
@@ -1899,11 +1903,11 @@ cloudFunctions
                 if field_name in initial_fields:
                     old_wall_func = initial_fields[field_name].get('wallFunction')
 
-                # Only apply fallback to patches defined as type "wall" (and the catch-all ".*")
+                # Only apply fallback to patches defined as type "wall"
                 physics = self.config.get('physics', {})
                 boundaries = physics.get('boundaries', {})
 
-                wall_patches = ['".*"']
+                wall_patches = []
                 if boundaries:
                     for patch_name, patch_config in boundaries.items():
                         if patch_config.get('type') == 'wall':
