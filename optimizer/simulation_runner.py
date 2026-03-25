@@ -7,7 +7,7 @@ from utils import Timer, get_container_memory_gb
 from parameter_validator import validate_parameters
 from validator import Validator
 
-def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False, skip_cfd=False, iteration=0, reuse_mesh=False, output_prefix=None, verbose=False, params_file=None, turbulence="laminar"):
+def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False, skip_cfd=False, dry_mesh=False, iteration=0, reuse_mesh=False, output_prefix=None, verbose=False, params_file=None, turbulence="laminar"):
     """
     Executes the full simulation pipeline:
     1. Generate Fluid Geometry (STL)
@@ -326,59 +326,56 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
             success = True
 
         if success:
-            with Timer("Solver"):
-                _scaled = mesh_scaled_for_memory if 'mesh_scaled_for_memory' in locals() else False
-                # User directive: keep turbulence model active on coarse mesh instead of trapping into laminar FPE
-
-                success = foam_driver.run_solver(log_file=solver_log, mesh_scaled_for_memory=_scaled)
-
-            if success:
-                # Fetch foam metrics and preserve any existing custom metrics (like cell size)
-                foam_metrics = foam_driver.get_metrics(log_file=solver_log)
-                metrics.update(foam_metrics)
-
-                # Flow Sanity Check: Only run particles if the flow field is valid
-                delta_p = metrics.get('delta_p')
-                residuals = metrics.get('residuals')
-                if delta_p is None or (residuals is not None and residuals > 1e-3):
-                    print(f"Skipping particle tracking: flow field appears invalid or unconverged (delta_p={delta_p}, residuals={residuals}).")
-                else:
-                    # Attempt particle tracking
-                    with Timer("Particle Tracking"):
-                        # Pass bin config for injection/interaction setup
-                        foam_driver.run_particle_tracking(log_file=solver_log, bin_config=bin_config, turbulence=turbulence, mesh_scaled_for_memory=_scaled)
-
-                    # Update metrics with particle stats
-                    particle_metrics = foam_driver.get_metrics(log_file=solver_log)
-                    metrics.update(particle_metrics)
-
-                # Flow Sanity Check: Only run particles if the flow field is valid
-                delta_p = metrics.get('delta_p')
-                residuals = metrics.get('residuals')
-                if delta_p is None or (residuals is not None and residuals > 1e-3):
-                    print(f"Skipping particle tracking: flow field appears invalid or unconverged (delta_p={delta_p}, residuals={residuals}).")
-                else:
-                    # Attempt particle tracking
-                    with Timer("Particle Tracking"):
-                        # Pass bin config for injection/interaction setup
-                        foam_driver.run_particle_tracking(log_file=solver_log, bin_config=bin_config, turbulence=turbulence, mesh_scaled_for_memory=_scaled)
-
-                    # Update metrics with particle stats
-                    particle_metrics = foam_driver.get_metrics(log_file=solver_log)
-                    metrics.update(particle_metrics)
-
-                # Generate VTK
-                vtk_dir = foam_driver.generate_vtk()
-                if vtk_dir:
-                    timestamp = int(time.time())
-                    # Archive to exports/
-                    zip_name = os.path.join("exports", f"run_{timestamp}_vtk")
-                    print(f"Zipping VTK output to {zip_name}.zip...")
-                    shutil.make_archive(zip_name, 'zip', vtk_dir)
-                    vtk_zip_path = zip_name + ".zip"
+            if dry_mesh:
+                print("[Dry Mesh] Evaluating mesh quality and skipping CFD solver...")
+                mesh_metrics = foam_driver._run_checkMesh()
+                mesh_class = foam_driver._classify_mesh(mesh_metrics)
+                metrics.update({
+                    "mesh_quality_class": mesh_class,
+                    "max_non_orthogonality": mesh_metrics.get("max_non_orthogonality", 0.0),
+                    "max_skewness": mesh_metrics.get("max_skewness", 0.0),
+                    "failed_checks": mesh_metrics.get("failed_checks", False),
+                    "dry_mesh_completed": True
+                })
             else:
-                print(f"Solver failed. Check {solver_log}")
-                metrics = {"error": "solver_failed"}
+                with Timer("Solver"):
+                    _scaled = mesh_scaled_for_memory if 'mesh_scaled_for_memory' in locals() else False
+                    # User directive: keep turbulence model active on coarse mesh instead of trapping into laminar FPE
+
+                    success = foam_driver.run_solver(log_file=solver_log, mesh_scaled_for_memory=_scaled)
+
+                if success:
+                    # Fetch foam metrics and preserve any existing custom metrics (like cell size)
+                    foam_metrics = foam_driver.get_metrics(log_file=solver_log)
+                    metrics.update(foam_metrics)
+
+                    # Flow Sanity Check: Only run particles if the flow field is valid
+                    delta_p = metrics.get('delta_p')
+                    residuals = metrics.get('residuals')
+                    if delta_p is None or (residuals is not None and residuals > 1e-3):
+                        print(f"Skipping particle tracking: flow field appears invalid or unconverged (delta_p={delta_p}, residuals={residuals}).")
+                    else:
+                        # Attempt particle tracking
+                        with Timer("Particle Tracking"):
+                            # Pass bin config for injection/interaction setup
+                            foam_driver.run_particle_tracking(log_file=solver_log, bin_config=bin_config, turbulence=turbulence, mesh_scaled_for_memory=_scaled)
+
+                        # Update metrics with particle stats
+                        particle_metrics = foam_driver.get_metrics(log_file=solver_log)
+                        metrics.update(particle_metrics)
+
+                    # Generate VTK
+                    vtk_dir = foam_driver.generate_vtk()
+                    if vtk_dir:
+                        timestamp = int(time.time())
+                        # Archive to exports/
+                        zip_name = os.path.join("exports", f"run_{timestamp}_vtk")
+                        print(f"Zipping VTK output to {zip_name}.zip...")
+                        shutil.make_archive(zip_name, 'zip', vtk_dir)
+                        vtk_zip_path = zip_name + ".zip"
+                else:
+                    print(f"Solver failed. Check {solver_log}")
+                    metrics = {"error": "solver_failed"}
         else:
             print(f"Meshing failed. Check {mesh_log}")
             metrics = {"error": "meshing_failed"}

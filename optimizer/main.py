@@ -39,6 +39,7 @@ def main():
     parser.add_argument("--output-stl", type=str, default="corkscrew_fluid.stl", help="Output STL filename (for OpenFOAM usage)")
     parser.add_argument("--dry-run", action="store_true", help="Skip actual OpenFOAM execution (mocks everything)")
     parser.add_argument("--skip-cfd", action="store_true", help="Generate geometry but skip CFD simulation")
+    parser.add_argument("--dry-mesh", action="store_true", help="Run geometry generation and meshing, evaluate mesh quality, but skip CFD simulation")
     parser.add_argument("--reuse-mesh", action="store_true", help="Reuse existing mesh (skips geometry generation and meshing)")
     parser.add_argument("--container-engine", type=str, default="auto", choices=["auto", "podman", "docker"], help="Force specific container engine")
     parser.add_argument("--cpus", type=int, default=1, help="Number of CPUs to use for parallel execution (default: 1)")
@@ -298,6 +299,7 @@ def main():
                 output_stl_name=args.output_stl,
                 dry_run=args.dry_run,
                 skip_cfd=args.skip_cfd,
+                dry_mesh=args.dry_mesh,
                 iteration=i,
                 reuse_mesh=args.reuse_mesh,
                 output_prefix=output_prefix,
