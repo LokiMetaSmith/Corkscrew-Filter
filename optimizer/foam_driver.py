@@ -548,13 +548,13 @@ boundaryField
                 if patch_type == 'wall':
                     if field == "epsilon" and "type            zeroGradient;" in new_block:
                         pattern = re.compile(r'type\s+zeroGradient;\n?(?!.*value)', re.DOTALL)
-                        new_block = pattern.sub(r'type            epsilonWallFunction;\n        value           $internalField;\n', new_block)
-                        new_block = re.sub(r'type\s+zeroGradient;', r'type            epsilonWallFunction;', new_block)
+                        new_block = pattern.sub(lambda m: 'type            epsilonWallFunction;\n        value           $internalField;\n', new_block)
+                        new_block = re.sub(r'type\s+zeroGradient;', lambda m: 'type            epsilonWallFunction;', new_block)
                         print(f"Procedurally overriding epsilon boundary wall function from zeroGradient to epsilonWallFunction on {patch_name} to prevent SIGFPE.")
                     elif field == "k" and "type            zeroGradient;" in new_block:
                         pattern = re.compile(r'type\s+zeroGradient;\n?(?!.*value)', re.DOTALL)
-                        new_block = pattern.sub(r'type            kqRWallFunction;\n        value           $internalField;\n', new_block)
-                        new_block = re.sub(r'type\s+zeroGradient;', r'type            kqRWallFunction;', new_block)
+                        new_block = pattern.sub(lambda m: 'type            kqRWallFunction;\n        value           $internalField;\n', new_block)
+                        new_block = re.sub(r'type\s+zeroGradient;', lambda m: 'type            kqRWallFunction;', new_block)
                         print(f"Procedurally overriding k boundary wall function from zeroGradient to kqRWallFunction on {patch_name} to prevent SIGFPE.")
 
                 blocks[patch_name] = new_block.strip()
@@ -852,6 +852,10 @@ relaxationFactors
             else:
                 for factor_name, factor_value in relax_factors.items():
                     content = re.sub(rf"^\s*\b{factor_name}\b\s+[\d\.\-e\+]+;", f"        {factor_name}               {factor_value};", content, flags=re.MULTILINE)
+
+        # Remove pRefCell and pRefValue to prevent over-constraining the pressure equation
+        content = re.sub(r"^\s*pRefCell\s+.*?;[ \t]*\r?\n", "", content, flags=re.MULTILINE)
+        content = re.sub(r"^\s*pRefValue\s+.*?;[ \t]*\r?\n", "", content, flags=re.MULTILINE)
 
         # Clean up empty lines created by regex sub and enforce Unix line endings for OpenFOAM in Podman
         cleaned = "\n".join([s for s in content.splitlines() if s.strip()])
@@ -1948,7 +1952,7 @@ cloudFunctions
                         # If we replaced zeroGradient with something else (like epsilonWallFunction), we must append the missing value field
                         # Use regex to only append if 'value' is missing from that block
                         pattern = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?type\s+{new_wall_func};)(?!\s*value\s+)', re.DOTALL)
-                        content = pattern.sub(rf'\g<1>\n        value           $internalField;', content)
+                        content = pattern.sub(lambda m: m.group(1) + '\n        value           $internalField;', content)
 
                 with open(field_path, "w") as f:
                     f.write(content)
