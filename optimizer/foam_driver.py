@@ -315,6 +315,16 @@ class FoamDriver:
 
         initial_fields = cfd_settings['initial_fields']
 
+        # Ensure required turbulence fields exist even if not in config
+        if 'nut' not in initial_fields:
+            initial_fields['nut'] = {'internalField': 'uniform 1e-7', 'wallFunction': 'nutkWallFunction'}
+        if 'omega' not in initial_fields:
+            initial_fields['omega'] = {'internalField': 'uniform 1e-6', 'wallFunction': 'omegaWallFunction'}
+        if 'k' not in initial_fields:
+            initial_fields['k'] = {'internalField': 'uniform 1e-6', 'wallFunction': 'kqRWallFunction'}
+        if 'epsilon' not in initial_fields:
+            initial_fields['epsilon'] = {'internalField': 'uniform 1e-6', 'wallFunction': 'epsilonWallFunction'}
+
         allowed_fields = list(initial_fields.keys()) + ["U", "p", "nut", "nuTilda"]
         for field_file in os.listdir(zero_dir):
             if os.path.isfile(os.path.join(zero_dir, field_file)) and field_file not in allowed_fields:
@@ -381,6 +391,12 @@ boundaryField
                     blocks.append(f"    {patch_name}\n    {{\n        type            fixedValue;\n        value           $internalField;\n    }}")
                 else:
                     blocks.append(f"    {patch_name}\n    {{\n        type            zeroGradient;\n    }}")
+
+            # Ensure corkscrew and walls exist as proper walls if not explicitly defined
+            defined_patches = set(boundaries.keys())
+            for missing_wall in ["corkscrew", "walls"]:
+                if missing_wall not in defined_patches:
+                    blocks.append(f"    {missing_wall}\n    {{\n        type            {wall_function};\n        value           $internalField;\n    }}")
 
             blocks_str = "\n".join(blocks)
             footer = "\n}\n"
@@ -495,6 +511,13 @@ boundaryField
                         last_word = val
 
             # Modify/Add configured blocks
+
+            # Ensure corkscrew and walls are treated as wall patches if missing
+            defined_patches = set(boundaries.keys())
+            for missing_wall in ["corkscrew", "walls"]:
+                if missing_wall not in defined_patches:
+                    boundaries[missing_wall] = {"type": "wall"}
+
             for patch_name, patch_config in boundaries.items():
                 new_block = ""
                 # Check if specific field configuration is provided
@@ -523,10 +546,17 @@ boundaryField
                         elif field == 'p':
                             new_block += "type            zeroGradient;\n"
                         elif field in ['k', 'epsilon', 'omega', 'nut']:
-                            # Using zeroGradient for unknown fields on walls, though wall functions are typically applied
-                            # later by the procedural override block or initial_fields.
                             default_val = '1e-7' if field == 'nut' else '1e-6'
-                            new_block += f"type            zeroGradient;\nvalue           uniform {default_val};\n"
+                            if field == 'k':
+                                new_block += f"type            kqRWallFunction;\nvalue           uniform {default_val};\n"
+                            elif field == 'epsilon':
+                                new_block += f"type            epsilonWallFunction;\nvalue           uniform {default_val};\n"
+                            elif field == 'omega':
+                                new_block += f"type            omegaWallFunction;\nvalue           uniform {default_val};\n"
+                            elif field == 'nut':
+                                new_block += f"type            nutkWallFunction;\nvalue           uniform {default_val};\n"
+                            else:
+                                new_block += f"type            zeroGradient;\nvalue           uniform {default_val};\n"
                         else:
                             new_block += "type            calculated;\nvalue           uniform 0;\n"
                     else:
@@ -558,6 +588,15 @@ boundaryField
                         print(f"Procedurally overriding k boundary wall function from zeroGradient to kqRWallFunction on {patch_name} to prevent SIGFPE.")
 
                 blocks[patch_name] = new_block.strip()
+
+            # Process existing calculated defaults that need to be inletOutlet on non-wall patches
+            for patch_name, block_content in blocks.items():
+                # Avoid walls
+                p_type = boundaries.get(patch_name, {}).get("type")
+                if p_type != "wall":
+                    if field in ['k', 'epsilon', 'omega', 'nut'] and "type            calculated;" in block_content:
+                        default_val = '1e-7' if field == 'nut' else '1e-6'
+                        blocks[patch_name] = f"type            inletOutlet;\n        inletValue      uniform {default_val};\n        value           uniform {default_val};"
 
             # Reconstruct the inner boundary field block
             new_boundary_field = "\n"
