@@ -1,16 +1,17 @@
-import os
-import sys
-
-sys.path.append("optimizer")
+import yaml
 from optimizer.foam_driver import FoamDriver
-import shutil
 
-foam_driver = FoamDriver("corkscrewFilter", num_processors=1)
-foam_driver.prepare_case(keep_mesh=False)
-assets = {'fluid': 'corkscrew_fluid.stl', 'inlet': 'inlet.stl', 'outlet': 'outlet.stl', 'wall': 'wall.stl'}
-# Check if files exist in corkscrewFilter/constant/triSurface
-for k,v in assets.items():
-    if not os.path.exists(f"corkscrewFilter/constant/triSurface/{v}"):
-        with open(f"corkscrewFilter/constant/triSurface/{v}", "w") as f:
-            f.write("solid\nendsolid\n")
-foam_driver.run_meshing(log_file="test_meshing3.log", bin_config={"num_bins": 1}, stl_assets=assets, add_layers=False)
+# Just load config
+with open("configs/example_manifold_config.yaml", "r") as f:
+    config = yaml.safe_load(f)
+
+# Mock FoamDriver just to generate initial fields
+import os
+os.environ["PYTHONPATH"] = "optimizer"
+
+driver = FoamDriver("corkscrewFilter", config=config)
+driver._generate_turbulence_fields(os.path.join(driver.case_dir, "0.orig"), config.get('cfd_settings', {}))
+
+for field in ["k", "epsilon", "omega", "nut"]:
+    p = os.path.join(driver.case_dir, "0.orig", field)
+    print(f"File: {field} exists: {os.path.exists(p)}")
