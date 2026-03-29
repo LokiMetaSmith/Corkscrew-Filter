@@ -241,6 +241,32 @@ class FoamDriver:
             print(f"Error reading log: {e}")
         print("--------------------------------------------------\n")
 
+    def _clean_results(self, processors_only=False):
+        """
+        Robustly deletes numeric time directories and processor* directories.
+        Uses container commands to bypass PermissionErrors on root-owned files (Podman issue).
+        """
+        if self.use_container:
+            cmd = "rm -rf processor*"
+            if not processors_only:
+                cmd = "foamListTimes -rm && rm -rf processor*"
+
+            # Execute directly via run_command to let container handle permissions
+            self.run_command(["/bin/bash", "-c", cmd], description="Cleaning up old results", ignore_error=True)
+        else:
+            if not processors_only:
+                for d in os.listdir(self.case_dir):
+                    path = os.path.join(self.case_dir, d)
+                    try:
+                        if d != "0" and os.path.isdir(path):
+                            float(d)  # Check if it's a numeric time directory
+                            shutil.rmtree(path, ignore_errors=True)
+                    except ValueError:
+                        pass
+
+            for p_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
+                shutil.rmtree(p_dir, ignore_errors=True)
+
     def prepare_case(self, keep_mesh=False, bin_config=None, turbulence="laminar"):
         """
         Prepares the case directory.
@@ -264,22 +290,7 @@ class FoamDriver:
         os.makedirs(edge_mesh, exist_ok=True)
 
         # Clean previous results (numeric time directories and processors)
-        for d in os.listdir(self.case_dir):
-            path = os.path.join(self.case_dir, d)
-            # Use float check to catch scientific notation like 1e-5
-            try:
-                is_numeric = False
-                if d != "0":
-                    float(d)
-                    is_numeric = True
-            except ValueError:
-                is_numeric = False
-
-            if os.path.isdir(path) and is_numeric:
-                shutil.rmtree(path, ignore_errors=True)
-
-        for p_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
-            shutil.rmtree(p_dir, ignore_errors=True)
+        self._clean_results()
 
         # Ensure 0 folder
         zero_orig = os.path.join(self.case_dir, "0.orig")
@@ -1881,8 +1892,7 @@ cloudFunctions
             if not self.run_command(["reconstructParMesh", "-constant"], log_file=log_file, description="Reconstructing Mesh"): return False
 
             # After reconstruction, clean up processor directories to save disk space
-            for proc_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
-                shutil.rmtree(proc_dir, ignore_errors=True)
+            self._clean_results(processors_only=True)
 
             # Step 2: Create Patches (Serial, after reconstruction to prevent boundary overlap bugs)
             if not self.run_command(["topoSet"], log_file=log_file, description="Meshing (topoSet)"): return False
@@ -2082,18 +2092,7 @@ cloudFunctions
         import re
 
         # Clean up any crashed or old time directories to ensure a fresh start from 0 for the new mesh
-        for d in os.listdir(self.case_dir):
-            path = os.path.join(self.case_dir, d)
-            try:
-                if d != "0" and os.path.isdir(path):
-                    float(d)  # Check if it's a numeric time directory
-                    shutil.rmtree(path, ignore_errors=True)
-            except ValueError:
-                pass
-
-        # Also clean up processor time directories if running in parallel
-        for p_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
-            shutil.rmtree(p_dir, ignore_errors=True)
+        self._clean_results()
 
         results = []
 
@@ -2170,20 +2169,7 @@ cloudFunctions
             self._sanitize_fields(zero_dir)
 
             # Clean up any crashed time directories to ensure a fresh start from 0
-            for d in os.listdir(self.case_dir):
-                path = os.path.join(self.case_dir, d)
-                try:
-                    if d != "0" and os.path.isdir(path):
-                        float(d)  # Check if it's a numeric time directory
-                        shutil.rmtree(path, ignore_errors=True)
-                except ValueError:
-                    pass
-
-            # For parallel execution, the new `0` directory fields must be forcefully redistributed.
-            # `_execute_simpleFoam` calls `decomposePar -force`, but to ensure absolutely no conflicts
-            # with stale parallel boundary fields, it's safer to wipe processor directories completely before solving.
-            for p_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
-                shutil.rmtree(p_dir, ignore_errors=True)
+            self._clean_results()
 
             success, output = self._execute_simpleFoam(return_output=True, log_file=log_file, solve_procs=solve_procs, solve_method=solve_method)
 
@@ -2830,8 +2816,7 @@ boundaryField
                 if not self.run_command(["reconstructPar", "-latestTime"], log_file=target_log, description="Reconstructing Domain"):
                     return (False, "") if return_output else False
 
-            for proc_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
-                shutil.rmtree(proc_dir, ignore_errors=True)
+            self._clean_results(processors_only=True)
         else:
             success, cmd_out = self.run_command(["simpleFoam"], log_file=target_log, description="Solving CFD", timeout=14400, capture_output=True)
             output = cmd_out
