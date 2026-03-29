@@ -28,12 +28,16 @@ boundaryField
 
     clean_outlet
     {
-        type            zeroGradient;
+        type            inletOutlet;
+        inletValue      uniform 1e-6;
+        value           uniform 1e-6;
     }
 
     dust_outlet
     {
-        type            zeroGradient;
+        type            inletOutlet;
+        inletValue      uniform 1e-6;
+        value           uniform 1e-6;
     }
 
     corkscrew
@@ -50,7 +54,9 @@ boundaryField
 
     ".*"
     {
-        type            zeroGradient;
+        type            inletOutlet;
+        inletValue      uniform 1e-6;
+        value           uniform 1e-6;
     }
 
 }
