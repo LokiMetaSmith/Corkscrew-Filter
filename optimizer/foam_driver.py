@@ -594,7 +594,7 @@ boundaryField
                 # Avoid walls
                 p_type = boundaries.get(patch_name, {}).get("type")
                 if p_type != "wall":
-                    if field in ['k', 'epsilon', 'omega', 'nut'] and "type            calculated;" in block_content:
+                    if field in ['k', 'epsilon', 'omega', 'nut'] and ("type            calculated;" in block_content or "type            zeroGradient;" in block_content):
                         default_val = '1e-7' if field == 'nut' else '1e-6'
                         blocks[patch_name] = f"type            inletOutlet;\n        inletValue      uniform {default_val};\n        value           uniform {default_val};"
 
