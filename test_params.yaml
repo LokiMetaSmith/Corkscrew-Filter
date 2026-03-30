@@ -1,0 +1,13 @@
+project_name: "Parametric_Cyclone_Filter"
+geometry:
+  scad_file: "cyclone_filter_manifold.scad"
+  fluid_volume_module: "fluid_volume"
+  parameters:
+    cyclone_diameter: { type: "float", default: 100.0 }
+    cylinder_height: { type: "float", default: 100.0 }
+    cone_height: { type: "float", default: 150.0 }
+    inlet_width: { type: "float", default: 20.0 }
+    inlet_height: { type: "float", default: 50.0 }
+    vortex_finder_diameter: { type: "float", default: 40.0 }
+    vortex_finder_length: { type: "float", default: 75.0 }
+    dust_outlet_diameter: { type: "float", default: 25.0 }
