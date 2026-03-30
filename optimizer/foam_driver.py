@@ -249,7 +249,7 @@ class FoamDriver:
         if self.use_container:
             cmd = "rm -rf processor*"
             if not processors_only:
-                cmd = "foamListTimes -rm && rm -rf processor*"
+                cmd = "foamListTimes -rm; rm -rf processor*"
 
             # Execute directly via run_command to let container handle permissions
             self.run_command(["/bin/bash", "-c", cmd], description="Cleaning up old results", ignore_error=True)
