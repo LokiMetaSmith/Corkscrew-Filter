@@ -162,7 +162,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                 # Allow override from params if provided, bypassing automatic void_r logic if explicit
                 if "target_cell_size" not in params:
                     void_r = params.get("helix_void_profile_radius_mm")
-                    if void_r:
+                    if "void_r" in locals() and void_r:
                         try:
                             # Ensure resolution is sufficient for small channels (at least ~2.5 cells radius)
                             # We use 0.3 * radius to be safe (diameter / 6), clamped between 0.2mm and 0.8mm
@@ -219,7 +219,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                 MAX_CELLS = max(MIN_LIMIT, min(calculated_limit, MAX_LIMIT))
 
                 # Check for minimum resolution requirement (void_r)
-                if void_r:
+                if "void_r" in locals() and void_r:
                     # Require at least 4 cells across the channel diameter (radius / 2)
                     # This ensures features aren't completely lost
                     min_res_cell_size = (float(void_r) * SCALE_FACTOR) / 2.0
