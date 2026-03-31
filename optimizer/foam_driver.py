@@ -661,6 +661,14 @@ boundaryField
         with open(target_path, 'r') as f:
             content = f.read()
 
+        # Aggressively clean up previous run's duplicated injections or missing fields
+        # This prevents the file from growing indefinitely or causing parsing errors
+        content = re.sub(r"^\s*div\(phi,U\).*?;[ \t]*\r?\n?", "", content, flags=re.MULTILINE)
+        content = re.sub(r"^\s*div\(phi,k\).*?;[ \t]*\r?\n?", "", content, flags=re.MULTILINE)
+        content = re.sub(r"^\s*div\(phi,epsilon\).*?;[ \t]*\r?\n?", "", content, flags=re.MULTILINE)
+        content = re.sub(r"^\s*div\(phi,omega\).*?;[ \t]*\r?\n?", "", content, flags=re.MULTILINE)
+        content = re.sub(r"^\s*div\(phi,R\).*?;[ \t]*\r?\n?", "", content, flags=re.MULTILINE)
+
         # Adaptive fvSchemes based on mesh classification
         # Adjust limited correctors to prevent SIGFPEs in snGrad and laplacian calculations
         if mesh_class == 'good':
@@ -673,51 +681,24 @@ boundaryField
             content = re.sub(r"(snGradSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>limited corrected 0.2;", content)
             content = re.sub(r"(laplacianSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>Gauss linear limited corrected 0.2;", content)
 
-            # Additional aggressive damping for BAD meshes: ensure bounded upwind for velocity and turbulence
-            content = re.sub(r"div\(phi,U\).*?;", "div(phi,U)      bounded Gauss upwind;", content)
-            content = re.sub(r"div\(phi,k\).*?;", "div(phi,k)      bounded Gauss upwind;", content)
-            content = re.sub(r"div\(phi,epsilon\).*?;", "div(phi,epsilon) bounded Gauss upwind;", content)
-            content = re.sub(r"div\(phi,omega\).*?;", "div(phi,omega) bounded Gauss upwind;", content)
-
             # Use careful replacement to prevent stripping structure
             grad_schemes_pattern = re.compile(r"(gradSchemes\s*\{[^}]*?default\s+)[^;]+;")
             if grad_schemes_pattern.search(content):
                 content = grad_schemes_pattern.sub(r"\g<1>cellLimited Gauss linear 0.5;", content)
 
         if turbulence == "laminar":
-            content = re.sub(r"div\(phi,k\).*?;", "", content)
-            content = re.sub(r"div\(phi,epsilon\).*?;", "", content)
-            content = re.sub(r"div\(phi,omega\).*?;", "", content)
-            content = re.sub(r"div\(phi,R\).*?;", "", content)
             # Switch to upwind for U to ensure stability on coarse mesh without turbulent viscosity
-            content = re.sub(r"div\(phi,U\).*?;", "div(phi,U)      bounded Gauss upwind;", content)
+            if "divSchemes" in content:
+                content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,U)      bounded Gauss upwind;", content, count=1)
+
         elif turbulence == "RNGkEpsilon":
-            content = re.sub(r"div\(phi,omega\).*?;", "", content)
-            content = re.sub(r"div\(phi,R\).*?;", "", content)
             # Upwind U to ensure stability on coarse/scaled meshes with turbulence enabled
-            content = re.sub(r"div\(phi,U\).*?;", "div(phi,U)      bounded Gauss upwind;", content)
-
-            # Enforce bounded upwind for turbulence fields
-            content = re.sub(r"div\(phi,k\).*?;", "div(phi,k)      bounded Gauss upwind;", content)
-            content = re.sub(r"div\(phi,epsilon\).*?;", "div(phi,epsilon) bounded Gauss upwind;", content)
-
-            # Robustly inject if missing due to prior corrupted files (handles Windows CRLF and arbitrary spacing)
-            if "div(phi,k)" not in content and "divSchemes" in content:
-                content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,k)      bounded Gauss upwind;", content, count=1)
-            if "div(phi,epsilon)" not in content and "divSchemes" in content:
-                content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,epsilon) bounded Gauss upwind;", content, count=1)
+            if "divSchemes" in content:
+                content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,U)      bounded Gauss upwind;\n    div(phi,k)      bounded Gauss upwind;\n    div(phi,epsilon) bounded Gauss upwind;", content, count=1)
 
         elif turbulence == "kOmegaSST" or turbulence == "kOmegaSST_disabled":
-            content = re.sub(r"div\(phi,R\).*?;", "", content)
-
-            # Enforce bounded upwind for turbulence fields
-            content = re.sub(r"div\(phi,k\).*?;", "div(phi,k)      bounded Gauss upwind;", content)
-            content = re.sub(r"div\(phi,omega\).*?;", "div(phi,omega) bounded Gauss upwind;", content)
-
-            if "div(phi,k)" not in content and "divSchemes" in content:
-                content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,k)      bounded Gauss upwind;", content, count=1)
-            if "div(phi,omega)" not in content and "divSchemes" in content:
-                content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,omega) bounded Gauss upwind;", content, count=1)
+            if "divSchemes" in content:
+                content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,U)      bounded Gauss upwind;\n    div(phi,k)      bounded Gauss upwind;\n    div(phi,omega)  bounded Gauss upwind;", content, count=1)
 
         with open(target_path, 'w', newline='\n') as f:
             # Clean up empty lines created by regex sub and enforce Unix line endings
