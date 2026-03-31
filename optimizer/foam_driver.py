@@ -627,22 +627,54 @@ boundaryField
                 f.write(new_content)
     def _update_turbulence_properties(self, turbulence):
         tp_path = os.path.join(self.case_dir, "constant", "turbulenceProperties")
-        if not os.path.exists(tp_path): return
+
+        # In case the file got deleted by a previous run or doesn't exist, we recreate a base structure
+        if not os.path.exists(tp_path):
+            base_content = r'''/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      turbulenceProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+simulationType  RAS;
+
+RAS
+{
+    model           RNGkEpsilon;
+    turbulence      on;
+    printCoeffs     on;
+}
+
+// ************************************************************************* //
+'''
+            with open(tp_path, 'w') as f:
+                f.write(base_content)
 
         with open(tp_path, 'r') as f:
-            content = f.read()
+            t_content = f.read()
 
         if turbulence == "laminar" or turbulence == "kOmegaSST_disabled":
             # Cleanly disable turbulence by switching model to laminar and turbulence off.
-            content = re.sub(r"simulationType\s+.*?;", "simulationType  laminar;", content)
-            content = re.sub(r"turbulence\s+.*?;", "turbulence      off;", content)
+            t_content = re.sub(r"simulationType\s+.*?;", "simulationType  laminar;", t_content)
+            t_content = re.sub(r"turbulence\s+.*?;", "turbulence      off;", t_content)
         else:
-            content = re.sub(r"simulationType\s+.*?;", "simulationType  RAS;", content)
-            content = re.sub(r"model\s+.*?;", f"model           {turbulence};", content)
-            content = re.sub(r"turbulence\s+.*?;", "turbulence      on;", content)
+            t_content = re.sub(r"simulationType\s+.*?;", "simulationType  RAS;", t_content)
+            t_content = re.sub(r"model\s+.*?;", f"model           {turbulence};", t_content)
+            t_content = re.sub(r"turbulence\s+.*?;", "turbulence      on;", t_content)
 
         with open(tp_path, 'w') as f:
-            f.write(content)
+            f.write(t_content)
 
     def _update_fvSchemes(self, turbulence, mesh_class='bad'):
         import shutil
