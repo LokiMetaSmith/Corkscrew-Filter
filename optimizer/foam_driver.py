@@ -2036,7 +2036,7 @@ cloudFunctions
         metrics = {
             "max_non_orthogonality": 0.0,
             "max_skewness": 0.0,
-            "failed_checks": False
+            "failed_checks": 0
         }
 
         if os.path.exists(temp_log):
@@ -2058,7 +2058,7 @@ cloudFunctions
                 # Check if it failed any checks
                 m_failed = re.search(r"Failed\s+(\d+)\s+mesh checks", log_content)
                 if m_failed and int(m_failed.group(1)) > 0:
-                    metrics["failed_checks"] = True
+                    metrics["failed_checks"] = int(m_failed.group(1))
 
         return metrics
 
@@ -2069,11 +2069,15 @@ cloudFunctions
         """
         ortho = metrics.get("max_non_orthogonality", 0.0)
         skew = metrics.get("max_skewness", 0.0)
-        failed = metrics.get("failed_checks", False)
+        failed = metrics.get("failed_checks", 0)
 
-        print(f"Mesh Quality Metrics - Max Non-Ortho: {ortho:.2f}, Max Skewness: {skew:.2f}")
+        # Handle backwards compatibility if a boolean was stored
+        if isinstance(failed, bool):
+            failed = 1 if failed else 0
 
-        if ortho > 75.0 or skew > 6.0 or failed:
+        print(f"Mesh Quality Metrics - Max Non-Ortho: {ortho:.2f}, Max Skewness: {skew:.2f}, Failed Checks: {failed}")
+
+        if ortho > 75.0 or skew > 6.0 or failed > 0:
             print("Mesh classification: BAD (requires aggressive stabilization)")
             return "bad"
         elif ortho > 65.0 or skew > 4.0:

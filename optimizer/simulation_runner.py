@@ -334,7 +334,7 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                     "mesh_quality_class": mesh_class,
                     "max_non_orthogonality": mesh_metrics.get("max_non_orthogonality", 0.0),
                     "max_skewness": mesh_metrics.get("max_skewness", 0.0),
-                    "failed_checks": mesh_metrics.get("failed_checks", False),
+                    "failed_checks": mesh_metrics.get("failed_checks", 0),
                     "dry_mesh_completed": True
                 })
             else:
