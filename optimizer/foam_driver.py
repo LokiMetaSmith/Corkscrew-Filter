@@ -2903,9 +2903,14 @@ boundaryField
         # Define monitor callback for early divergence detection
         def solver_monitor(line):
             line_lower = line.lower()
-            if "floating point exception" in line_lower or "segmentation fault" in line_lower:
+            if "floating point exception" in line_lower:
+                print("\n[Monitor] Floating point exception detected.")
+                return True
+            if "segmentation fault" in line_lower:
+                print("\n[Monitor] Segmentation fault detected.")
                 return True
             if "foam aborting" in line_lower or "foam fatal error" in line_lower:
+                print("\n[Monitor] OpenFOAM fatal error or abort detected.")
                 return True
 
             # Detect blowing up residuals
