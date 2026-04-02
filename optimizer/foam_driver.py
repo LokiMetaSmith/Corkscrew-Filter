@@ -775,11 +775,11 @@ RAS
 
         # Aggressively clean up previous run's duplicated injections or missing fields
         # This prevents the file from growing indefinitely or causing parsing errors
-        content = re.sub(r"^\s*div\(phi,U\).*?;[ \t]*\r?\n?", "", content, flags=re.MULTILINE)
-        content = re.sub(r"^\s*div\(phi,k\).*?;[ \t]*\r?\n?", "", content, flags=re.MULTILINE)
-        content = re.sub(r"^\s*div\(phi,epsilon\).*?;[ \t]*\r?\n?", "", content, flags=re.MULTILINE)
-        content = re.sub(r"^\s*div\(phi,omega\).*?;[ \t]*\r?\n?", "", content, flags=re.MULTILINE)
-        content = re.sub(r"^\s*div\(phi,R\).*?;[ \t]*\r?\n?", "", content, flags=re.MULTILINE)
+        content = re.sub(r"^\s*div\(phi,U\).*?;[ \t]*\r?\n", "", content, flags=re.MULTILINE)
+        content = re.sub(r"^\s*div\(phi,k\).*?;[ \t]*\r?\n", "", content, flags=re.MULTILINE)
+        content = re.sub(r"^\s*div\(phi,epsilon\).*?;[ \t]*\r?\n", "", content, flags=re.MULTILINE)
+        content = re.sub(r"^\s*div\(phi,omega\).*?;[ \t]*\r?\n", "", content, flags=re.MULTILINE)
+        content = re.sub(r"^\s*div\(phi,R\).*?;[ \t]*\r?\n", "", content, flags=re.MULTILINE)
 
         # Adaptive fvSchemes based on mesh classification
         # Adjust limited correctors to prevent SIGFPEs in snGrad and laplacian calculations
@@ -997,8 +997,8 @@ relaxationFactors
                     content = re.sub(rf"^\s*\b{factor_name}\b\s+[\d\.\-e\+]+;", f"        {factor_name}               {factor_value};", content, flags=re.MULTILINE)
 
         # Remove pRefCell and pRefValue to prevent over-constraining the pressure equation
-        content = re.sub(r"^\s*pRefCell\s+.*?;[ \t]*\r?\n", "", content, flags=re.MULTILINE)
-        content = re.sub(r"^\s*pRefValue\s+.*?;[ \t]*\r?\n", "", content, flags=re.MULTILINE)
+        content = re.sub(r"^\s*pRefCell\s+.*?;[ \t]*\r?\n?", "", content, flags=re.MULTILINE)
+        content = re.sub(r"^\s*pRefValue\s+.*?;[ \t]*\r?\n?", "", content, flags=re.MULTILINE)
 
         # Clean up empty lines created by regex sub and enforce Unix line endings for OpenFOAM in Podman
         cleaned = "\n".join([s for s in content.splitlines() if s.strip()])
@@ -2062,38 +2062,39 @@ cloudFunctions
                     wall_patches.append("corkscrew")
 
                 for patch in wall_patches:
-                    escaped_patch = re.escape(patch)
+                    # Strict boundary constraints by using start of line anchor for the patch block
+                    escaped_patch = r'^\s*' + re.escape(patch)
 
                     if old_wall_func:
-                        pattern = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?type\s+){old_wall_func}(;)', re.DOTALL)
+                        pattern = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?type\s+){old_wall_func}(;)', re.DOTALL | re.MULTILINE)
                         content = pattern.sub(rf'\g<1>{new_wall_func}\g<2>', content)
                     else:
                         if field_name == "nut":
-                            pattern = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?type\s+)nutkRoughWallFunction(;)', re.DOTALL)
+                            pattern = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?type\s+)nutkRoughWallFunction(;)', re.DOTALL | re.MULTILINE)
                             content = pattern.sub(rf'\g<1>{new_wall_func}\g<2>', content)
                         elif field_name == "epsilon":
-                            pattern = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?type\s+)epsilonWallFunction(;)', re.DOTALL)
+                            pattern = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?type\s+)epsilonWallFunction(;)', re.DOTALL | re.MULTILINE)
                             content = pattern.sub(rf'\g<1>{new_wall_func}\g<2>', content)
                         elif field_name == "k":
-                            pattern = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?type\s+)kqRWallFunction(;)', re.DOTALL)
+                            pattern = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?type\s+)kqRWallFunction(;)', re.DOTALL | re.MULTILINE)
                             content = pattern.sub(rf'\g<1>{new_wall_func}\g<2>', content)
 
                     # Clean up roughness constants just in case we are replacing a rough wall function
                     if "nut" in field_name or new_wall_func == "nutkWallFunction":
-                        pattern_ks = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?)\s*Ks\s+.*?;\n?', re.DOTALL)
+                        pattern_ks = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?)\s*Ks\s+.*?;\n?', re.DOTALL | re.MULTILINE)
                         content = pattern_ks.sub(r'\g<1>', content)
-                        pattern_cs = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?)\s*Cs\s+.*?;\n?', re.DOTALL)
+                        pattern_cs = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?)\s*Cs\s+.*?;\n?', re.DOTALL | re.MULTILINE)
                         content = pattern_cs.sub(r'\g<1>', content)
 
                     if new_wall_func == "zeroGradient":
-                        pattern_val1 = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?type\s+zeroGradient;\s+)value\s+uniform\s+[\d\.\-e\+]+;\n?', re.DOTALL)
+                        pattern_val1 = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?type\s+zeroGradient;\s+)value\s+uniform\s+[\d\.\-e\+]+;\n?', re.DOTALL | re.MULTILINE)
                         content = pattern_val1.sub(r'\g<1>', content)
-                        pattern_val2 = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?type\s+zeroGradient;\s+)value\s+\$internalField;\n?', re.DOTALL)
+                        pattern_val2 = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?type\s+zeroGradient;\s+)value\s+\$internalField;\n?', re.DOTALL | re.MULTILINE)
                         content = pattern_val2.sub(r'\g<1>', content)
                     elif old_wall_func == "zeroGradient":
                         # If we replaced zeroGradient with something else (like epsilonWallFunction), we must append the missing value field
                         # Use regex to only append if 'value' is missing from that block
-                        pattern = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?type\s+{new_wall_func};)(?!\s*value\s+)', re.DOTALL)
+                        pattern = re.compile(rf'({escaped_patch}\s*\{{[^}}]*?type\s+{new_wall_func};)(?!\s*value\s+)', re.DOTALL | re.MULTILINE)
                         content = pattern.sub(lambda m: m.group(1) + '\n        value           $internalField;', content)
 
                 with open(field_path, "w") as f:
