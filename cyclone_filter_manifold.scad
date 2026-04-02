@@ -74,7 +74,9 @@ module VortexFinder(solid = true) {
         if (solid) {
              cylinder(r=vortex_finder_radius, h=vortex_finder_length + 25, center=false);
         } else {
-             cylinder(r=vortex_finder_radius - wall_thickness, h=vortex_finder_length + 26, center=false); // Inner hole
+             // Extend slightly downwards to overlap with main fluid, ensuring explicit union
+             translate([0, 0, -1])
+             cylinder(r=vortex_finder_radius - wall_thickness, h=vortex_finder_length + 27, center=false); // Inner hole
         }
     }
 }
