@@ -9,7 +9,7 @@ import contextlib
 import shlex
 import numpy as np
 import jinja2
-from utils import run_command_with_spinner, safe_print
+from utils import run_command_with_spinner, safe_print, ProcessAbortedError
 
 class FoamDriver:
     def __init__(self, case_dir, config=None, template_dir=None, container_engine="auto", num_processors=1, verbose=False):
@@ -168,7 +168,7 @@ class FoamDriver:
 
         return container_cmd
 
-    def run_command(self, cmd, log_file=None, description="Processing", ignore_error=False, timeout=None, capture_output=False):
+    def run_command(self, cmd, log_file=None, description="Processing", ignore_error=False, timeout=None, capture_output=False, monitor_callback=None, idle_timeout=None):
         """
         Executes a command, optionally wrapping it in a container.
         """
@@ -190,12 +190,20 @@ class FoamDriver:
                 target_log,
                 cwd=cwd,
                 description=description,
-                timeout=timeout
+                timeout=timeout,
+                monitor_callback=monitor_callback,
+                idle_timeout=idle_timeout
             )
             if capture_output:
                 return True, output
             return True
 
+        except ProcessAbortedError as e:
+            if not ignore_error:
+                print(f"\nCommand aborted: {e.message}")
+            if capture_output:
+                return False, e.output or ""
+            return False
         except subprocess.TimeoutExpired as e:
             if not ignore_error:
                 print(f"\nTimeout executing {' '.join(cmd)} after {timeout} seconds.")
@@ -221,9 +229,16 @@ class FoamDriver:
             return False
 
     def _print_log_tail(self, log_file, lines=30):
-        """Prints the last N lines of the log file to stdout."""
+        """Analyzes the log file and prints a smart summary, falling back to tail if it's not a solver log."""
+        import datetime
         if not log_file or not os.path.exists(log_file):
             print(f"(Log file {log_file} not found)")
+            return
+
+        is_solver_log = "simpleFoam" in open(log_file, 'r', encoding='utf-8', errors='replace').read(1000)
+
+        if is_solver_log:
+            self._analyze_solver_log(log_file)
             return
 
         print(f"\n--- Error Log Tail ({os.path.basename(log_file)}) ---")
@@ -240,6 +255,71 @@ class FoamDriver:
         except Exception as e:
             print(f"Error reading log: {e}")
         print("--------------------------------------------------\n")
+
+    def _analyze_solver_log(self, log_file):
+        """Reads the solver log to extract and print a concise summary of failure reasons."""
+        print(f"\n--- Smart Log Summary ({os.path.basename(log_file)}) ---")
+        summary_path = os.path.join(self.case_dir, "solver_summary.log")
+
+        last_time = "Unknown"
+        peak_continuity = 0.0
+        last_residuals = {}
+        fatal_error = None
+
+        try:
+            with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
+                for line in f:
+                    line_lower = line.lower()
+
+                    if line.startswith("Time ="):
+                        last_time = line.strip().split()[-1]
+
+                    elif "time step continuity errors" in line_lower:
+                        m = re.search(r"sum local = ([\deE\+\-\.]+)", line_lower)
+                        if m:
+                            try:
+                                peak_continuity = max(peak_continuity, float(m.group(1)))
+                            except ValueError:
+                                pass
+
+                    elif "solving for" in line_lower:
+                        # smoothSolver:  Solving for Ux, Initial residual = ..., Final residual = ...
+                        m = re.search(r"solving for (\w+).*final residual = ([\deE\+\-\.]+)", line_lower)
+                        if m:
+                            last_residuals[m.group(1)] = m.group(2)
+
+                    elif "floating point exception" in line_lower or "segmentation fault" in line_lower:
+                        fatal_error = line.strip()
+                    elif "foam aborting" in line_lower or "foam fatal error" in line_lower:
+                        fatal_error = line.strip()
+
+            summary = []
+            summary.append(f"Last Iteration: {last_time}")
+            summary.append(f"Peak Continuity Error: {peak_continuity:.4e}")
+            if last_residuals:
+                res_str = ", ".join([f"{k}: {v}" for k, v in last_residuals.items()])
+                summary.append(f"Last Residuals: {res_str}")
+            if fatal_error:
+                summary.append(f"Fatal Error: {fatal_error}")
+            else:
+                if peak_continuity > 1000:
+                    summary.append("Probable Cause: Massive continuity error (mesh quality or relaxation factors)")
+                elif any(float(v) > 1 for v in last_residuals.values() if float(v) > 0):
+                    summary.append("Probable Cause: Diverging residuals")
+                else:
+                    summary.append("Probable Cause: Process timeout or abort")
+
+            summary_text = "\n".join(summary)
+            print(summary_text)
+            print("--------------------------------------------------\n")
+
+            with open(summary_path, 'a', encoding='utf-8') as sf:
+                sf.write(f"\n--- Summary for {datetime.datetime.now()} ---\n")
+                sf.write(summary_text + "\n")
+
+        except Exception as e:
+            print(f"Error analyzing log: {e}")
+            print("--------------------------------------------------\n")
 
     def _clean_results(self, processors_only=False):
         """
@@ -2820,13 +2900,45 @@ boundaryField
         import glob
         import shutil
 
+        # Define monitor callback for early divergence detection
+        def solver_monitor(line):
+            line_lower = line.lower()
+            if "floating point exception" in line_lower or "segmentation fault" in line_lower:
+                return True
+            if "foam aborting" in line_lower or "foam fatal error" in line_lower:
+                return True
+
+            # Detect blowing up residuals
+            # smoothSolver:  Solving for Ux, Initial residual = 0.00721651, Final residual = 0.000149534, No Iterations 1
+            res_match = re.search(r"final residual = ([\deE\+\-\.]+)", line_lower)
+            if res_match:
+                try:
+                    if float(res_match.group(1)) > 100.0:
+                        print(f"\n[Monitor] Diverging residual detected: {res_match.group(1)}")
+                        return True
+                except ValueError:
+                    pass
+
+            # Detect massive continuity errors
+            # time step continuity errors : sum local = 15279.5, global = ...
+            ce_match = re.search(r"sum local = ([\deE\+\-\.]+)", line_lower)
+            if ce_match:
+                try:
+                    if float(ce_match.group(1)) > 1000.0:
+                        print(f"\n[Monitor] Massive continuity error detected: {ce_match.group(1)}")
+                        return True
+                except ValueError:
+                    pass
+
+            return False
+
         if solve_procs > 1:
             self._generate_decomposeParDict(num_processors=solve_procs, method=solve_method)
             if not self.run_command(["decomposePar", "-force"], log_file=target_log, description="Decomposing Domain"):
                 return (False, "") if return_output else False
 
             cmd = ["mpirun", "--allow-run-as-root", "--oversubscribe", "-np", str(solve_procs), "simpleFoam", "-parallel"]
-            success, cmd_out = self.run_command(cmd, log_file=target_log, description=f"Solving CFD (Parallel {solve_procs} CPUs)", timeout=14400, capture_output=True)
+            success, cmd_out = self.run_command(cmd, log_file=target_log, description=f"Solving CFD (Parallel {solve_procs} CPUs)", timeout=7200, capture_output=True, monitor_callback=solver_monitor, idle_timeout=600)
             output = cmd_out
 
             if success:
@@ -2835,7 +2947,7 @@ boundaryField
 
             self._clean_results(processors_only=True)
         else:
-            success, cmd_out = self.run_command(["simpleFoam"], log_file=target_log, description="Solving CFD", timeout=14400, capture_output=True)
+            success, cmd_out = self.run_command(["simpleFoam"], log_file=target_log, description="Solving CFD", timeout=7200, capture_output=True, monitor_callback=solver_monitor, idle_timeout=600)
             output = cmd_out
 
         failure_signals = [
