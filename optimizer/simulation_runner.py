@@ -7,7 +7,7 @@ from utils import Timer, get_container_memory_gb
 from parameter_validator import validate_parameters
 from validator import Validator
 
-def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False, skip_cfd=False, dry_mesh=False, iteration=0, reuse_mesh=False, output_prefix=None, verbose=False, params_file=None, turbulence="laminar"):
+def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_fluid.stl", dry_run=False, skip_cfd=False, dry_mesh=False, iteration=0, reuse_mesh=False, output_prefix=None, verbose=False, params_file=None, turbulence="laminar", debug=False):
     """
     Executes the full simulation pipeline:
     1. Generate Fluid Geometry (STL)
@@ -426,6 +426,20 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
                 print(f"Warning: Failed to copy fluid STL: {e}")
         else:
             print(f"Warning: Fluid STL not found at {stl_path}, cannot archive.")
+
+        # Handle debug logic: Clean up OpenFOAM case directory to save space if not successful and debug is off
+        if "error" in metrics and not debug:
+            if foam_driver.case_dir != os.path.abspath(foam_driver.template_dir):
+                # We can safely clear the case dir contents since it failed and we don't need them
+                try:
+                    for filename in os.listdir(foam_driver.case_dir):
+                        file_path = os.path.join(foam_driver.case_dir, filename)
+                        if os.path.isfile(file_path) or os.path.islink(file_path):
+                            os.unlink(file_path)
+                        elif os.path.isdir(file_path):
+                            shutil.rmtree(file_path)
+                except Exception as e:
+                    if verbose: print(f"Warning: Failed to clean up failed case dir: {e}")
 
     else:
         print(f"[Dry Run] Generated Visualization at {vis_base}.png")

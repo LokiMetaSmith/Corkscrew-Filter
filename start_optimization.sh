@@ -32,11 +32,12 @@ usage() {
     echo "  --batch-size <N>       Number of parameter sets to generate per LLM call (default: 5)"
     echo "  --no-cleanup           Disable cleanup of artifacts for non-top runs"
     echo "  --verbose, -v          Enable verbose output"
+    echo "  --debug                Run CFD inside a RAM disk to save disk wear and preserve all logs"
     echo "  --params-file <file>   Path to a SCAD parameter file to override defaults"
     echo "  -h, --help             Show this help message and exit"
     echo ""
     echo "Example:"
-    echo "  ./start_optimization.sh configs/corkscrew_config.yaml --iterations 10 --cpus 4 --verbose"
+    echo "  ./start_optimization.sh configs/corkscrew_config.yaml --iterations 10 --cpus 4 --verbose --debug"
 }
 
 # Check for Help Flag
