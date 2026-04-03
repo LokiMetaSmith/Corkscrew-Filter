@@ -20,17 +20,13 @@ class FoamDriver:
         self.debug = debug
         self.num_processors = num_processors
 
-        # If not debugging, use a RAM disk (/dev/shm) or a temp directory for the case directory to prevent SSD wear and clutter
-        if not self.debug:
-            import tempfile
-            if os.path.exists("/dev/shm") and sys.platform.startswith('linux'):
-                self.ram_disk_base = tempfile.mkdtemp(dir="/dev/shm", prefix="foam_run_")
-            else:
-                self.ram_disk_base = tempfile.mkdtemp(prefix="foam_run_")
-            self.case_dir = os.path.join(self.ram_disk_base, os.path.basename(case_dir))
+        # Use a RAM disk (/dev/shm) or a temp directory for the case directory to prevent SSD wear and clutter
+        import tempfile
+        if os.path.exists("/dev/shm") and sys.platform.startswith('linux'):
+            self.ram_disk_base = tempfile.mkdtemp(dir="/dev/shm", prefix="foam_run_")
         else:
-            self.ram_disk_base = None
-            self.case_dir = os.path.abspath(case_dir)
+            self.ram_disk_base = tempfile.mkdtemp(prefix="foam_run_")
+        self.case_dir = os.path.join(self.ram_disk_base, os.path.basename(case_dir))
 
         self.log_file = os.path.join(self.case_dir, "run_foam.log")
         self.docker_image = os.environ.get("OPENFOAM_IMAGE", "opencfd/openfoam-default:2512")

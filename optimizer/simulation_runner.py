@@ -427,10 +427,21 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         else:
             print(f"Warning: Fluid STL not found at {stl_path}, cannot archive.")
 
-        # Handle debug logic: Clean up OpenFOAM case directory to save space if not successful and debug is off
-        if "error" in metrics and not debug:
+        # Handle debug logic: Save successful OpenFOAM case directories out of the volatile RAM disk,
+        # or clear the case directory to save space if not successful and debug is off.
+        if "error" not in metrics or debug:
             if foam_driver.case_dir != os.path.abspath(foam_driver.template_dir):
-                # We can safely clear the case dir contents since it failed and we don't need them
+                # Run was successful (or we are in debug mode), so we must preserve the data to persistent disk.
+                # Copy the volatile case_dir (likely in /dev/shm) to a persistent exports location
+                persistent_case_dest = f"{output_prefix}_case"
+                try:
+                    shutil.copytree(foam_driver.case_dir, persistent_case_dest, dirs_exist_ok=True)
+                    print(f"Archived successful OpenFOAM case to {persistent_case_dest}")
+                except Exception as e:
+                    print(f"Warning: Failed to archive successful OpenFOAM case: {e}")
+        elif "error" in metrics and not debug:
+            if foam_driver.case_dir != os.path.abspath(foam_driver.template_dir):
+                # We can safely clear the volatile case dir contents since it failed and we don't need them
                 try:
                     for filename in os.listdir(foam_driver.case_dir):
                         file_path = os.path.join(foam_driver.case_dir, filename)
