@@ -12,18 +12,31 @@ import jinja2
 from utils import run_command_with_spinner, safe_print, ProcessAbortedError
 
 class FoamDriver:
-    def __init__(self, case_dir, config=None, template_dir=None, container_engine="auto", num_processors=1, verbose=False):
-        self.case_dir = os.path.abspath(case_dir)
+    def __init__(self, case_dir, config=None, template_dir=None, container_engine="auto", num_processors=1, verbose=False, debug=False):
         self.config = config or {}
-        self.template_dir = os.path.abspath(template_dir) if template_dir else self.case_dir
+        self.template_dir = os.path.abspath(template_dir) if template_dir else os.path.abspath(case_dir)
+        self.container_engine = container_engine
+        self.verbose = verbose
+        self.debug = debug
+        self.num_processors = num_processors
+
+        # If not debugging, use a RAM disk (/dev/shm) or a temp directory for the case directory to prevent SSD wear and clutter
+        if not self.debug:
+            import tempfile
+            if os.path.exists("/dev/shm") and sys.platform.startswith('linux'):
+                self.ram_disk_base = tempfile.mkdtemp(dir="/dev/shm", prefix="foam_run_")
+            else:
+                self.ram_disk_base = tempfile.mkdtemp(prefix="foam_run_")
+            self.case_dir = os.path.join(self.ram_disk_base, os.path.basename(case_dir))
+        else:
+            self.ram_disk_base = None
+            self.case_dir = os.path.abspath(case_dir)
+
         self.log_file = os.path.join(self.case_dir, "run_foam.log")
         self.docker_image = os.environ.get("OPENFOAM_IMAGE", "opencfd/openfoam-default:2512")
         self.has_tools = False
         self.container_tool = None
         self.use_container = False
-        self.container_engine = container_engine
-        self.num_processors = num_processors
-        self.verbose = verbose
 
         # Attempt to recover from previous crashes (if any)
         self._recover_from_crash()
@@ -346,6 +359,18 @@ class FoamDriver:
 
             for p_dir in glob.glob(os.path.join(self.case_dir, "processor*")):
                 shutil.rmtree(p_dir, ignore_errors=True)
+
+    def cleanup_ram_disk(self):
+        """
+        Cleans up the RAM disk if it was created for this driver instance.
+        """
+        if self.ram_disk_base and os.path.exists(self.ram_disk_base):
+            try:
+                shutil.rmtree(self.ram_disk_base)
+                if self.verbose:
+                    print(f"Cleaned up RAM disk: {self.ram_disk_base}")
+            except Exception as e:
+                print(f"Warning: Failed to clean up RAM disk {self.ram_disk_base}: {e}")
 
     def prepare_case(self, keep_mesh=False, bin_config=None, turbulence="laminar"):
         """

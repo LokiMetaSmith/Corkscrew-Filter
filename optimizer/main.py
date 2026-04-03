@@ -47,6 +47,7 @@ def main():
     parser.add_argument("--batch-size", type=int, default=5, help="Number of parameter sets to generate per LLM call")
     parser.add_argument("--no-cleanup", action="store_true", help="Disable cleanup of artifacts (STLs, images) for non-top runs")
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output (e.g. error logs)")
+    parser.add_argument("--debug", action="store_true", help="Run CFD inside a RAM disk to save disk wear and preserve all logs")
     parser.add_argument("--parallel-workers", type=int, default=0, help="Number of parallel worker processes to spawn (0 = sequential)")
     parser.add_argument("--params-file", type=str, help="Path to a SCAD parameter file to use as the base configuration (overrides defaults)")
     parser.add_argument("--turbulence", type=str, default="laminar", help="Turbulence model to use (default: laminar, can be kOmegaSST, RNGkEpsilon, etc.)")
@@ -80,7 +81,7 @@ def main():
 
     # Initialize components
     scad = ScadDriver(scad_file, fluid_volume_module=fluid_volume_module)
-    foam = FoamDriver(args.case_dir, config=config, container_engine=args.container_engine, num_processors=args.cpus, verbose=args.verbose)
+    foam = FoamDriver(args.case_dir, config=config, container_engine=args.container_engine, num_processors=args.cpus, verbose=args.verbose, debug=args.debug)
 
     # Handle --no-llm logic
     if args.no_llm and "GEMINI_API_KEY" in os.environ:
@@ -305,7 +306,8 @@ def main():
                 output_prefix=output_prefix,
                 verbose=args.verbose,
                 params_file=args.params_file,
-                turbulence=args.turbulence
+                turbulence=args.turbulence,
+                debug=args.debug
             )
 
             print(f"Result metrics: {metrics}")
@@ -362,6 +364,9 @@ def main():
                     store.clean_artifacts(top_runs)
 
             i += 1
+
+    # Cleanup the driver RAM disk when loop is finished
+    foam.cleanup_ram_disk()
 
     print("\nOptimization loop finished.")
 
