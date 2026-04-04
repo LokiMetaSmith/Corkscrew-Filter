@@ -1,10 +1,12 @@
 import subprocess
 import os
+import pytest
 
-def test_single_cell_filter_cgal_error():
+@pytest.mark.xfail(reason="Upstream CGAL bug in openscad-wasm when processing complex twisted intersections")
+def test_single_cell_filter_cgal_error(tmp_path):
     """
-    Test that reproducing single_cell_filter triggers the known
-    CGAL precondition violation in openscad-wasm.
+    Test that reproducing single_cell_filter works without a
+    CGAL precondition violation.
     This tracks the upstream issue.
     """
     scad_content = """
@@ -17,25 +19,23 @@ def test_single_cell_filter_cgal_error():
     // Reproduce the core of single_cell_filter
     StagedHelicalStructure(cell_length, cell_diameter, num_helices, num_stages);
     """
-    with open("test_cgal_scf.scad", "w") as f:
-        f.write(scad_content)
+    scad_path = tmp_path / "test_cgal_scf.scad"
+    stl_path = tmp_path / "test_cgal_scf.stl"
 
-    result = subprocess.run(["node", "export.js", "-o", "test_cgal_scf.stl", "test_cgal_scf.scad"], capture_output=True, text=True)
+    scad_path.write_text(scad_content)
 
-    # Cleanup
-    if os.path.exists("test_cgal_scf.scad"):
-        os.remove("test_cgal_scf.scad")
-    if os.path.exists("test_cgal_scf.stl"):
-        os.remove("test_cgal_scf.stl")
+    result = subprocess.run(["node", "export.js", "-o", str(stl_path), str(scad_path)], capture_output=True, text=True)
 
-    assert result.returncode != 0
-    assert "CGAL error: precondition violation!" in result.stderr
-    assert "Expr: dimension() < 2" in result.stderr
+    # Check if the execution succeeded without the specific errors
+    assert result.returncode == 0
+    assert "CGAL error: precondition violation!" not in result.stderr
+    assert "Expr: dimension() < 2" not in result.stderr
 
-def test_flat_end_screw_cgal_error():
+@pytest.mark.xfail(reason="Upstream CGAL bug in openscad-wasm processing complex differences before intersection")
+def test_flat_end_screw_cgal_error(tmp_path):
     """
-    Test that reproducing flat_end_screw triggers the known
-    CGAL NFE / unclosed mesh error in openscad-wasm.
+    Test that reproducing flat_end_screw works without
+    a CGAL NFE / unclosed mesh error.
     """
     scad_content = """
     include <config.scad>
@@ -57,18 +57,11 @@ def test_flat_end_screw_cgal_error():
         cylinder(d = screw_outer_dia, h = h, center = true);
     }
     """
-    with open("test_cgal_fes.scad", "w") as f:
-        f.write(scad_content)
+    scad_path = tmp_path / "test_cgal_fes.scad"
+    stl_path = tmp_path / "test_cgal_fes.stl"
 
-    result = subprocess.run(["node", "export.js", "-o", "test_cgal_fes.stl", "test_cgal_fes.scad"], capture_output=True, text=True)
+    scad_path.write_text(scad_content)
 
-    # Cleanup
-    if os.path.exists("test_cgal_fes.scad"):
-        os.remove("test_cgal_fes.scad")
-    if os.path.exists("test_cgal_fes.stl"):
-        os.remove("test_cgal_fes.stl")
+    result = subprocess.run(["node", "export.js", "-o", str(stl_path), str(scad_path)], capture_output=True, text=True)
 
-    # In my bash tests, FlatEndScrew actually returns 0 (Success) but prints
-    # 'ERROR: The given mesh is not closed!' in stderr and generates a broken STL.
-    # We check for the specific error string.
-    assert "ERROR: The given mesh is not closed" in result.stderr
+    assert "ERROR: The given mesh is not closed" not in result.stderr
