@@ -75,3 +75,16 @@ To address the root cause of the numerical instabilities outlined in the technic
 - [x] **Tune `snappyHexMeshDict` (Surface Refinement):** Increase `refinementSurfaces` level for the corkscrew geometry (e.g., `level (3 4)`) to force the mesher to divide cells closer to the twisted walls.
 - [ ] **Tune `snappyHexMeshDict` (Boundary Layers):** Relax `meshQualityControls` and reduce `nSurfaceLayers` while increasing `featureAngle` to prevent prism layers from colliding on tight helices, or temporarily disable `addLayers` to isolate skewness causes.
 - [ ] **Tune `surfaceFeatureExtract`:** Lower `includedAngle` (e.g., to 120 or 130) to ensure the spiraling blade edges are explicitly captured.
+
+## Codebase Cleanup and Refactoring
+This section tracks necessary repository cleanup tasks to reorganize misplaced files, remove orphaned code, and improve project structure. **Important:** Every file must be carefully examined before deletion to ensure we do not introduce regressions. This codebase has extensive debug and recovery methods that are core functionality, so do not indiscriminately delete anything that says "fix/resolve/verify".
+
+- [ ] **Group 1: Investigate Test Files Outside of the `test/` Folder.**
+    - Carefully review the following test files in the root directory. If they are actual tests or test utilities, move them to `test/`. If they are redundant or outdated, delete them.
+    - Files to investigate: `check_tests.py`, `generalize_tests.py`, `run_cfd_test.py`, `run_cfd_test2.py`, `test_boundaries.py`, `test_fvschemes.py`, `test_fvschemes2.py`, `test_fvsolution.py`, `test_fvsolution2.py`, `test_meshing.py`, `test_nan.py`, `update_tests.py`.
+- [ ] **Group 2: Investigate Orphaned Plan Files.**
+    - Review `plan17.md` and `plan18.md` to see if they contain any relevant unsaved documentation. Otherwise, they appear to be orphaned agent execution plans and should be removed.
+- [ ] **Group 3: Investigate Debug, Recovery, and One-Off Scripts.**
+    - Many scripts in the root seem related to debugging or resolving specific issues (e.g., `fix_final_merge.py`, `fix_inletoutlet.py`, `fix_merge.py`, `investigate.py`, `resolve_conflicts.py`, `resolve_foam_driver.py`, `verify_fvschemes.py`, `verify_fvsolution.py`). Examine them carefully. If they are no longer needed, they can be deleted. If they still serve a purpose, consider moving them to a `scripts/` or `tools/` folder. Do not blindly delete files that are core recovery functionalities.
+- [ ] **Group 4: Investigate Log Files in the Root Directory.**
+    - Review `.pip_install.log` and `test_meshing3.log`. If they are not needed for reference, delete them or add them to `.gitignore` and untrack them from the repository to clean up the root folder.
