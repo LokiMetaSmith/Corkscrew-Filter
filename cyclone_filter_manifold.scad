@@ -16,7 +16,7 @@ dust_outlet_diameter = 25.0;
 wall_thickness = 2.0;
 
 // High resolution for rendering
-$fn = is_undef(high_res_fn) ? 60 : high_res_fn;
+$fn = is_undef(high_res_fn) ? 120 : high_res_fn;
 
 // Simulation flags
 GENERATE_CFD_VOLUME = is_undef(GENERATE_CFD_VOLUME) ? false : GENERATE_CFD_VOLUME;
