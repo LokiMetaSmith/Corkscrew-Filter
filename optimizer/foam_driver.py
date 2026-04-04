@@ -1902,7 +1902,7 @@ cloudFunctions
             geom = {
                 "filename": filename,
                 "name": patch_name,
-                "level": "(1 1)",
+                "level": "(3 4)" if patch_name == "corkscrew" else "(1 1)",
                 "patch_info": key in physics_boundaries or key in ["inlet", "outlet"]
             }
             geometries.append(geom)

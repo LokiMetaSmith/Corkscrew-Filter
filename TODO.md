@@ -72,6 +72,6 @@ To address the root cause of the numerical instabilities outlined in the technic
 - [x] **Eliminate Non-Manifold Geometry (Epsilon Rule):** Add tiny overlaps (e.g., `+ 0.01mm`) to cutting tools in OpenSCAD before `union()` or `difference()` operations to eliminate zero-thickness shared edges.
 - [ ] **Smooth Internal Corners:** Add small chamfers or fillets to the root of the corkscrew blade to smooth the 90-degree internal corner, preventing the mesher from generating severely distorted cells at the singularity.
 - [ ] **Tune `snappyHexMeshDict` (Background Grid):** Lower `target_cell_size` so at least 4 to 5 base cells fit across the narrowest gap in the corkscrew channel before refinement.
-- [ ] **Tune `snappyHexMeshDict` (Surface Refinement):** Increase `refinementSurfaces` level for the corkscrew geometry (e.g., `level (3 4)`) to force the mesher to divide cells closer to the twisted walls.
+- [x] **Tune `snappyHexMeshDict` (Surface Refinement):** Increase `refinementSurfaces` level for the corkscrew geometry (e.g., `level (3 4)`) to force the mesher to divide cells closer to the twisted walls.
 - [ ] **Tune `snappyHexMeshDict` (Boundary Layers):** Relax `meshQualityControls` and reduce `nSurfaceLayers` while increasing `featureAngle` to prevent prism layers from colliding on tight helices, or temporarily disable `addLayers` to isolate skewness causes.
 - [ ] **Tune `surfaceFeatureExtract`:** Lower `includedAngle` (e.g., to 120 or 130) to ensure the spiraling blade edges are explicitly captured.
