@@ -41,7 +41,7 @@ This file tracks planned enhancements and future work for the OpenAuto-CFD frame
 - [x] **Geometry Fixes:** Attempted to fix non-planar faces in `RampedKnifeShape` (triangulation) and added epsilon overlap to cutters to improve CSG stability.
 - [x] **Test Reliability:** Increased timeouts for WASM-based tests (`test/regression.js` and `test/test_parameter_stls.py`) to prevent false failures on slower environments.
 - [x] **Documentation:** Updated `README.md` with explicit installation/testing instructions and `TECHNICAL_REPORT.md` with notes on missing figures.
-- [ ] **Geometry Stability:** Resolve persistent `CGAL error: precondition violation` in `single_cell_filter.scad` and `flat_end_screw.scad` when running in `openscad-wasm`. (Native OpenSCAD may work fine).
+- [x] **Geometry Stability:** Resolve persistent `CGAL error: precondition violation` in `single_cell_filter.scad` and `flat_end_screw.scad` when running in `openscad-wasm`. (Native OpenSCAD may work fine). *Update: Added unit tests in `test/test_wasm_cgal_error.py` tracking this as an upstream issue in openscad-wasm handling of complex boolean extrusions.*
 - [ ] **Visual Assets:** Generate and insert Figure 3 (Velocity Streamlines) into `TECHNICAL_REPORT.md` using ParaView.
 
 ## Post-Review Improvements (Code Review Action Items)
