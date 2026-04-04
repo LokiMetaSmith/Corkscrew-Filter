@@ -41,10 +41,10 @@ CUT_FOR_VISIBILITY = false;      // If true, cuts the model in half (removes Y>0
 
 // --- General & Precision ---
 _requested_high_res_fn = is_undef(high_res_fn) ? 200 : high_res_fn; // Fragment resolution for final renders ($fn). Higher values create smoother curves.
-if (_requested_high_res_fn > 60) {
-    echo("WARNING: high_res_fn capped at 60 for performance stability in WASM environment.");
+if (_requested_high_res_fn > 120) {
+    echo("WARNING: high_res_fn capped at 120 for performance stability in WASM environment.");
 }
-_actual_high_res_fn = min(_requested_high_res_fn, 60); // Cap resolution to prevent timeouts in WASM environment
+_actual_high_res_fn = min(_requested_high_res_fn, 120); // Cap resolution to prevent timeouts in WASM environment
 low_res_fn = is_undef(low_res_fn) ? 10 : low_res_fn;   // Fragment resolution for previews. Lower values provide faster previews.
 $fn = $preview ? low_res_fn : _actual_high_res_fn; // OpenSCAD automatically uses the appropriate value.
 
