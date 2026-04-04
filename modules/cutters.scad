@@ -153,7 +153,8 @@ module CorkscrewSlitKnife(twist, depth, num_bins) {
         j = -num_bins/2 + i;
         rotate([0, 0, -yrot * j])
         translate([0, 0, j * de])
-            RampedKnifeShape(slit_axial_length_mm, twist / depth * slit_axial_length_mm, helix_path_radius_mm, helix_profile_radius_mm);
+            // Added 0.02 epsilon to length for clean cuts
+            RampedKnifeShape(slit_axial_length_mm + 0.02, twist / depth * (slit_axial_length_mm + 0.02), helix_path_radius_mm, helix_profile_radius_mm);
     }
 }
 

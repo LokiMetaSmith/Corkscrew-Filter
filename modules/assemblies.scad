@@ -97,9 +97,9 @@ module ModularFilterAssembly(tube_id, total_length) {
 
                         // Slits
                         if (slit_type == "simple") {
-                            SimpleSlitCutter(h + 0.02, rate * (h + 0.02), 2 * (helix_path_radius_mm + safe_profile_radius), 1, offset_angle=0);
+                            SimpleSlitCutter(h + 0.04, rate * (h + 0.04), 2 * (helix_path_radius_mm + safe_profile_radius), 1, offset_angle=0);
                         } else if (slit_type == "ramped") {
-                            RampedSlitKnife(h + 0.02, rate * (h + 0.02), 2 * (helix_path_radius_mm + safe_profile_radius), 1, offset_angle=0);
+                            RampedSlitKnife(h + 0.04, rate * (h + 0.04), 2 * (helix_path_radius_mm + safe_profile_radius), 1, offset_angle=0);
                         }
                     }
                 } else {
@@ -114,7 +114,7 @@ module ModularFilterAssembly(tube_id, total_length) {
                             cylinder(d = spacer_od, h = h + 0.02, center = true); // Add overlap
 
                             // Cut the helical void
-                            Corkscrew(h + 0.04, rate * (h + 0.04), void = true);
+                            Corkscrew(h + 0.06, rate * (h + 0.06), void = true);
 
                             union(){
                                 OringGroove_OD_Cutter(spacer_od, oring_cross_section_mm);
