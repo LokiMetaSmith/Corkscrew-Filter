@@ -526,8 +526,8 @@ boundaryField
 
     def _sanitize_fields(self, zero_dir):
         """
-        Global invariant enforcer: ensure no turbulence fields fall to 0.
-        Particularly enforces nut >= 1e-7.
+        Global invariant enforcer: ensure no turbulence fields fall to 0, NaN, or extremely small values.
+        Particularly enforces nut >= 1e-7 and k, epsilon, omega >= 1e-6.
         """
         for field in ["k", "epsilon", "omega", "nut"]:
             field_path = os.path.join(zero_dir, field)
@@ -537,20 +537,40 @@ boundaryField
             with open(field_path, 'r') as f:
                 content = f.read()
 
-            default_val = "1e-7" if field == "nut" else "1e-6"
+            default_val_str = "1e-7" if field == "nut" else "1e-6"
+            default_val = float(default_val_str)
+
+            def clamp_value(match):
+                prefix = match.group(1)
+                val_str = match.group(2)
+                suffix = match.group(3)
+
+                if val_str.lower() == 'nan':
+                    return f"{prefix}{default_val_str}{suffix}"
+
+                try:
+                    val = float(val_str)
+                    if val < default_val:
+                        return f"{prefix}{default_val_str}{suffix}"
+                except ValueError:
+                    pass
+
+                return match.group(0)
 
             # Sanitize internalField
             content = re.sub(
-                r"internalField\s+uniform\s+0(\.0*)?\s*;",
-                f"internalField   uniform {default_val};",
-                content
+                r"(internalField\s+uniform\s+)([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?|NaN)(\s*;)",
+                clamp_value,
+                content,
+                flags=re.IGNORECASE
             )
 
-            # Sanitize boundary values that are exactly 0
+            # Sanitize boundary values
             content = re.sub(
-                r"value\s+uniform\s+0(\.0*)?\s*;",
-                f"value           uniform {default_val};",
-                content
+                r"(value\s+uniform\s+)([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?|NaN)(\s*;)",
+                clamp_value,
+                content,
+                flags=re.IGNORECASE
             )
 
             with open(field_path, 'w') as f:
