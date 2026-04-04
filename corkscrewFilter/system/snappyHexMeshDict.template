@@ -53,7 +53,11 @@ castellatedMeshControls
         {% for geom in geometries %}
         {{ geom.name }}
         {
+            {% if geom.name == "corkscrew" %}
+            level (4 5);
+            {% else %}
             level {{ geom.level }};
+            {% endif %}
             {% if geom.patch_info %}
             patchInfo
             {
@@ -87,10 +91,10 @@ addLayersControls
     finalLayerThickness 0.3;
     minThickness 0.1;
     nGrow 0;
-    featureAngle 130;
-    maxFaceThicknessRatio 0.5;
-    maxThicknessToMedialRatio 0.3;
-    minMedialAxisAngle 90;
+    featureAngle 160;
+    maxFaceThicknessRatio 0.6;
+    maxThicknessToMedialRatio 0.6;
+    minMedialAxisAngle 130;
     nBufferCellsNoExtrude 0;
     nLayerIter 50;
     nSmoothSurfaceNormals 1;
