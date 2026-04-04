@@ -587,3 +587,28 @@ For lunar applications, the corkscrew filter offers a critical advantage: the ab
 The following figures require visual assets (screenshots or renders) that cannot be generated via Mermaid diagrams:
 
 *   **Figure 3:** Velocity streamlines through the helical channel (OpenFOAM Output) (Section 5.2).
+
+
+### Simulation Stability Challenges and Workarounds
+
+The corkscrew geometry presents significant numerical challenges for steady-state flow and transient particle tracking. The `foam_driver.py` orchestrator implements aggressive "procedural overrides" and fallback strategies to prevent OpenFOAM from diverging or throwing Floating Point Exceptions (SIGFPE). These workarounds are critical to maintaining simulation stability and should not be removed without addressing the root upstream geometric causes.
+
+**1. The Particle Dispersion Model causes Math Errors (SIGFPE)**
+The turbulent particle dispersion model (`stochasticDispersionRAS`) is inherently unstable near the heavily skewed walls of the corkscrew. If turbulent kinetic energy ($k$) or dissipation ($\epsilon$) drops to exactly zero at the wall (which `zeroGradient` allows), the particle dispersion math breaks down and throws a divide-by-zero or infinity error.
+*   **Workaround:** The driver procedurally overrides user configurations to force `epsilonWallFunction` and `kqRWallFunction` on all wall patches. Furthermore, robust fallbacks exist to temporarily disable dispersion or degrade the entire tracking run to `laminar` if a SIGFPE is detected.
+
+**2. Poor Mesh Quality from the Corkscrew Geometry**
+A corkscrew is a highly complex 3D shape that creates terrible, highly skewed cells when meshed automatically (using `snappyHexMesh`).
+*   **Workaround:** The driver classifies the mesh using `checkMesh` output (non-orthogonality and skewness). To keep the `simpleFoam` solver from blowing up on bad cells, the script implements severe numerical dampening: it forces highly diffusive `upwind` schemes (`bounded Gauss upwind`) for Velocity ($U$), $k$, and $\epsilon$, and brutally limits gradient calculations (e.g., `limited corrected 0.2`) to prevent solver divergence at the cost of smeared physical accuracy.
+
+**3. Backflow at the Outlets**
+In swirling flows exiting the corkscrew filter, fluid often curls back and re-enters the domain through the outlet patch. If turbulence properties are drawn back into the domain incorrectly, the simulation diverges.
+*   **Workaround:** The script forces `inletOutlet` boundary conditions on non-wall patches, which is strictly necessary to prevent SIGFPE multiplication errors on backflow.
+
+**4. Pressure Over-Constraining**
+OpenFOAM uses `pRefCell` and `pRefValue` to anchor the pressure field in a closed box, but leaving them active in a flow-through pipe simulation (where inlet/outlet boundaries already define the pressure field) over-constrains the matrix solver, causing immediate divergence.
+*   **Workaround:** The driver aggressively strips `pRefCell` and `pRefValue` from the `fvSolution` dictionary.
+
+**5. Turbulence Fields Dropping to Absolute Zero**
+OpenFOAM's turbulence models divide by values like turbulent viscosity ($\nu_t$). If the initial conditions set these fields to `0`, the solver will instantly crash on the first iteration.
+*   **Workaround:** The `_sanitize_fields` function acts as a global enforcer to physically scrub the `0` files, ensuring no field ever falls below `1e-7` or `1e-6`.
