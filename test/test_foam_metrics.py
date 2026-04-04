@@ -16,6 +16,7 @@ class TestFoamMetrics(unittest.TestCase):
         self.test_dir = tempfile.mkdtemp()
         self.driver = FoamDriver(self.test_dir)
         os.makedirs(os.path.dirname(self.driver.log_file), exist_ok=True)
+        os.makedirs(os.path.dirname(self.driver.case_dir), exist_ok=True)
         # Create dummy log file
         with open(self.driver.log_file, 'w') as f:
             f.write("Dummy Log\n")
