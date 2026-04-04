@@ -69,7 +69,7 @@ This file tracks planned enhancements and future work for the OpenAuto-CFD frame
 ## Phase 4: Upstream Geometry & Mesh Optimization
 To address the root cause of the numerical instabilities outlined in the technical report, the mesh quality must be improved at the source rather than relying solely on `foam_driver.py` workarounds.
 - [x] **Optimize OpenSCAD Geometry ($fn):** Increase facet resolution (`$fn = 60` to `120`) on helical modules to prevent `snappyHexMesh` from snapping to artificial sharp edges and creating highly skewed cells.
-- [ ] **Eliminate Non-Manifold Geometry (Epsilon Rule):** Add tiny overlaps (e.g., `+ 0.01mm`) to cutting tools in OpenSCAD before `union()` or `difference()` operations to eliminate zero-thickness shared edges.
+- [x] **Eliminate Non-Manifold Geometry (Epsilon Rule):** Add tiny overlaps (e.g., `+ 0.01mm`) to cutting tools in OpenSCAD before `union()` or `difference()` operations to eliminate zero-thickness shared edges.
 - [ ] **Smooth Internal Corners:** Add small chamfers or fillets to the root of the corkscrew blade to smooth the 90-degree internal corner, preventing the mesher from generating severely distorted cells at the singularity.
 - [ ] **Tune `snappyHexMeshDict` (Background Grid):** Lower `target_cell_size` so at least 4 to 5 base cells fit across the narrowest gap in the corkscrew channel before refinement.
 - [ ] **Tune `snappyHexMeshDict` (Surface Refinement):** Increase `refinementSurfaces` level for the corkscrew geometry (e.g., `level (3 4)`) to force the mesher to divide cells closer to the twisted walls.

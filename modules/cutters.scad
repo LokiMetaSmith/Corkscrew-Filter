@@ -10,11 +10,11 @@
  * Arguments: (Same as MultiHelixRamp)
  */
 module SimpleSlitCutter(h, twist, dia, helices, offset_angle=ramp_width_degrees/2) {
-    // Overlap epsilon to ensure clean cuts
-    eps = 0.1;
+    // Overlap epsilon to ensure clean cuts (Epsilon Rule for Manifold Geometry)
+    eps = 0.05;
     for (i = [0 : helices - 1]) {
         rotate([0, 0, i * (360 / helices) + offset_angle])
-        linear_extrude(height = h, twist = twist, center = true, slices = h > 0 ? h * 2 : 1)
+        linear_extrude(height = h + eps, twist = twist, center = true, slices = h > 0 ? h * 2 : 1)
             // Shift outward by eps/2 and increase width by eps
             translate([dia / 2 - slit_depth_mm / 2 + eps/2, 0])
                 square([slit_depth_mm + eps, slit_width_mm], center = true);
@@ -30,11 +30,11 @@ module RampedSlitKnife(h, twist, dia, helices, offset_angle=ramp_width_degrees/2
     twist_per_mm = twist / h;
     ramp_len = slit_ramp_length_mm;
     open_len = slit_open_length_mm;
-    eps = 0.1; // Overlap epsilon
+    eps = 0.05; // Overlap epsilon to ensure clean cuts
 
     for (i = [0 : helices - 1]) {
         rotate([0, 0, i * (360 / helices) + offset_angle]) {
-            translate([0, 0, -h/2]) {
+            translate([0, 0, -h/2 - eps/2]) { // extend downward
                 union() {
                     // 1. The Ramp using hull (interpolates between start surface and full depth)
                     hull() {
@@ -55,9 +55,9 @@ module RampedSlitKnife(h, twist, dia, helices, offset_angle=ramp_width_degrees/2
                     }
 
                     // 2. The Body (Open Slit)
-                     translate([0,0,ramp_len])
+                     translate([0,0,ramp_len - 0.01]) // overlap with hull
                      rotate([0, 0, twist_per_mm * ramp_len])
-                     linear_extrude(height = open_len, twist = twist_per_mm * open_len, center=false) {
+                     linear_extrude(height = open_len + eps, twist = twist_per_mm * open_len, center=false) {
                          translate([dia/2 - slit_depth_mm, -slit_width_mm/2])
                              square([slit_depth_mm + eps, slit_width_mm]);
                      }
@@ -109,6 +109,7 @@ module RampedKnifeShape(h, twist, radius, profile_radius) {
     p4 = rotZ([radius + w, -w, 0], ct_rad);
     p5 = rotZ([radius + w, w, 0], ct_rad);
 
+    eps = 0.05; // Extend out to make sure cuts don't hit manifold boundaries
     chamfer_points = [p0, p1, p2, p3, p4, p5];
     chamfer_faces = [
         [0, 2, 1], // Bottom
@@ -122,16 +123,19 @@ module RampedKnifeShape(h, twist, radius, profile_radius) {
     ];
 
     // Shift to match center=true of original linear_extrude
-    translate([0, 0, -h/2]) {
-        // Chamfer Section (Polyhedron)
-        polyhedron(points = chamfer_points, faces = chamfer_faces);
+    translate([0, 0, -h/2 - eps/2]) {
+        union() {
+            // Chamfer Section (Polyhedron) extended down
+            translate([0,0, -eps])
+            polyhedron(points = chamfer_points, faces = chamfer_faces);
 
-        // Main Body Section - Standard helical extrusion
-        // Using shifted points to avoid translate() inside linear_extrude which causes issues in WASM
-        translate([0, 0, chamfer_h])
-        rotate([0, 0, chamfer_twist])
-        linear_extrude(height = body_h, twist = body_twist, center = false)
-             polygon(points = [[radius, 0], [radius+w, -w], [radius+w+0.01, 0], [radius+w, w]]);
+            // Main Body Section - Standard helical extrusion
+            // Using shifted points to avoid translate() inside linear_extrude which causes issues in WASM
+            translate([0, 0, chamfer_h - 0.01])
+            rotate([0, 0, chamfer_twist])
+            linear_extrude(height = body_h + eps, twist = body_twist, center = false)
+                 polygon(points = [[radius - eps, 0], [radius+w+eps, -w-eps], [radius+w+eps, 0], [radius+w+eps, w+eps]]);
+        }
     }
 }
 
@@ -161,13 +165,14 @@ module CorkscrewSlitKnife(twist, depth, num_bins) {
  * Arguments: (Same as MultiHelixRamp)
  */
 module HelicalChannelCutter(h, twist, dia, helices) {
-     for (i = [0 : helices - 1]) {
+    eps = 0.05;
+    for (i = [0 : helices - 1]) {
         rotate([0, 0, i * (360 / helices) + ramp_width_degrees/2]) {
-            linear_extrude(height = h, twist = twist, center=true, slices = h > 0 ? h*2:1) {
+            linear_extrude(height = h + eps, twist = twist, center=true, slices = h > 0 ? h*2:1) {
                 // This cutter starts at the ramp's outer edge and extends far outwards
                 // to cut through the hex array frame.
-                translate([dia, 0, 0]) {
-                    square([dia*2, slit_width_mm], center=true);
+                translate([dia - eps, 0, 0]) {
+                    square([dia*2 + eps, slit_width_mm], center=true);
                 }
             }
         }
