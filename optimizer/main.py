@@ -8,6 +8,11 @@ import hashlib
 import sys
 import uuid
 import yaml
+from dotenv import load_dotenv
+
+# Load environment variables from .env file if present
+load_dotenv()
+
 from scad_driver import ScadDriver
 from foam_driver import FoamDriver
 from llm_agent import LLMAgent

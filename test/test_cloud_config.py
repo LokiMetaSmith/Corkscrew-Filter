@@ -15,17 +15,19 @@ class TestCloudConfig(unittest.TestCase):
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
         self.driver = FoamDriver(self.test_dir)
-        # Create constant directory
-        os.makedirs(os.path.join(self.test_dir, "constant"))
+        # Create constant directory INSIDE the driver's case_dir
+        # Since foam_driver maps its case_dir to /dev/shm, we must use that path!
+        os.makedirs(os.path.join(self.driver.case_dir, "constant"))
 
     def tearDown(self):
         shutil.rmtree(self.test_dir)
+        self.driver.cleanup_ram_disk()
 
     def test_generate_kinematic_cloud_properties(self):
         # Generate the config
         self.driver._generate_kinematicCloudProperties()
 
-        config_path = os.path.join(self.test_dir, "constant", "kinematicCloudProperties")
+        config_path = os.path.join(self.driver.case_dir, "constant", "kinematicCloudProperties")
         self.assertTrue(os.path.exists(config_path))
 
         with open(config_path, 'r') as f:

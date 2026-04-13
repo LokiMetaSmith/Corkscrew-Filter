@@ -6,6 +6,10 @@ import mimetypes
 import time
 import base64
 from typing import Dict, List, Any, Union, Tuple
+from dotenv import load_dotenv
+
+# Load environment variables from .env file if present
+load_dotenv()
 
 # Attempt imports for providers
 try:
@@ -19,6 +23,11 @@ try:
     import openai
 except ImportError:
     openai = None
+
+try:
+    import requests
+except ImportError:
+    requests = None
 
 try:
     from PIL import Image
@@ -205,6 +214,46 @@ class OpenAIProvider(LLMProvider):
         return models
 
 
+class OllamaProvider(OpenAIProvider):
+    def __init__(self, host: str = "http://localhost:11434", model_name: str = None):
+        if not openai:
+            raise ImportError("openai library not installed. Required for Ollama integration.")
+        if not requests:
+            raise ImportError("requests library not installed. Required for Ollama integration.")
+
+        self.host = host.rstrip('/')
+
+        # Determine available models
+        available_models = self.list_models()
+        if not available_models:
+            raise Exception(f"No models found or Ollama is not running at {self.host}")
+
+        if model_name:
+            if model_name not in available_models:
+                 print(f"Warning: Model {model_name} not found in Ollama. Available: {available_models}")
+            self.model_name = model_name
+        else:
+            self.model_name = available_models[0]
+
+        # Initialize the underlying OpenAI client pointing to Ollama
+        super().__init__(api_key="ollama", base_url=f"{self.host}/v1", model_name=self.model_name)
+
+    def get_name(self) -> str:
+        return f"Ollama ({self.host}) - Model: {self.model_name}"
+
+    def list_models(self) -> List[str]:
+        models = []
+        try:
+            response = requests.get(f"{self.host}/api/tags", timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            if "models" in data:
+                models = [m["name"] for m in data["models"]]
+        except Exception as e:
+            print(f"Error checking Ollama at {self.host}: {e}")
+        return models
+
+
 class LLMAgent:
     def __init__(self, api_key=None, model_name="gemini-2.5-flash"):
         self.providers: List[LLMProvider] = []
@@ -246,9 +295,28 @@ class LLMAgent:
         elif not openai and (openai_key or openai_base):
             print("Warning: OPENAI_API_KEY/BASE_URL present but openai lib missing.")
 
+        # 3. Ollama Setup
+        ollama_host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+        ollama_model = os.environ.get("OLLAMA_MODEL")
+        if openai and requests:
+            try:
+                p = OllamaProvider(host=ollama_host, model_name=ollama_model)
+                self.providers.append(p)
+            except Exception as e:
+                # Silently fail if Ollama is just not running, only print on explicit error
+                if "No models found or Ollama is not running" not in str(e):
+                    print(f"Failed to initialize Ollama provider: {e}")
+
         if not self.providers:
             print("Warning: No LLM providers available (Missing Keys or Libraries). LLM features will be disabled.")
-            print("To enable, set GEMINI_API_KEY or OPENAI_API_KEY/OPENAI_BASE_URL.")
+            print("To enable LLM, please provide one of the following:")
+            print(f"  1. GEMINI_API_KEY")
+            print(f"  2. OPENAI_API_KEY (and optionally OPENAI_BASE_URL)")
+            print(f"  3. Run Ollama locally at {ollama_host}")
+        else:
+            # Print which provider we're using based on priority
+            active = self.providers[0]
+            print(f"Using LLM Provider: {active.get_name()}")
 
     def _generate(self, prompt: str, image_paths: List[str] = None) -> str:
         """Iterates through providers until one succeeds."""

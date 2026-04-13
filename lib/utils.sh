@@ -70,6 +70,11 @@ setup_node_env() {
 }
 
 setup_python_env() {
+    # Load .env if it exists
+    if [ -f ".env" ]; then
+        export $(grep -v '^#' .env | xargs)
+    fi
+
     VENV_DIR=".venv"
 
     # Detect Python Executable

@@ -1,5 +1,10 @@
 import os
 import sys
+from dotenv import load_dotenv
+
+# Load environment variables from .env file if present
+load_dotenv()
+
 from llm_agent import LLMAgent
 
 def main():
@@ -11,9 +16,6 @@ def main():
 
     if not agent.providers:
         print("\nError: No LLM providers configured.")
-        print("Please set one of the following:")
-        print("  - GEMINI_API_KEY (for Google Gemini)")
-        print("  - OPENAI_API_KEY (and optionally OPENAI_BASE_URL for Local LLMs)")
         sys.exit(1)
 
     print(f"\nConfigured Providers:")

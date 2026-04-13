@@ -84,12 +84,28 @@ if [ "$HAS_NODE" = false ]; then
      print_warning "Node.js not found. Visualization (PNG) generation will be disabled."
 fi
 
+# Load .env variables so that script can see them if available
+if [ -f ".env" ]; then
+    export $(grep -v '^#' .env | xargs)
+fi
+
 # 2. Check API Key
-if [ -z "$GEMINI_API_KEY" ] && [ -z "$OPENAI_API_KEY" ] && [ -z "$OPENAI_BASE_URL" ]; then
+OLLAMA_HOST_TO_CHECK=${OLLAMA_HOST:-"http://localhost:11434"}
+OLLAMA_RUNNING=0
+if curl -s -f -m 2 "${OLLAMA_HOST_TO_CHECK}/api/tags" > /dev/null 2>&1; then
+    OLLAMA_RUNNING=1
+fi
+
+if [ -z "$GEMINI_API_KEY" ] && [ -z "$OPENAI_API_KEY" ] && [ -z "$OPENAI_BASE_URL" ] && [ "$OLLAMA_RUNNING" -eq 0 ]; then
     if [[ "$*" == *"--no-llm"* ]] || [ "$NON_INTERACTIVE" == "1" ]; then
-        print_warning "No LLM API Key found. Proceeding in dry-run/random mode."
+        print_warning "No LLM Configuration found. Proceeding in dry-run/random mode."
     else
-        print_warning "No LLM API Key found (GEMINI_API_KEY, OPENAI_API_KEY, or OPENAI_BASE_URL)."
+        print_warning "No LLM Configuration found."
+        echo "Please set one of the following:"
+        echo "  - GEMINI_API_KEY"
+        echo "  - OPENAI_API_KEY (and optionally OPENAI_BASE_URL)"
+        echo "  - Or have Ollama running locally at $OLLAMA_HOST_TO_CHECK"
+        echo ""
         echo "The optimizer will run in 'dry-run' or 'random' mode without LLM guidance."
         read -p "Do you want to continue without LLM? (y/n) " -n 1 -r
         echo
