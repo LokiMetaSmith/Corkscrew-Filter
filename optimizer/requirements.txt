@@ -11,4 +11,3 @@ pytest
 PyYAML
 Jinja2
 python-dotenv
-requests

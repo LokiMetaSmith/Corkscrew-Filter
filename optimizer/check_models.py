@@ -1,10 +1,8 @@
 import os
 from dotenv import load_dotenv
-
-# Load environment variables from .env file if present
-load_dotenv()
-
 from llm_agent import LLMAgent
+
+load_dotenv()
 
 def list_models():
     print("Checking available models from configured providers...")
@@ -16,6 +14,10 @@ def list_models():
     # Check if we have any providers
     if not agent.providers:
         print("\nError: No LLM providers configured.")
+        print("Please set one of the following environment variables:")
+        print("  - GEMINI_API_KEY")
+        print("  - OPENAI_API_KEY (and optionally OPENAI_BASE_URL)")
+        print("  - or ensure Ollama is running locally (http://localhost:11434)")
         return
 
     # Use the agent to list models

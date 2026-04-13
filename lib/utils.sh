@@ -70,23 +70,22 @@ setup_node_env() {
 }
 
 setup_python_env() {
-    # Load .env if it exists
-    if [ -f ".env" ]; then
-        export $(grep -v '^#' .env | xargs)
-    fi
-
     VENV_DIR=".venv"
 
     # Detect Python Executable
     PYTHON_CMD=""
-    if command -v python3 &> /dev/null; then
-        PYTHON_CMD="python3"
-    elif command -v python &> /dev/null; then
-        PYTHON_CMD="python"
-    elif command -v py &> /dev/null; then
-        PYTHON_CMD="py"
-    else
-        print_error "Python not found (tried 'python3', 'python', 'py'). Please install Python."
+    for cmd in python3 python py; do
+        if command -v "$cmd" &> /dev/null; then
+            # Verify it's a real Python executable and not a Windows Store stub
+            if "$cmd" --version &> /dev/null; then
+                PYTHON_CMD="$cmd"
+                break
+            fi
+        fi
+    done
+
+    if [ -z "$PYTHON_CMD" ]; then
+        print_error "Python not found or not working (tried 'python3', 'python', 'py'). Please install Python and ensure it is in your PATH."
         exit 1
     fi
     # echo "Using Python executable: $PYTHON_CMD"

@@ -84,28 +84,41 @@ if [ "$HAS_NODE" = false ]; then
      print_warning "Node.js not found. Visualization (PNG) generation will be disabled."
 fi
 
-# Load .env variables so that script can see them if available
+# 2. Check API Key and Endpoints
 if [ -f ".env" ]; then
-    export $(grep -v '^#' .env | xargs)
+    echo "Loading variables from .env file..."
+    set -a
+    source .env
+    set +a
 fi
 
-# 2. Check API Key
-OLLAMA_HOST_TO_CHECK=${OLLAMA_HOST:-"http://localhost:11434"}
-OLLAMA_RUNNING=0
-if curl -s -f -m 2 "${OLLAMA_HOST_TO_CHECK}/api/tags" > /dev/null 2>&1; then
-    OLLAMA_RUNNING=1
+LLM_DETECTED=false
+LLM_INFO=""
+
+if [ -n "$GEMINI_API_KEY" ]; then
+    LLM_DETECTED=true
+    LLM_INFO="$LLM_INFO Gemini"
 fi
 
-if [ -z "$GEMINI_API_KEY" ] && [ -z "$OPENAI_API_KEY" ] && [ -z "$OPENAI_BASE_URL" ] && [ "$OLLAMA_RUNNING" -eq 0 ]; then
+if [ -n "$OPENAI_API_KEY" ] || [ -n "$OPENAI_BASE_URL" ]; then
+    LLM_DETECTED=true
+    LLM_INFO="$LLM_INFO OpenAI-Compatible"
+fi
+
+# Check for local Ollama
+if command -v curl &> /dev/null && curl -s -f http://localhost:11434/api/tags > /dev/null 2>&1 || [ -n "$OLLAMA_HOST" ]; then
+    LLM_DETECTED=true
+    LLM_INFO="$LLM_INFO Ollama"
+fi
+
+if [ "$LLM_DETECTED" = true ]; then
+    echo "Detected LLM Providers:$LLM_INFO"
+else
     if [[ "$*" == *"--no-llm"* ]] || [ "$NON_INTERACTIVE" == "1" ]; then
-        print_warning "No LLM Configuration found. Proceeding in dry-run/random mode."
+        print_warning "No LLM API Key or local endpoint found. Proceeding in dry-run/random mode."
     else
-        print_warning "No LLM Configuration found."
-        echo "Please set one of the following:"
-        echo "  - GEMINI_API_KEY"
-        echo "  - OPENAI_API_KEY (and optionally OPENAI_BASE_URL)"
-        echo "  - Or have Ollama running locally at $OLLAMA_HOST_TO_CHECK"
-        echo ""
+        print_warning "No LLM API Key or local endpoint found."
+        echo "Please set GEMINI_API_KEY, OPENAI_API_KEY, OPENAI_BASE_URL, or start a local Ollama instance."
         echo "The optimizer will run in 'dry-run' or 'random' mode without LLM guidance."
         read -p "Do you want to continue without LLM? (y/n) " -n 1 -r
         echo
