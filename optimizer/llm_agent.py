@@ -5,7 +5,12 @@ import random
 import mimetypes
 import time
 import base64
+import urllib.request
+import urllib.error
+from dotenv import load_dotenv
 from typing import Dict, List, Any, Union, Tuple
+
+load_dotenv()
 
 # Attempt imports for providers
 try:
@@ -118,6 +123,55 @@ class GoogleGenAIProvider(LLMProvider):
                     models.append(m.name)
         except Exception as e:
             print(f"Error listing Google models: {e}")
+        return models
+
+
+class OllamaProvider(LLMProvider):
+    def __init__(self, host: str = "http://localhost:11434", model_name: str = "llama3"):
+        self.host = host.rstrip('/')
+        self.model_name = model_name
+
+    def get_name(self) -> str:
+        return f"Ollama Local ({self.host}) - Model: {self.model_name}"
+
+    def _encode_image(self, image_path: str) -> str:
+        with open(image_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode('utf-8')
+
+    def generate(self, prompt: str, image_paths: List[str] = None) -> str:
+        url = f"{self.host}/api/generate"
+        payload = {
+            "model": self.model_name,
+            "prompt": prompt,
+            "stream": False
+        }
+
+        if image_paths:
+            images = []
+            for path in image_paths:
+                images.append(self._encode_image(path))
+            payload["images"] = images
+
+        data = json.dumps(payload).encode('utf-8')
+        req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'})
+
+        try:
+            with urllib.request.urlopen(req) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                return result.get("response", "")
+        except urllib.error.URLError as e:
+            raise Exception(f"Ollama connection error: {e}")
+
+    def list_models(self) -> List[str]:
+        url = f"{self.host}/api/tags"
+        models = []
+        try:
+            with urllib.request.urlopen(url) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                for model in result.get("models", []):
+                    models.append(model.get("name"))
+        except Exception as e:
+            print(f"Error listing Ollama models: {e}")
         return models
 
 
@@ -246,9 +300,23 @@ class LLMAgent:
         elif not openai and (openai_key or openai_base):
             print("Warning: OPENAI_API_KEY/BASE_URL present but openai lib missing.")
 
+        # 3. Ollama Local Setup
+        ollama_host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+        ollama_model = os.environ.get("OLLAMA_MODEL", "llama3")
+        try:
+            # Check if Ollama is running
+            req = urllib.request.Request(f"{ollama_host.rstrip('/')}/api/tags")
+            with urllib.request.urlopen(req, timeout=2) as response:
+                if response.status == 200:
+                    p = OllamaProvider(host=ollama_host, model_name=ollama_model)
+                    self.providers.append(p)
+                    # print(f"Registered provider: {p.get_name()}")
+        except Exception:
+            pass # Ollama not running or reachable, skip
+
         if not self.providers:
-            print("Warning: No LLM providers available (Missing Keys or Libraries). LLM features will be disabled.")
-            print("To enable, set GEMINI_API_KEY or OPENAI_API_KEY/OPENAI_BASE_URL.")
+            print("Warning: No LLM providers available (Missing Keys, Libraries, or Local Endpoint). LLM features will be disabled.")
+            print("To enable, set GEMINI_API_KEY, OPENAI_API_KEY, or start a local Ollama instance.")
 
     def _generate(self, prompt: str, image_paths: List[str] = None) -> str:
         """Iterates through providers until one succeeds."""

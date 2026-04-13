@@ -8,6 +8,7 @@ import hashlib
 import sys
 import uuid
 import yaml
+from dotenv import load_dotenv
 from scad_driver import ScadDriver
 from foam_driver import FoamDriver
 from llm_agent import LLMAgent
@@ -32,6 +33,7 @@ def get_params_hash(params):
     return hashlib.md5(s.encode('utf-8')).hexdigest()
 
 def main():
+    load_dotenv()
     parser = argparse.ArgumentParser(description="Generative AI Optimizer for Config-Driven Workflows")
     parser.add_argument("config_file", type=str, help="Path to the problem definition YAML file")
     parser.add_argument("--iterations", type=str, default="5", help="Number of iterations (int), or 'inf'/'infinite'/-1 for infinite loop")

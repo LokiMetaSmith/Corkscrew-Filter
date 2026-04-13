@@ -1,6 +1,9 @@
 import os
 import sys
+from dotenv import load_dotenv
 from llm_agent import LLMAgent
+
+load_dotenv()
 
 def main():
     print("Verifying LLM Connection...")
@@ -14,6 +17,7 @@ def main():
         print("Please set one of the following:")
         print("  - GEMINI_API_KEY (for Google Gemini)")
         print("  - OPENAI_API_KEY (and optionally OPENAI_BASE_URL for Local LLMs)")
+        print("  - or ensure Ollama is running locally (http://localhost:11434)")
         sys.exit(1)
 
     print(f"\nConfigured Providers:")
