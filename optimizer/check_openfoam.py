@@ -1,5 +1,6 @@
 import argparse
 import sys
+import os
 import re
 from foam_driver import FoamDriver
 
@@ -41,57 +42,60 @@ def main():
     # Initialize driver to use its environment detection
     driver = FoamDriver(args.case_dir, container_engine=args.container_engine)
 
-    if not driver.has_tools:
-        print("Error: OpenFOAM tools not found (neither native nor containerized).")
-        sys.exit(1)
-
-    # Run simpleFoam -help to get version
-    # We use a temporary log file or capture output directly?
-    # FoamDriver.run_command uses run_command_with_spinner which streams to file.
-    # We can try to capture stdout by running subprocess directly via driver's method?
-    # No, driver.run_command is high level.
-    # Let's use driver._get_container_command if containerized, or just run subprocess if native.
-
-    # We will try a few commands to extract the version, as `-help` often strips the header in newer versions.
-    cmds_to_try = [
-        ["simpleFoam", "-help"],
-        ["foamVersion"],
-        ["bash", "-c", "echo WM_PROJECT_VERSION=$WM_PROJECT_VERSION"]
-    ]
-
-    version_int = None
-    output = ""
-
-    import subprocess
-
-    for cmd in cmds_to_try:
-        try:
-            if driver.use_container:
-                # Construct container command
-                full_cmd = driver._get_container_command(cmd, driver.case_dir)
-            else:
-                full_cmd = cmd
-
-            # Run and capture output
-            result = subprocess.run(
-                full_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                check=False # Don't throw error on non-zero exit
-            )
-
-            current_output = result.stdout
-            output += current_output + "\n"
-            version_int = parse_openfoam_version(current_output)
-
-            if version_int:
-                break
-        except Exception as e:
-            output += f"Error running {' '.join(cmd)}: {e}\n"
-            continue
-
     try:
+        if not driver.has_tools:
+            print("Error: OpenFOAM tools not found (neither native nor containerized).")
+            sys.exit(1)
+
+        # Ensure the case directory exists before mounting it in the container
+        os.makedirs(driver.case_dir, exist_ok=True)
+
+        # Run simpleFoam -help to get version
+        # We use a temporary log file or capture output directly?
+        # FoamDriver.run_command uses run_command_with_spinner which streams to file.
+        # We can try to capture stdout by running subprocess directly via driver's method?
+        # No, driver.run_command is high level.
+        # Let's use driver._get_container_command if containerized, or just run subprocess if native.
+
+        # We will try a few commands to extract the version, as `-help` often strips the header in newer versions.
+        cmds_to_try = [
+            ["simpleFoam", "-help"],
+            ["foamVersion"],
+            ["bash", "-c", "echo WM_PROJECT_VERSION=$WM_PROJECT_VERSION"]
+        ]
+
+        version_int = None
+        output = ""
+
+        import subprocess
+
+        for cmd in cmds_to_try:
+            try:
+                if driver.use_container:
+                    # Construct container command
+                    full_cmd = driver._get_container_command(cmd, driver.case_dir)
+                else:
+                    full_cmd = cmd
+
+                # Run and capture output
+                result = subprocess.run(
+                    full_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    check=False # Don't throw error on non-zero exit
+                )
+
+                current_output = result.stdout
+                output += current_output + "\n"
+                version_int = parse_openfoam_version(current_output)
+
+                if version_int:
+                    break
+            except Exception as e:
+                output += f"Error running {' '.join(cmd)}: {e}\n"
+                continue
+
         if version_int:
             print(f"Detected OpenFOAM version: v{version_int}")
             if version_int < 2512:
@@ -110,9 +114,13 @@ def main():
             print("Error: Unable to verify OpenFOAM version.")
             sys.exit(1)
 
+    except SystemExit:
+        raise
     except Exception as e:
         print(f"Error running version check: {e}")
         sys.exit(1)
+    finally:
+        driver.cleanup_ram_disk()
 
 if __name__ == "__main__":
     main()
