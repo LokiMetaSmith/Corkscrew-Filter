@@ -127,7 +127,7 @@ class GoogleGenAIProvider(LLMProvider):
 
 
 class OllamaProvider(LLMProvider):
-    def __init__(self, host: str = "http://localhost:11434", model_name: str = "llama3"):
+    def __init__(self, host: str = "http://localhost:11434", model_name: str = "qwen3:14b"):
         self.host = host.rstrip('/')
         self.model_name = model_name
 
@@ -159,6 +159,14 @@ class OllamaProvider(LLMProvider):
             with urllib.request.urlopen(req) as response:
                 result = json.loads(response.read().decode('utf-8'))
                 return result.get("response", "")
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode('utf-8')
+            try:
+                error_json = json.loads(error_body)
+                error_message = error_json.get('error', error_body)
+            except json.JSONDecodeError:
+                error_message = error_body
+            raise Exception(f"Ollama HTTP error {e.code}: {error_message}")
         except urllib.error.URLError as e:
             raise Exception(f"Ollama connection error: {e}")
 
@@ -302,7 +310,7 @@ class LLMAgent:
 
         # 3. Ollama Local Setup
         ollama_host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
-        ollama_model = os.environ.get("OLLAMA_MODEL", "llama3")
+        ollama_model = os.environ.get("OLLAMA_MODEL", "qwen3:14b")
         try:
             # Check if Ollama is running
             req = urllib.request.Request(f"{ollama_host.rstrip('/')}/api/tags")
