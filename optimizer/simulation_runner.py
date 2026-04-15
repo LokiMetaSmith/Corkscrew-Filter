@@ -57,6 +57,34 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
     else:
         print("Skipping parameter validation due to external params file.")
 
+    # 0.5. Prepare Case Directory and Configs
+    if not dry_run and not skip_cfd:
+        # Early check for environment
+        if not foam_driver.has_tools:
+            print("OpenFOAM tools not found. Skipping simulation.")
+            return {"error": "environment_missing_tools", "details": "Neither OpenFOAM nor Docker found"}, [], None, None, None
+
+        # Override turbulence if defined in config
+        cfd_settings = foam_driver.config.get('cfd_settings', {})
+        turbulence = "laminar"
+        if cfd_settings and 'turbulence_model' in cfd_settings:
+            turbulence = cfd_settings['turbulence_model']
+
+        # Prepare Bin Configuration for Meshing/Tracking
+        bin_config = {
+            "num_bins": int(params.get("num_bins", 1)),
+            "insert_length_mm": float(params.get("insert_length_mm", 50.0)),
+
+            # --- NEW: Dynamic Physics & Dust Parameters ---
+            "tube_od_mm": float(params.get("tube_od_mm", 32.0)),
+            "fluid_velocity": float(params.get("fluid_velocity", 5.0)),
+            "dust_density": float(params.get("dust_density", 3100)), # Default: Moon dust
+            "dust_sizes_um": params.get("dust_sizes_um", [5, 10, 20, 50, 100])
+        }
+
+        # Initialize base case directory and templates
+        foam_driver.prepare_case(keep_mesh=reuse_mesh, turbulence=turbulence, bin_config=bin_config)
+
     # 1. Generate Geometry (Fluid Volume + CFD Assets)
     tri_surface_dir = os.path.join(foam_driver.case_dir, "constant", "triSurface")
     os.makedirs(tri_surface_dir, exist_ok=True)
@@ -135,36 +163,10 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         if not os.path.exists(fluid_stl_path):
             with open(fluid_stl_path, 'w') as f: f.write("solid dryrun\nendsolid dryrun")
 
-    # 2. Prepare Case
+    # 2. Prepare Case (BlockMesh update)
     stl_path = fluid_stl_path # For bounds check
 
     if not dry_run and not skip_cfd:
-        # Early check for environment
-        if not foam_driver.has_tools:
-            print("OpenFOAM tools not found. Skipping simulation.")
-            return {"error": "environment_missing_tools", "details": "Neither OpenFOAM nor Docker found"}, [], None, None, None
-
-        # Override turbulence if defined in config
-        cfd_settings = foam_driver.config.get('cfd_settings', {})
-        turbulence = "laminar"
-        if cfd_settings and 'turbulence_model' in cfd_settings:
-            turbulence = cfd_settings['turbulence_model']
-
-        # Prepare Bin Configuration for Meshing/Tracking
-        bin_config = {
-            "num_bins": int(params.get("num_bins", 1)),
-            "insert_length_mm": float(params.get("insert_length_mm", 50.0)),
-
-            # --- NEW: Dynamic Physics & Dust Parameters ---
-            "tube_od_mm": float(params.get("tube_od_mm", 32.0)),
-            "fluid_velocity": float(params.get("fluid_velocity", 5.0)),
-            "dust_density": float(params.get("dust_density", 3100)), # Default: Moon dust
-            "dust_sizes_um": params.get("dust_sizes_um", [5, 10, 20, 50, 100])
-        }
-
-        # Initialize base case directory and templates
-        foam_driver.prepare_case(keep_mesh=reuse_mesh, turbulence=turbulence, bin_config=bin_config)
-
         if not reuse_mesh:
             # STL is now in METERS (scaled above or from previous run).
             bounds = scad_driver.get_bounds(stl_path)
