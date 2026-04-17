@@ -170,8 +170,9 @@ def run_simulation(scad_driver, foam_driver, params, output_stl_name="corkscrew_
         if not reuse_mesh:
             # STL is now in METERS (scaled above or from previous run).
             bounds = scad_driver.get_bounds(stl_path)
-            if bounds[0] is None:
-                print("Failed to get bounds. Using default.")
+            if bounds is None or bounds[0] is None:
+                print("ERROR: Failed to get bounds. STL geometry is likely invalid or empty.")
+                return {"error": "invalid_geometry_bounds"}, [], None, None, None
             else:
                 REFINEMENT_LEVEL = 1 # Match level set in snappyHexMeshDict
 
