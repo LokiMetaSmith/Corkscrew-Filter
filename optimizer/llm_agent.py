@@ -143,7 +143,8 @@ class OllamaProvider(LLMProvider):
         payload = {
             "model": self.model_name,
             "prompt": prompt,
-            "stream": False
+            "stream": False,
+            "format": "json"
         }
 
         if image_paths:
@@ -236,7 +237,8 @@ class OpenAIProvider(LLMProvider):
                 # print(f"Attempting to generate with OpenAI model: {self.model_name} (Attempt {attempt+1}/{max_retries})")
                 response = self.client.chat.completions.create(
                     model=self.model_name,
-                    messages=messages
+                    messages=messages,
+                    response_format={"type": "json_object"}
                 )
                 return response.choices[0].message.content
             except Exception as e:
@@ -500,7 +502,7 @@ Propose a CAMPAIGN of {count} DISTINCT sets of parameters to explore the design 
 These sets should be diverse enough to learn more about the landscape but focused on improving the best results so far.
 
 RESPONSE FORMAT:
-You must respond with valid JSON only.
+You must respond with valid JSON only. DO NOT include any conversational text, markdown blocks, preamble, or explanations outside the JSON object.
 {{
     "campaign_reasoning": "Explain the overall strategy for this batch...",
     "stop_optimization": false,  // Set to true ONLY if success criteria are met and converged
@@ -596,7 +598,7 @@ Analyze the history. Identify trends. Propose the NEXT set of parameters to test
 If you believe the current best result meets the success criteria and no further meaningful improvement is possible, you may choose to STOP the optimization.
 
 RESPONSE FORMAT:
-You must respond with valid JSON only.
+You must respond with valid JSON only. DO NOT include any conversational text, markdown blocks, preamble, or explanations outside the JSON object.
 {{
     "reasoning": "Explain why you chose these parameters...",
     "stop_optimization": false,  // Set to true ONLY if success criteria are met and converged
@@ -608,26 +610,14 @@ You must respond with valid JSON only.
 """
 
     def _extract_json(self, text):
-        # Remove ```json ... ``` if present
-        if "```" in text:
-            start = text.find("```json")
-            if start == -1:
-                start = text.find("```")
+        # Try to find the JSON object using string search for outermost curly braces.
+        # This handles cases where the LLM adds commentary outside the code block,
+        # forgets the code block entirely, or includes malformed markdown.
+        start_idx = text.find('{')
+        end_idx = text.rfind('}')
 
-            # find end
-            end = text.rfind("```")
-
-            if start != -1 and end != -1 and start != end:
-                # Adjust start to skip line
-                first_newline = text.find("\n", start)
-                if first_newline != -1 and first_newline < end:
-                    text = text[first_newline:end].strip()
-
-        # Try to find the JSON object using regex (outermost curly braces) if it looks like there's extra text
-        # This handles cases where the LLM adds commentary outside the code block or forgets the code block
-        match = re.search(r'\{.*\}', text, re.DOTALL)
-        if match:
-            text = match.group(0)
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            text = text[start_idx:end_idx + 1]
 
         # Cleaning: Escape backslashes that are not part of a valid escape sequence
         # This fixes "Invalid \escape" errors common in LLM output (e.g. file paths or LaTeX)
