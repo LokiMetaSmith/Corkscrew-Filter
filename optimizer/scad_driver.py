@@ -360,8 +360,8 @@ class ScadDriver:
                 # process() removes duplicates, unreferenced vertices, etc.
                 mesh.process()
 
-                # Explicitly remove degenerate faces (area check)
-                mesh.update_faces(mesh.nondegenerate_faces())
+                # Explicitly remove degenerate faces (area check). Use 1e-14 to support scaled-to-meters meshes
+                mesh.update_faces(mesh.nondegenerate_faces(area_threshold=1e-14))
 
                 if len(mesh.faces) == 0:
                     return None

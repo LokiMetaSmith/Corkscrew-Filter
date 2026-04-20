@@ -38,7 +38,13 @@ The core mechanism of the corkscrew filter is **inertial separation**. As fluid 
 ### 1. Install Dependencies
 
 *   **Node.js**: Run `npm install` in the root directory to install geometry generation tools (`openscad-wasm`).
-*   **Python**: Run `pip install -r optimizer/requirements.txt` to install the optimization and testing framework.
+*   **Python**:
+    It is highly recommended to use a virtual environment. The `start_optimization.sh` script handles this automatically (creating `.venv`). If installing manually:
+    ```bash
+    python3 -m venv .venv
+    source .venv/bin/activate  # On Windows, use `.venv\Scripts\activate`
+    pip install -r optimizer/requirements.txt
+    ```
 
 ### 2. Generating the 3D Models (OpenSCAD)
 

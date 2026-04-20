@@ -8,6 +8,7 @@ import hashlib
 import sys
 import uuid
 import yaml
+from dotenv import load_dotenv
 from scad_driver import ScadDriver
 from foam_driver import FoamDriver
 from llm_agent import LLMAgent
@@ -32,6 +33,7 @@ def get_params_hash(params):
     return hashlib.md5(s.encode('utf-8')).hexdigest()
 
 def main():
+    load_dotenv()
     parser = argparse.ArgumentParser(description="Generative AI Optimizer for Config-Driven Workflows")
     parser.add_argument("config_file", type=str, help="Path to the problem definition YAML file")
     parser.add_argument("--iterations", type=str, default="5", help="Number of iterations (int), or 'inf'/'infinite'/-1 for infinite loop")
@@ -39,6 +41,7 @@ def main():
     parser.add_argument("--output-stl", type=str, default="corkscrew_fluid.stl", help="Output STL filename (for OpenFOAM usage)")
     parser.add_argument("--dry-run", action="store_true", help="Skip actual OpenFOAM execution (mocks everything)")
     parser.add_argument("--skip-cfd", action="store_true", help="Generate geometry but skip CFD simulation")
+    parser.add_argument("--dry-mesh", action="store_true", help="Run geometry generation and meshing, evaluate mesh quality, but skip CFD simulation")
     parser.add_argument("--reuse-mesh", action="store_true", help="Reuse existing mesh (skips geometry generation and meshing)")
     parser.add_argument("--container-engine", type=str, default="auto", choices=["auto", "podman", "docker"], help="Force specific container engine")
     parser.add_argument("--cpus", type=int, default=1, help="Number of CPUs to use for parallel execution (default: 1)")
@@ -46,6 +49,7 @@ def main():
     parser.add_argument("--batch-size", type=int, default=5, help="Number of parameter sets to generate per LLM call")
     parser.add_argument("--no-cleanup", action="store_true", help="Disable cleanup of artifacts (STLs, images) for non-top runs")
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output (e.g. error logs)")
+    parser.add_argument("--debug", action="store_true", help="Run CFD inside a RAM disk to save disk wear and preserve all logs")
     parser.add_argument("--parallel-workers", type=int, default=0, help="Number of parallel worker processes to spawn (0 = sequential)")
     parser.add_argument("--params-file", type=str, help="Path to a SCAD parameter file to use as the base configuration (overrides defaults)")
     parser.add_argument("--turbulence", type=str, default="laminar", help="Turbulence model to use (default: laminar, can be kOmegaSST, RNGkEpsilon, etc.)")
@@ -79,7 +83,7 @@ def main():
 
     # Initialize components
     scad = ScadDriver(scad_file, fluid_volume_module=fluid_volume_module)
-    foam = FoamDriver(args.case_dir, config=config, container_engine=args.container_engine, num_processors=args.cpus, verbose=args.verbose)
+    foam = FoamDriver(args.case_dir, config=config, container_engine=args.container_engine, num_processors=args.cpus, verbose=args.verbose, debug=args.debug)
 
     # Handle --no-llm logic
     if args.no_llm and "GEMINI_API_KEY" in os.environ:
@@ -298,12 +302,14 @@ def main():
                 output_stl_name=args.output_stl,
                 dry_run=args.dry_run,
                 skip_cfd=args.skip_cfd,
+                dry_mesh=args.dry_mesh,
                 iteration=i,
                 reuse_mesh=args.reuse_mesh,
                 output_prefix=output_prefix,
                 verbose=args.verbose,
                 params_file=args.params_file,
-                turbulence=args.turbulence
+                turbulence=args.turbulence,
+                debug=args.debug
             )
 
             print(f"Result metrics: {metrics}")
@@ -360,6 +366,9 @@ def main():
                     store.clean_artifacts(top_runs)
 
             i += 1
+
+    # Cleanup the driver RAM disk when loop is finished
+    foam.cleanup_ram_disk()
 
     print("\nOptimization loop finished.")
 

@@ -1,0 +1,91 @@
+        content = re.sub(r"^\s*div\(phi,omega\).*?;[ \t]*\r?\n", "", content, flags=re.MULTILINE)
+        content = re.sub(r"^\s*div\(phi,R\).*?;[ \t]*\r?\n", "", content, flags=re.MULTILINE)
+
+        # Adaptive fvSchemes based on mesh classification
+        # Adjust limited correctors to prevent SIGFPEs in snGrad and laplacian calculations
+        if mesh_class == 'good':
+            content = re.sub(r"(snGradSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>limited corrected 0.7;", content)
+            content = re.sub(r"(laplacianSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>Gauss linear limited corrected 0.7;", content)
+        elif mesh_class == 'marginal':
+            content = re.sub(r"(snGradSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>limited corrected 0.5;", content)
+            content = re.sub(r"(laplacianSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>Gauss linear limited corrected 0.5;", content)
+        else: # 'bad'
+            content = re.sub(r"(snGradSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>limited corrected 0.2;", content)
+            content = re.sub(r"(laplacianSchemes\s*\{[^}]*?default\s+).*?;", r"\g<1>Gauss linear limited corrected 0.2;", content)
+
+            # Use careful replacement to prevent stripping structure
+            grad_schemes_pattern = re.compile(r"(gradSchemes\s*\{[^}]*?default\s+)[^;]+;")
+            if grad_schemes_pattern.search(content):
+                content = grad_schemes_pattern.sub(r"\g<1>cellLimited Gauss linear 0.5;", content)
+
+        if turbulence == "laminar":
+            # Switch to upwind for U to ensure stability on coarse mesh without turbulent viscosity
+            if "divSchemes" in content:
+                content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,U)      bounded Gauss upwind;", content, count=1)
+
+        elif turbulence == "RNGkEpsilon":
+            # Upwind U to ensure stability on coarse/scaled meshes with turbulence enabled
+            if "divSchemes" in content:
+                content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,U)      bounded Gauss upwind;\n    div(phi,k)      bounded Gauss upwind;\n    div(phi,epsilon) bounded Gauss upwind;", content, count=1)
+
+        elif turbulence == "kOmegaSST" or turbulence == "kOmegaSST_disabled":
+            if "divSchemes" in content:
+                content = re.sub(r"(divSchemes\s*\{)", r"\1\n    div(phi,U)      bounded Gauss upwind;\n    div(phi,k)      bounded Gauss upwind;\n    div(phi,omega)  bounded Gauss upwind;", content, count=1)
+
+        with open(target_path, 'w', newline='\n') as f:
+            # Clean up empty lines created by regex sub and enforce Unix line endings
+            cleaned = "\n".join([s for s in content.splitlines() if s.strip()])
+            f.write(cleaned + "\n")
+
+        # If we had to synthesize the file from scratch because template was corrupted, save it
+        if not os.path.exists(template_path):
+            shutil.copy2(target_path, template_path)
+
+        return turbulence
+
+    def _update_fvSolution(self, turbulence, cfd_settings=None, relaxation_override=None):
+>>>>>>> origin/main
+        import shutil
+        template_path = os.path.join(self.case_dir, "system", "fvSolution.template")
+        target_path = os.path.join(self.case_dir, "system", "fvSolution")
+
+        default_base_template = """/*--------------------------------*- C++ -*----------------------------------*\\
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSolution;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+solvers
+{
+    p
+    {
+        solver          PCG;
+        preconditioner  DIC;
+        tolerance       1e-6;
+        relTol          0.01;
+    }
+
+    U
+    {
+        solver          smoothSolver;
+        smoother        symGaussSeidel;
+        tolerance       1e-6;
+        relTol          0.1;
+    }
+
+    k
+    {
+        solver          smoothSolver;
+        smoother        symGaussSeidel;
+        tolerance       1e-6;
+        relTol          0.1;

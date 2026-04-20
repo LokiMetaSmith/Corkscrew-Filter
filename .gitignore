@@ -40,3 +40,5 @@ corkscrewFilter/system/fvSolution
 
 # Ignore generated particle tracking configuration
 corkscrewFilter/constant/kinematicCloudProperties
+corkscrewFilter/constant/turbulenceProperties
+.pip_install.log

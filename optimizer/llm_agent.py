@@ -5,7 +5,12 @@ import random
 import mimetypes
 import time
 import base64
+import urllib.request
+import urllib.error
+from dotenv import load_dotenv
 from typing import Dict, List, Any, Union, Tuple
+
+load_dotenv()
 
 # Attempt imports for providers
 try:
@@ -121,6 +126,64 @@ class GoogleGenAIProvider(LLMProvider):
         return models
 
 
+class OllamaProvider(LLMProvider):
+    def __init__(self, host: str = "http://localhost:11434", model_name: str = "qwen3:14b"):
+        self.host = host.rstrip('/')
+        self.model_name = model_name
+
+    def get_name(self) -> str:
+        return f"Ollama Local ({self.host}) - Model: {self.model_name}"
+
+    def _encode_image(self, image_path: str) -> str:
+        with open(image_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode('utf-8')
+
+    def generate(self, prompt: str, image_paths: List[str] = None) -> str:
+        url = f"{self.host}/api/generate"
+        payload = {
+            "model": self.model_name,
+            "prompt": prompt,
+            "stream": False,
+            "format": "json"
+        }
+
+        if image_paths:
+            images = []
+            for path in image_paths:
+                images.append(self._encode_image(path))
+            payload["images"] = images
+
+        data = json.dumps(payload).encode('utf-8')
+        req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'})
+
+        try:
+            with urllib.request.urlopen(req) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                return result.get("response", "")
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode('utf-8')
+            try:
+                error_json = json.loads(error_body)
+                error_message = error_json.get('error', error_body)
+            except json.JSONDecodeError:
+                error_message = error_body
+            raise Exception(f"Ollama HTTP error {e.code}: {error_message}")
+        except urllib.error.URLError as e:
+            raise Exception(f"Ollama connection error: {e}")
+
+    def list_models(self) -> List[str]:
+        url = f"{self.host}/api/tags"
+        models = []
+        try:
+            with urllib.request.urlopen(url) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                for model in result.get("models", []):
+                    models.append(model.get("name"))
+        except Exception as e:
+            print(f"Error listing Ollama models: {e}")
+        return models
+
+
 class OpenAIProvider(LLMProvider):
     def __init__(self, api_key: str, base_url: str = None, model_name: str = "gpt-4o"):
         if not openai:
@@ -174,7 +237,8 @@ class OpenAIProvider(LLMProvider):
                 # print(f"Attempting to generate with OpenAI model: {self.model_name} (Attempt {attempt+1}/{max_retries})")
                 response = self.client.chat.completions.create(
                     model=self.model_name,
-                    messages=messages
+                    messages=messages,
+                    response_format={"type": "json_object"}
                 )
                 return response.choices[0].message.content
             except Exception as e:
@@ -246,9 +310,23 @@ class LLMAgent:
         elif not openai and (openai_key or openai_base):
             print("Warning: OPENAI_API_KEY/BASE_URL present but openai lib missing.")
 
+        # 3. Ollama Local Setup
+        ollama_host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+        ollama_model = os.environ.get("OLLAMA_MODEL", "qwen3:14b")
+        try:
+            # Check if Ollama is running
+            req = urllib.request.Request(f"{ollama_host.rstrip('/')}/api/tags")
+            with urllib.request.urlopen(req, timeout=2) as response:
+                if response.status == 200:
+                    p = OllamaProvider(host=ollama_host, model_name=ollama_model)
+                    self.providers.append(p)
+                    # print(f"Registered provider: {p.get_name()}")
+        except Exception:
+            pass # Ollama not running or reachable, skip
+
         if not self.providers:
-            print("Warning: No LLM providers available (Missing Keys or Libraries). LLM features will be disabled.")
-            print("To enable, set GEMINI_API_KEY or OPENAI_API_KEY/OPENAI_BASE_URL.")
+            print("Warning: No LLM providers available (Missing Keys, Libraries, or Local Endpoint). LLM features will be disabled.")
+            print("To enable, set GEMINI_API_KEY, OPENAI_API_KEY, or start a local Ollama instance.")
 
     def _generate(self, prompt: str, image_paths: List[str] = None) -> str:
         """Iterates through providers until one succeeds."""
@@ -424,7 +502,7 @@ Propose a CAMPAIGN of {count} DISTINCT sets of parameters to explore the design 
 These sets should be diverse enough to learn more about the landscape but focused on improving the best results so far.
 
 RESPONSE FORMAT:
-You must respond with valid JSON only.
+You must respond with valid JSON only. DO NOT include any conversational text, markdown blocks, preamble, or explanations outside the JSON object.
 {{
     "campaign_reasoning": "Explain the overall strategy for this batch...",
     "stop_optimization": false,  // Set to true ONLY if success criteria are met and converged
@@ -520,7 +598,7 @@ Analyze the history. Identify trends. Propose the NEXT set of parameters to test
 If you believe the current best result meets the success criteria and no further meaningful improvement is possible, you may choose to STOP the optimization.
 
 RESPONSE FORMAT:
-You must respond with valid JSON only.
+You must respond with valid JSON only. DO NOT include any conversational text, markdown blocks, preamble, or explanations outside the JSON object.
 {{
     "reasoning": "Explain why you chose these parameters...",
     "stop_optimization": false,  // Set to true ONLY if success criteria are met and converged
@@ -532,26 +610,14 @@ You must respond with valid JSON only.
 """
 
     def _extract_json(self, text):
-        # Remove ```json ... ``` if present
-        if "```" in text:
-            start = text.find("```json")
-            if start == -1:
-                start = text.find("```")
+        # Try to find the JSON object using string search for outermost curly braces.
+        # This handles cases where the LLM adds commentary outside the code block,
+        # forgets the code block entirely, or includes malformed markdown.
+        start_idx = text.find('{')
+        end_idx = text.rfind('}')
 
-            # find end
-            end = text.rfind("```")
-
-            if start != -1 and end != -1 and start != end:
-                # Adjust start to skip line
-                first_newline = text.find("\n", start)
-                if first_newline != -1 and first_newline < end:
-                    text = text[first_newline:end].strip()
-
-        # Try to find the JSON object using regex (outermost curly braces) if it looks like there's extra text
-        # This handles cases where the LLM adds commentary outside the code block or forgets the code block
-        match = re.search(r'\{.*\}', text, re.DOTALL)
-        if match:
-            text = match.group(0)
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            text = text[start_idx:end_idx + 1]
 
         # Cleaning: Escape backslashes that are not part of a valid escape sequence
         # This fixes "Invalid \escape" errors common in LLM output (e.g. file paths or LaTeX)

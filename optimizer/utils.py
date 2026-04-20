@@ -7,6 +7,13 @@ import threading
 import json
 import shutil
 
+class ProcessAbortedError(Exception):
+    """Exception raised when a subprocess is aborted early due to a monitor callback."""
+    def __init__(self, message, output=""):
+        super().__init__(message)
+        self.message = message
+        self.output = output
+
 class Timer:
     def __init__(self, description=None):
         self.description = description
@@ -26,10 +33,12 @@ class Timer:
         if self.description:
             print(f"Finished {self.description} in {self.duration:.2f}s")
 
-def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processing", timeout=None):
+def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processing", timeout=None, monitor_callback=None, idle_timeout=None):
     """
     Runs a command, streaming output to a log file with timestamps, while showing a spinner on the console.
     Includes an optional timeout (in seconds) that will forcefully terminate the process.
+    monitor_callback: A function(line) -> bool. If it returns True, the process is aborted.
+    idle_timeout: If no output is received for this many seconds, the process is aborted.
     """
     # Ensure directory for log file exists
     log_dir = os.path.dirname(log_file_path)
@@ -71,6 +80,8 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
                 self.is_meshing = any("snappyHexMesh" in arg for arg in cmd)
                 self.current_phase = ""
                 self.phase_start_time = time.time()
+                self.last_log_time = time.time()
+                self.aborted_reason = None
 
         state = ProgressState()
 
@@ -87,13 +98,22 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
                 except Exception:
                     pass
 
+        captured_output = []
+
         # Thread function to read from stdout and write to log
-        def log_reader(proc, file_handle, state):
+        def log_reader(proc, file_handle, state, output_list):
             try:
                 for line in proc.stdout:
+                    state.last_log_time = time.time()
+                    output_list.append(line)
                     timestamp = datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S] ")
                     file_handle.write(f"{timestamp}{line}")
                     file_handle.flush()
+
+                    if monitor_callback and monitor_callback(line):
+                        state.aborted_reason = "Monitor callback requested abort."
+                        # The main thread will catch the state change and kill the process
+                        break
 
                     if state.is_openfoam:
                         m = re.match(r"^Time = ([\d\.]+)", line.strip())
@@ -128,7 +148,7 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
                 except ValueError:
                     pass
 
-        reader_thread = threading.Thread(target=log_reader, args=(process, log_f, state))
+        reader_thread = threading.Thread(target=log_reader, args=(process, log_f, state, captured_output))
         reader_thread.start()
 
         spinner = ["|", "/", "-", "\\"]
@@ -139,12 +159,28 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
         try:
             while process.poll() is None:
                 elapsed_wall = time.time() - state.start_wall_time
+
+                if state.aborted_reason:
+                    process.kill()
+                    reader_thread.join()
+                    sys.stdout.write(f"\nCommand aborted: {state.aborted_reason}\n")
+                    log_f.write(f"\n[ERROR] Command aborted: {state.aborted_reason}\n")
+                    raise ProcessAbortedError(state.aborted_reason, output="".join(captured_output))
+
                 if timeout and elapsed_wall > timeout:
                     process.kill()
                     reader_thread.join()
                     sys.stdout.write(f"\nCommand timed out after {timeout} seconds: {' '.join(cmd)}\n")
                     log_f.write(f"\n[ERROR] Command timed out after {timeout} seconds.\n")
                     raise subprocess.TimeoutExpired(cmd, timeout)
+
+                if idle_timeout and (time.time() - state.last_log_time) > idle_timeout:
+                    process.kill()
+                    reader_thread.join()
+                    reason = f"Command idled for >{idle_timeout} seconds."
+                    sys.stdout.write(f"\n{reason}\n")
+                    log_f.write(f"\n[ERROR] {reason}\n")
+                    raise ProcessAbortedError(reason, output="".join(captured_output))
 
                 output_str = f"{spinner[idx]} {description}..."
 
@@ -233,10 +269,14 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
             sys.stdout.write(f"\r{' ' * (term_width - 1)}\r")
             sys.stdout.flush()
 
+            full_output = "".join(captured_output)
+
             if process.returncode != 0:
                 # We don't print Error here to let caller handle it, but we can hint
                 # Caller usually catches CalledProcessError
-                raise subprocess.CalledProcessError(process.returncode, cmd)
+                raise subprocess.CalledProcessError(process.returncode, cmd, output=full_output)
+
+            return full_output
 
         except (Exception, KeyboardInterrupt) as e:
             # Catch all exceptions so we can safely kill the process and join the thread
@@ -248,7 +288,7 @@ def run_command_with_spinner(cmd, log_file_path, cwd=None, description="Processi
                 pass
             if isinstance(e, KeyboardInterrupt):
                 sys.stdout.write("\nProcess interrupted by user.\n")
-            elif not isinstance(e, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
+            elif not isinstance(e, (subprocess.CalledProcessError, subprocess.TimeoutExpired, ProcessAbortedError)):
                 sys.stdout.write(f"\nUnexpected error executing {' '.join(cmd)}: {e}\n")
             raise
 
@@ -310,3 +350,18 @@ def get_container_memory_gb(container_tool=None):
             print(f"Warning: Failed to query Docker memory: {e}")
 
     return mem_gb
+
+def safe_print(text: str):
+    """
+    Safely prints text containing emojis or special characters.
+    Gracefully degrades to the terminal encoding if it (like cp1252 on Windows)
+    does not support them, preventing UnicodeEncodeError crashes.
+    """
+    try:
+        encoding = sys.stdout.encoding or 'utf-8'
+        text.encode(encoding)
+        print(text)
+    except UnicodeEncodeError:
+        # Strip characters that can't be encoded
+        safe_text = text.encode(encoding, 'ignore').decode(encoding)
+        print(safe_text)

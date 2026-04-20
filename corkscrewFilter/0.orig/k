@@ -1,61 +1,62 @@
-/*--------------------------------*- C++ -*----------------------------------*\\
-| =========                 |                                                 |
-| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\    /   O peration     | Version:  v2512                                 |
-|   \\  /    A nd           | Website:  www.openfoam.com                      |
-|    \\/     M anipulation  |                                                 |
-\\*---------------------------------------------------------------------------*/
+/*--------------------------------*- C++ -*----------------------------------*\
+| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \    /   O peration     | Version:  v2512                                 |
+|   \  /    A nd           | Website:  www.openfoam.com                      |
+|    \/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
 FoamFile
 {
     version     2.0;
     format      ascii;
     class       volScalarField;
+    location    "0";
     object      k;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 dimensions      [0 2 -2 0 0 0 0];
 
-internalField   uniform 0.09375; // 5% turbulence intensity (U=5m/s)
+internalField   uniform 0.375;
 
 boundaryField
 {
     inlet
     {
-        type            turbulentIntensityKineticEnergyInlet;
-        intensity       0.05;
-        value           uniform 0.09375;
+        type            fixedValue;
+        value           uniform 0.375;
     }
 
-    outlet
+    clean_outlet
     {
-        type            zeroGradient;
+        type            inletOutlet;
+        inletValue      uniform 1e-6;
+        value           uniform 1e-6;
     }
 
-    walls
+    dust_outlet
     {
-        type            kqRWallFunction;
-        value           uniform 0.09375;
+        type            inletOutlet;
+        inletValue      uniform 1e-6;
+        value           uniform 1e-6;
     }
 
     corkscrew
     {
         type            kqRWallFunction;
-        value           uniform 0.09375;
+        value           $internalField;
     }
 
-    clean_outlet
+    walls
     {
-        type            calculated;
-        value           uniform 0;
+        type            kqRWallFunction;
+        value           $internalField;
     }
 
-    dust_outlet
+    ".*"
     {
-        type            calculated;
-        value           uniform 0;
+        type            inletOutlet;
+        inletValue      uniform 1e-6;
+        value           uniform 1e-6;
     }
 
 }
-
-// ************************************************************************* //

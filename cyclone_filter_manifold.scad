@@ -16,7 +16,7 @@ dust_outlet_diameter = 25.0;
 wall_thickness = 2.0;
 
 // High resolution for rendering
-$fn = is_undef(high_res_fn) ? 60 : high_res_fn;
+$fn = is_undef(high_res_fn) ? 120 : high_res_fn;
 
 // Simulation flags
 GENERATE_CFD_VOLUME = is_undef(GENERATE_CFD_VOLUME) ? false : GENERATE_CFD_VOLUME;
@@ -74,8 +74,22 @@ module VortexFinder(solid = true) {
         if (solid) {
              cylinder(r=vortex_finder_radius, h=vortex_finder_length + 25, center=false);
         } else {
-             cylinder(r=vortex_finder_radius - wall_thickness, h=vortex_finder_length + 26, center=false); // Inner hole
+             // Extend slightly downwards to overlap with main fluid, ensuring explicit union
+             translate([0, 0, -1])
+             cylinder(r=vortex_finder_radius - wall_thickness, h=vortex_finder_length + 27, center=false); // Inner hole
         }
+    }
+}
+
+module ActualFluidVolume() {
+    union() {
+        difference() {
+            CycloneFluidVolume();
+            // Subtract the vortex finder pipe that protrudes *into* the fluid
+            VortexFinder(solid=true);
+        }
+        // Add the fluid inside the vortex finder which goes out the top
+        VortexFinder(solid=false);
     }
 }
 
@@ -103,11 +117,8 @@ module CycloneSolid() {
             cylinder(r=cyclone_radius + wall_thickness, h=wall_thickness, center=false);
         }
 
-        // Subtract inner fluid volume
-        CycloneFluidVolume();
-
-        // Subtract vortex finder core (the hole to the outside)
-        VortexFinder(solid=false);
+        // Subtract actual fluid volume
+        ActualFluidVolume();
     }
 }
 
@@ -115,12 +126,7 @@ module GeneratePart() {
     if (part_to_generate == "solid") {
         CycloneSolid();
     } else if (part_to_generate == "fluid_volume" || part_to_generate == "corkscrew_fluid") { // alias for compatibility
-        // The CFD simulation requires the inverse
-        difference() {
-            CycloneFluidVolume();
-            // Subtract the vortex finder pipe that protrudes *into* the fluid
-            VortexFinder(solid=true);
-        }
+        ActualFluidVolume();
     } else if (part_to_generate == "inlet") {
         // A patch at the end of the inlet pipe
         translate([cyclone_radius - inlet_width/2, cyclone_diameter, cylinder_height - inlet_height/2])
@@ -138,10 +144,7 @@ module GeneratePart() {
         // For snappyHexMesh, we often just provide the solid boundaries, but `corkscrewFilter`
         // workflow generates an explicit `wall.stl`.
         difference() {
-             CycloneFluidVolume();
-             // Subtract the vortex finder pipe that protrudes *into* the fluid
-             VortexFinder(solid=true);
-
+             ActualFluidVolume();
              // Subtracting a bit of the caps so they aren't part of the wall
              // This is an approximation for STL generation; OpenFOAM topoSet handles exact boundaries usually
         }

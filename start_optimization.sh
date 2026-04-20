@@ -32,11 +32,12 @@ usage() {
     echo "  --batch-size <N>       Number of parameter sets to generate per LLM call (default: 5)"
     echo "  --no-cleanup           Disable cleanup of artifacts for non-top runs"
     echo "  --verbose, -v          Enable verbose output"
+    echo "  --debug                Run CFD inside a RAM disk to save disk wear and preserve all logs"
     echo "  --params-file <file>   Path to a SCAD parameter file to override defaults"
     echo "  -h, --help             Show this help message and exit"
     echo ""
     echo "Example:"
-    echo "  ./start_optimization.sh configs/corkscrew_config.yaml --iterations 10 --cpus 4 --verbose"
+    echo "  ./start_optimization.sh configs/corkscrew_config.yaml --iterations 10 --cpus 4 --verbose --debug"
 }
 
 # Check for Help Flag
@@ -83,12 +84,41 @@ if [ "$HAS_NODE" = false ]; then
      print_warning "Node.js not found. Visualization (PNG) generation will be disabled."
 fi
 
-# 2. Check API Key
-if [ -z "$GEMINI_API_KEY" ] && [ -z "$OPENAI_API_KEY" ] && [ -z "$OPENAI_BASE_URL" ]; then
+# 2. Check API Key and Endpoints
+if [ -f ".env" ]; then
+    echo "Loading variables from .env file..."
+    set -a
+    source .env
+    set +a
+fi
+
+LLM_DETECTED=false
+LLM_INFO=""
+
+if [ -n "$GEMINI_API_KEY" ]; then
+    LLM_DETECTED=true
+    LLM_INFO="$LLM_INFO Gemini"
+fi
+
+if [ -n "$OPENAI_API_KEY" ] || [ -n "$OPENAI_BASE_URL" ]; then
+    LLM_DETECTED=true
+    LLM_INFO="$LLM_INFO OpenAI-Compatible"
+fi
+
+# Check for local Ollama
+if command -v curl &> /dev/null && curl -s -f http://localhost:11434/api/tags > /dev/null 2>&1 || [ -n "$OLLAMA_HOST" ]; then
+    LLM_DETECTED=true
+    LLM_INFO="$LLM_INFO Ollama"
+fi
+
+if [ "$LLM_DETECTED" = true ]; then
+    echo "Detected LLM Providers:$LLM_INFO"
+else
     if [[ "$*" == *"--no-llm"* ]] || [ "$NON_INTERACTIVE" == "1" ]; then
-        print_warning "No LLM API Key found. Proceeding in dry-run/random mode."
+        print_warning "No LLM API Key or local endpoint found. Proceeding in dry-run/random mode."
     else
-        print_warning "No LLM API Key found (GEMINI_API_KEY, OPENAI_API_KEY, or OPENAI_BASE_URL)."
+        print_warning "No LLM API Key or local endpoint found."
+        echo "Please set GEMINI_API_KEY, OPENAI_API_KEY, OPENAI_BASE_URL, or start a local Ollama instance."
         echo "The optimizer will run in 'dry-run' or 'random' mode without LLM guidance."
         read -p "Do you want to continue without LLM? (y/n) " -n 1 -r
         echo

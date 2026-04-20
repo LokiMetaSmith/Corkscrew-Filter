@@ -15,6 +15,8 @@ class TestFoamMetrics(unittest.TestCase):
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
         self.driver = FoamDriver(self.test_dir)
+        os.makedirs(os.path.dirname(self.driver.log_file), exist_ok=True)
+        os.makedirs(os.path.dirname(self.driver.case_dir), exist_ok=True)
         # Create dummy log file
         with open(self.driver.log_file, 'w') as f:
             f.write("Dummy Log\n")
@@ -25,7 +27,7 @@ class TestFoamMetrics(unittest.TestCase):
     def test_parse_particle_collector(self):
         # Setup directory structure for patchPostProcessing
         # Path: case/postProcessing/kinematicCloud/patchPostProcessing1/*/patchPostProcessing1.dat
-        pp_dir = os.path.join(self.test_dir, "postProcessing", "kinematicCloud", "patchPostProcessing1", "0")
+        pp_dir = os.path.join(self.driver.case_dir, "postProcessing", "kinematicCloud", "patchPostProcessing1", "0")
         os.makedirs(pp_dir)
 
         dat_file = os.path.join(pp_dir, "patchPostProcessing1.dat")
