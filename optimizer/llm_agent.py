@@ -526,15 +526,23 @@ You must respond with valid JSON only. DO NOT include any conversational text, m
                 print("LLM signaled to STOP optimization.")
                 return [{"stop_optimization": True}]
 
-            if "jobs" in data and isinstance(data["jobs"], list):
-                # Extract just the parameters from each job
-                params_list = []
-                for job in data["jobs"]:
-                    if "parameters" in job:
-                        params_list.append(job["parameters"])
+            params_list = []
+            if "jobs" in data:
+                jobs = data["jobs"]
+                if isinstance(jobs, dict):
+                    jobs = [jobs]  # Handle case where LLM returns a single object instead of a list
+                if isinstance(jobs, list):
+                    for job in jobs:
+                        if "parameters" in job:
+                            params_list.append(job["parameters"])
+            elif "parameters" in data:
+                # Handle case where LLM returns the format for suggest_parameters
+                params_list.append(data["parameters"])
+
+            if params_list:
                 return params_list
             else:
-                print("LLM response did not contain valid 'jobs' list.")
+                print("LLM response did not contain valid 'jobs' list or 'parameters'.")
                 return []
         except Exception as e:
             print(f"LLM campaign generation failed: {e}")
