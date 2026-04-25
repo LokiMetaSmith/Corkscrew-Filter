@@ -9,6 +9,7 @@ import urllib.request
 import urllib.error
 from dotenv import load_dotenv
 from typing import Dict, List, Any, Union, Tuple
+from parameter_validator import validate_parameters
 
 load_dotenv()
 
@@ -364,25 +365,33 @@ class LLMAgent:
         This provides a basic random search strategy using the YAML definitions.
         """
         print("Using random search strategy...")
-        new_params = current_params.copy()
 
-        for param_name, param_info in parameters_def.items():
-            if param_info.get('constant', False):
-                continue
+        max_attempts = 100
+        for _ in range(max_attempts):
+            new_params = current_params.copy()
 
-            param_type = param_info.get('type', 'float')
-            p_min = param_info.get('min')
-            p_max = param_info.get('max')
-            default = param_info.get('default')
+            for param_name, param_info in parameters_def.items():
+                if param_info.get('constant', False):
+                    continue
 
-            if p_min is not None and p_max is not None:
-                if param_type == 'int':
-                    new_params[param_name] = random.randint(int(p_min), int(p_max))
-                elif param_type == 'float':
-                    new_params[param_name] = round(random.uniform(float(p_min), float(p_max)), 2)
-            elif default is not None:
-                new_params[param_name] = default
+                param_type = param_info.get('type', 'float')
+                p_min = param_info.get('min')
+                p_max = param_info.get('max')
+                default = param_info.get('default')
 
+                if p_min is not None and p_max is not None:
+                    if param_type == 'int':
+                        new_params[param_name] = random.randint(int(p_min), int(p_max))
+                    elif param_type == 'float':
+                        new_params[param_name] = round(random.uniform(float(p_min), float(p_max)), 2)
+                elif default is not None:
+                    new_params[param_name] = default
+
+            is_valid, _ = validate_parameters(new_params)
+            if is_valid:
+                return new_params
+
+        print("Warning: Could not generate valid random parameters after 100 attempts.")
         return new_params
 
     def suggest_parameters(self, current_params: Dict[str, Any], metrics: Dict[str, Any], constraints: str = "", image_paths: List[str] = None, history: List[Dict] = None) -> Union[Dict[str, Any], Tuple[Dict[str, Any], bool]]:
