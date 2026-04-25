@@ -362,15 +362,38 @@ class LLMAgent:
     def _generate_random_parameters(self, current_params: Dict[str, Any], parameters_def: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generates random parameters within valid ranges when LLM is unavailable.
-        This provides a basic random search strategy using the YAML definitions.
+        This provides a basic random search strategy using the YAML definitions,
+        with dynamic limit adjustment based on known geometric constraints.
         """
         print("Using random search strategy...")
+
+        # Enforce evaluation order for dependencies
+        dependency_order = [
+            "tube_od_mm",
+            "tube_wall_mm",
+            "cyclone_diameter",
+            "vortex_finder_diameter",
+            "inlet_width",
+            "helix_path_radius_mm",
+            "helix_profile_radius_mm",
+            "helix_void_profile_radius_mm",
+            "slit_axial_length_mm",
+            "slit_chamfer_height"
+        ]
+
+        ordered_params = []
+        for key in dependency_order:
+            if key in parameters_def:
+                ordered_params.append((key, parameters_def[key]))
+        for key, info in parameters_def.items():
+            if key not in dependency_order:
+                ordered_params.append((key, info))
 
         max_attempts = 100
         for _ in range(max_attempts):
             new_params = current_params.copy()
 
-            for param_name, param_info in parameters_def.items():
+            for param_name, param_info in ordered_params:
                 if param_info.get('constant', False):
                     continue
 
@@ -380,10 +403,38 @@ class LLMAgent:
                 default = param_info.get('default')
 
                 if p_min is not None and p_max is not None:
+                    # Dynamic Limit Adjustments
+                    current_p_max = float(p_max)
+                    current_p_min = float(p_min)
+
+                    if param_name == "helix_profile_radius_mm" and "helix_path_radius_mm" in new_params:
+                        # profile < path
+                        current_p_max = min(current_p_max, float(new_params["helix_path_radius_mm"]) - 0.01)
+
+                    elif param_name == "helix_void_profile_radius_mm" and "helix_profile_radius_mm" in new_params and "helix_path_radius_mm" in new_params:
+                        # void + 0.1 < profile, void + 0.1 < path
+                        max_allowed = min(float(new_params["helix_profile_radius_mm"]), float(new_params["helix_path_radius_mm"])) - 0.11
+                        current_p_max = min(current_p_max, max_allowed)
+
+                    elif param_name == "vortex_finder_diameter" and "cyclone_diameter" in new_params:
+                        current_p_max = min(current_p_max, float(new_params["cyclone_diameter"]) - 0.01)
+
+                    elif param_name == "inlet_width" and "cyclone_diameter" in new_params and "vortex_finder_diameter" in new_params:
+                        # (cyclone_d / 2.0) - inlet_w > vf_d / 2.0  => inlet_w < (cyclone_d - vf_d)/2.0
+                        max_allowed = (float(new_params["cyclone_diameter"]) - float(new_params["vortex_finder_diameter"])) / 2.0 - 0.01
+                        current_p_max = min(current_p_max, max_allowed)
+
+                    elif param_name == "slit_chamfer_height" and "slit_axial_length_mm" in new_params:
+                        current_p_max = min(current_p_max, float(new_params["slit_axial_length_mm"]) - 0.01)
+
+                    # Handle inverted constraints gracefully
+                    if current_p_min > current_p_max:
+                        current_p_max = current_p_min
+
                     if param_type == 'int':
-                        new_params[param_name] = random.randint(int(p_min), int(p_max))
+                        new_params[param_name] = random.randint(int(current_p_min), int(current_p_max))
                     elif param_type == 'float':
-                        new_params[param_name] = round(random.uniform(float(p_min), float(p_max)), 2)
+                        new_params[param_name] = round(random.uniform(current_p_min, current_p_max), 2)
                 elif default is not None:
                     new_params[param_name] = default
 
