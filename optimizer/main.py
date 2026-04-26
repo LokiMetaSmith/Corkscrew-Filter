@@ -120,6 +120,8 @@ def main():
         for param_name, param_def in config.get('geometry', {}).get('parameters', {}).items():
             if 'default' in param_def:
                 initial_params[param_name] = param_def['default']
+            elif param_def.get('constant', False) and 'value' in param_def:
+                initial_params[param_name] = param_def['value']
 
     # Extract constraints for the LLM
     constraints_str = config.get('optimization', {}).get('constraints', '')
