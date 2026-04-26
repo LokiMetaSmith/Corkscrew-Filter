@@ -50,7 +50,7 @@ castellatedMeshControls
 
     refinementSurfaces
     {
-        {% for geom in geometries %}
+        {% for geom in unique_geometries %}
         {{ geom.name }}
         {
             {% if geom.name == "corkscrew" %}

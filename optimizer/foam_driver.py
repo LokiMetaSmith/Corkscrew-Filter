@@ -1908,6 +1908,9 @@ cloudFunctions
         physics_boundaries = self.config.get('physics', {}).get('boundaries', {})
 
         geometries = []
+        unique_geometries = []
+        seen_patch_names = set()
+
         for key, filename in stl_assets.items():
             patch_name = "corkscrew"
             if key in physics_boundaries:
@@ -1923,9 +1926,13 @@ cloudFunctions
                 "filename": filename,
                 "name": patch_name,
                 "level": "(3 4)" if patch_name == "corkscrew" else "(1 1)",
-                "patch_info": key in physics_boundaries or key in ["inlet", "outlet"]
+                "patch_info": key in physics_boundaries or key in ["inlet", "outlet", "wall", "fluid"]
             }
             geometries.append(geom)
+
+            if patch_name not in seen_patch_names:
+                unique_geometries.append(geom)
+                seen_patch_names.add(patch_name)
 
         template_path = os.path.join(self.case_dir, "system", "snappyHexMeshDict.template")
         shm_path = os.path.join(self.case_dir, "system", "snappyHexMeshDict")
@@ -1963,6 +1970,7 @@ cloudFunctions
         content = template.render(
             add_layers=add_layers,
             geometries=geometries,
+            unique_geometries=unique_geometries,
             location_in_mesh=location_in_mesh
         )
 
