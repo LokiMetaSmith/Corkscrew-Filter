@@ -1,0 +1,17 @@
+<<<<<<< SEARCH
+    else:
+        # Extract default parameters from YAML config
+        initial_params = {}
+        for param_name, param_def in config.get('geometry', {}).get('parameters', {}).items():
+            if 'default' in param_def:
+                initial_params[param_name] = param_def['default']
+=======
+    else:
+        # Extract default parameters from YAML config
+        initial_params = {}
+        for param_name, param_def in config.get('geometry', {}).get('parameters', {}).items():
+            if 'default' in param_def:
+                initial_params[param_name] = param_def['default']
+            elif param_def.get('constant', False) and 'value' in param_def:
+                initial_params[param_name] = param_def['value']
+>>>>>>> REPLACE

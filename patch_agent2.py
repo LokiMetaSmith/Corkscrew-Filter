@@ -1,0 +1,23 @@
+import re
+
+with open('optimizer/llm_agent.py', 'r') as f:
+    content = f.read()
+
+patch = """<<<<<<< SEARCH
+            # First, initialize any missing or malformed parameters with defaults/constants
+            for param_name, param_info in ordered_params:
+                if param_name not in new_params or isinstance(new_params[param_name], dict):
+                    if 'default' in param_info:
+                        new_params[param_name] = param_info['default']
+=======
+            # First, initialize any missing or malformed parameters with defaults/constants
+            for param_name, param_info in ordered_params:
+                if param_name not in new_params or isinstance(new_params[param_name], dict):
+                    if 'default' in param_info:
+                        new_params[param_name] = param_info['default']
+                    elif param_info.get('constant', False) and 'value' in param_info:
+                        new_params[param_name] = param_info['value']
+>>>>>>> REPLACE"""
+
+with open('patch_agent2.diff', 'w') as f:
+    f.write(patch)
