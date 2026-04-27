@@ -83,7 +83,7 @@ if (!$podmanInstalled) {
 # 3. Try Safe Restart First
 Write-Host "Attempting safe restart of Podman machine..." -ForegroundColor Yellow
 if (Get-Command "podman" -ErrorAction SilentlyContinue) {
-    podman machine stop 2>$null
+    podman machine stop *>$null
     wsl --shutdown
     Start-Sleep -Seconds 3
     podman machine start
@@ -110,22 +110,22 @@ if ($lingeringProcesses) {
 # 5. Stop and remove existing Podman machines
 Write-Host "Cleaning up existing Podman machines..." -ForegroundColor Yellow
 if (Get-Command "podman" -ErrorAction SilentlyContinue) {
-    $machines = podman machine list --format "{{.Name}}" 2>$null
+    $machines = podman machine list --format "{{.Name}}" 2>&1 | Where-Object { $_ -is [String] }
     if ($LASTEXITCODE -eq 0 -and $machines) {
         foreach ($machine in $machines) {
             $machineName = $machine.Trim()
             if (![string]::IsNullOrEmpty($machineName)) {
                 Write-Host "Removing Podman machine: $machineName"
-                podman machine stop $machineName 2>$null
-                podman machine rm -f $machineName 2>$null
+                podman machine stop $machineName *>$null
+                podman machine rm -f $machineName *>$null
             }
         }
     } else {
         Write-Host "Attempting to remove default Podman machines..."
-        podman machine stop default 2>$null
-        podman machine rm -f default 2>$null
-        podman machine stop podman-machine-default 2>$null
-        podman machine rm -f podman-machine-default 2>$null
+        podman machine stop default *>$null
+        podman machine rm -f default *>$null
+        podman machine stop podman-machine-default *>$null
+        podman machine rm -f podman-machine-default *>$null
     }
 }
 
@@ -137,7 +137,7 @@ Start-Sleep -Seconds 3
 # Wait for WSL to fully shut down to prevent win-sshproxy.exe expected pipe failures
 $wslRetryCount = 0
 while ($wslRetryCount -lt 5) {
-    $runningDistros = wsl --list --running --quiet 2>$null
+    $runningDistros = wsl --list --running --quiet 2>&1 | Where-Object { $_ -is [String] }
     if ([string]::IsNullOrWhiteSpace($runningDistros)) {
         break
     }
@@ -153,7 +153,7 @@ Write-Host "Checking for lingering Podman WSL distributions..." -ForegroundColor
 wsl --unregister podman-machine-default >$null 2>&1
 wsl --unregister podman-machine-default-root >$null 2>&1
 
-$wslList = wsl --list --quiet 2>$null
+$wslList = wsl --list --quiet 2>&1 | Where-Object { $_ -is [String] }
 if ($wslList) {
     # Remove carriage returns and null characters (UTF-16 encoding artifacts)
     $distros = $wslList -split "`n" | ForEach-Object { $_ -replace "`r", "" -replace "`0", "" } | Where-Object { $_ -ne "" }
@@ -194,20 +194,20 @@ if (Test-Path $configMachineConf) {
 # 10. Forcefully clean lingering Podman system connections
 Write-Host "Cleaning up lingering Podman system connections..." -ForegroundColor Yellow
 if (Get-Command "podman" -ErrorAction SilentlyContinue) {
-    $connections = podman system connection list --format "{{.Name}}" 2>$null
+    $connections = podman system connection list --format "{{.Name}}" 2>&1 | Where-Object { $_ -is [String] }
     if ($LASTEXITCODE -eq 0 -and $connections) {
         foreach ($conn in $connections) {
             $connName = $conn.Trim()
             if (![string]::IsNullOrEmpty($connName)) {
                 Write-Host "Removing lingering Podman connection: $connName"
-                podman system connection rm $connName 2>$null
+                podman system connection rm $connName *>$null
             }
         }
     } else {
         # Fallback to defaults if list fails
-        podman system connection rm default 2>$null
-        podman system connection rm podman-machine-default 2>$null
-        podman system connection rm podman-machine-default-root 2>$null
+        podman system connection rm default *>$null
+        podman system connection rm podman-machine-default *>$null
+        podman system connection rm podman-machine-default-root *>$null
     }
 }
 
