@@ -3,7 +3,7 @@ import sys
 import yaml
 import argparse
 
-sys.path.append(os.path.join(os.path.dirname(__file__), 'optimizer'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'optimizer'))
 from physics_factory import PhysicsEngineFactory
 from scad_driver import ScadDriver
 from simulation_runner import run_simulation

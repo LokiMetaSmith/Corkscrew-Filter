@@ -1,6 +1,8 @@
 import pytest
 import tempfile
 import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'optimizer'))
 from physics_factory import PhysicsEngineFactory
 from foam_driver import FoamDriver
 from em_driver import OpenEMSDriver
