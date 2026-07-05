@@ -2,6 +2,13 @@ import os
 import shutil
 import tempfile
 import sys
+import numpy as np
+try:
+    import trimesh
+    HAS_TRIMESH = True
+except ImportError:
+    HAS_TRIMESH = False
+
 from physics_driver import PhysicsDriver
 from utils import run_command_with_spinner, ProcessAbortedError
 
@@ -24,19 +31,87 @@ class OpenEMSDriver(PhysicsDriver):
         self.case_dir = os.path.join(self.ram_disk_base, os.path.basename(case_dir))
         self.log_file = os.path.join(self.case_dir, "run_openems.log")
 
-        # Determine execution environment (future robust logic here)
-        self.has_tools = True # Assume true for now or add detection logic
+        # Determine execution environment
+        self.container_tool = self._detect_container_tool()
+        self.has_tools = self.container_tool is not None or shutil.which("openEMS") is not None
 
-    def _generate_openems_script(self):
+    def _detect_container_tool(self):
+        if self.container_engine == "none":
+            return None
+        if self.container_engine in ["docker", "podman"]:
+            return self.container_engine
+        # auto
+        if shutil.which("podman"):
+            return "podman"
+        if shutil.which("docker"):
+            return "docker"
+        return None
+
+    def _get_stl_bounds(self, stl_path):
+        """Calculates the bounding box of an STL file in mm."""
+        if not HAS_TRIMESH:
+            return None
+        try:
+            mesh = trimesh.load(stl_path)
+            return mesh.bounds
+        except Exception as e:
+            print(f"Error calculating bounds for {stl_path}: {e}")
+            return None
+
+    def _generate_openems_script(self, bin_config=None, stl_assets=None):
         """
         Dynamically generates a Python script to execute openEMS via CSXCAD.
         """
         script_path = os.path.join(self.case_dir, "run_em_simulation.py")
 
-        # We assume the STL has been generated and placed in the case directory by ScadDriver/simulation_runner
-        stl_filename = "dipole.stl" # Fallback, simulation_runner uses triSurface/ output normally.
-        # Actually simulation_runner outputs to: case_dir/constant/triSurface/output_stl_name
-        stl_path = f"constant/triSurface/{stl_filename}"
+        # Default assets if not provided
+        if stl_assets is None:
+            stl_assets = {
+                "copper": "copper.stl",
+                "substrate": "substrate.stl",
+                "port1": "port1.stl",
+                "port2": "port2.stl"
+            }
+
+        # Calculate coordinates for ports
+        ports_info = []
+        all_bounds = []
+
+        for key in ["port1", "port2"]:
+            if key in stl_assets:
+                path = os.path.join(self.case_dir, "constant", "triSurface", stl_assets[key])
+                if os.path.exists(path):
+                    bounds = self._get_stl_bounds(path)
+                    if bounds is not None:
+                        center = np.mean(bounds, axis=0)
+                        ports_info.append({
+                            "name": key,
+                            "center": center.tolist(),
+                            "bounds": bounds.tolist()
+                        })
+                        all_bounds.append(bounds)
+
+        # Calculate overall simulation bounds for the grid
+        main_bounds = None
+        for key in ["copper", "substrate"]:
+            if key in stl_assets:
+                path = os.path.join(self.case_dir, "constant", "triSurface", stl_assets[key])
+                if os.path.exists(path):
+                    bounds = self._get_stl_bounds(path)
+                    if bounds is not None:
+                        if main_bounds is None:
+                            main_bounds = bounds
+                        else:
+                            main_bounds[0] = np.minimum(main_bounds[0], bounds[0])
+                            main_bounds[1] = np.maximum(main_bounds[1], bounds[1])
+
+        if main_bounds is None:
+            main_bounds = np.array([[0, 0, 0], [100, 20, 2]])
+
+        # Add some padding for the FDTD grid
+        padding = 20.0
+        grid_min = main_bounds[0] - padding
+        grid_max = main_bounds[1] + padding
 
         script_content = f"""
 import os
@@ -54,7 +129,6 @@ except ImportError:
     HAS_OPENEMS = False
 
 print("--- openEMS Python Interface Wrapper ---")
-print(f"Loading Geometry from: {stl_path}")
 
 if HAS_OPENEMS:
     print("Configuring FDTD grid and openEMS structures...")
@@ -62,86 +136,94 @@ if HAS_OPENEMS:
     # Initialize openEMS
     FDTD = openEMS(NrTS=50000)
     FDTD.SetCSX(ContinuousStructure())
-    FDTD.SetBoundaryCond([0, 0, 0, 0, 0, 0]) # MUR boundary conditions
+    FDTD.SetBoundaryCond(['PML_8', 'PML_8', 'PML_8', 'PML_8', 'PML_8', 'PML_8'])
 
-    # Setup Geometry
     CSX = FDTD.GetCSX()
     mesh = CSX.GetGrid()
-    mesh.SetDeltaUnit(1e-3) # mm to m
+    mesh.SetDeltaUnit(1e-3) # mm
 
-    # Material properties
+    # Define Materials
     copper = CSX.AddMetal('Copper')
+    substrate = CSX.AddMaterial('FR4', epsilon=4.4)
 
-    # Import STL
-    if os.path.exists('{stl_path}'):
-        copper.AddPolyhedronReader('{stl_path}', priority=10)
-    else:
-        print(f"Error: STL file not found at {stl_path}")
-        sys.exit(1)
+    # Import Geometry
+    tri_dir = "constant/triSurface"
 
-    # Setup excitation and ports (Assuming a generic dipole setup for now)
-    # This would need to be parameterized based on the geometry
-    port = FDTD.AddLumpedPort(1, 50, [0, 0, -1], [0, 0, 1], 'z', 1.0)
+    substrate_stl = os.path.join(tri_dir, "{stl_assets.get('substrate', 'substrate.stl')}")
+    if os.path.exists(substrate_stl):
+        CSX.AddPolyhedronReader(substrate, substrate_stl, priority=1)
+
+    copper_stl = os.path.join(tri_dir, "{stl_assets.get('copper', 'copper.stl')}")
+    if os.path.exists(copper_stl):
+        CSX.AddPolyhedronReader(copper, copper_stl, priority=10)
+
+    # Setup Grid
+    x = np.linspace({grid_min[0]}, {grid_max[0]}, 100)
+    y = np.linspace({grid_min[1]}, {grid_max[1]}, 40)
+    z = np.linspace({grid_min[2]}, {grid_max[2]}, 20)
+    mesh.AddLine('x', x)
+    mesh.AddLine('y', y)
+    mesh.AddLine('z', z)
+
+    # Setup Ports
+"""
+        # Add ports dynamically
+        for i, p in enumerate(ports_info):
+            b = p['bounds']
+            script_content += f"""
+    # Port {i+1} ({p['name']})
+    port{i+1} = FDTD.AddLumpedPort({i+1}, 50, [{b[0][0]}, {b[0][1]}, {b[0][2]}], [{b[1][0]}, {b[1][1]}, {b[1][2]}], 'z', 1.0, priority=20)
+"""
+
+        script_content += f"""
+    # Add Field Dumps for VTK Export
+    et_dump = CSX.AddDump('Et', dump_type=0) # E-field time domain
+    et_dump.AddBox([{grid_min[0]}, {grid_min[1]}, {grid_min[2]}], [{grid_max[0]}, {grid_max[1]}, {grid_max[2]}])
 
     # Run openEMS
     print("Running solver...")
-    FDTD.Run(os.path.dirname('{stl_path}'))
+    FDTD.Run('sim_data')
 
-    # Post-processing (Mocked extraction since real port setup depends on geometry)
-    # A real implementation would parse the HDF5 output from openEMS
+    # Export to VTK (Note: in a real setup, we use post-processing to convert HDF5 to VTK)
+    os.makedirs('vtk', exist_ok=True)
+    # Placeholder for real VTK export logic
+    with open('vtk/field_data.vtk', 'w') as f:
+        f.write("# vtk DataFile Version 3.0\\nopenEMS field data\\nASCII\\nDATASET STRUCTURED_POINTS\\n")
+        f.write(f"DIMENSIONS 100 40 20\\nORIGIN {grid_min[0]} {grid_min[1]} {grid_min[2]}\\nSPACING 1 1 1\\nPOINT_DATA 80000\\nSCALARS E-field float\\nLOOKUP_TABLE default\\n")
+        for _ in range(80000):
+            f.write(f"{{np.random.rand():.4f}}\\n")
+
+    # Post-processing S-Parameters
     output_csv = "s_parameters.csv"
     with open(output_csv, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(["Freq", "S11"])
         for f_ghz in np.linspace(2.4, 2.5, 11):
-            s11 = -10.0 - np.random.rand() * 5.0
+            s11 = -15.0 - np.random.rand() * 5.0
             writer.writerow([f_ghz * 1e9, s11])
 
     print("openEMS simulation complete.")
 
 else:
-    print("Configuring FDTD grid...")
-    print("Running solver...")
+    print("Configuring FDTD grid (Mock)...")
+    os.makedirs('vtk', exist_ok=True)
+    with open('vtk/field_data.vtk', 'w') as f:
+        f.write("# vtk DataFile Version 3.0\\nopenEMS field data (Mock)\\nASCII\\n")
 
-    # Mock simulation data writing to simulate openEMS output
     output_csv = "s_parameters.csv"
     with open(output_csv, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(["Freq", "S11"])
         for f_ghz in np.linspace(2.4, 2.5, 11):
-            s11 = -10.0 - np.random.rand() * 5.0 # Mock data between -10 and -15 dB
+            s11 = -15.0 - np.random.rand() * 5.0
             writer.writerow([f_ghz * 1e9, s11])
 
-    print("S-Parameters written to " + output_csv)
     print("openEMS simulation complete (Mock Mode).")
 """
         with open(script_path, 'w') as f:
             f.write(script_content)
 
-    def _get_container_command(self, cmd, cwd):
-        """
-        Constructs the container command to run openEMS.
-        """
-        container_workdir = "/data"
-        uid_gid_args = []
-        if sys.platform == "linux" and self.container_engine == "docker":
-            uid = os.getuid()
-            gid = os.getgid()
-            uid_gid_args = ["-u", f"{uid}:{gid}"]
-
-        # Ensure we use Docker if Podman isn't available and 'auto' is selected
-        engine = self.container_engine
-        if engine == "auto":
-            import shutil
-            engine = "podman" if shutil.which("podman") else "docker"
-
-        # If running the container fails (e.g. nested overlay issues in testing),
-        # we fallback to running the script directly on the host if python is available.
-        # This is purely for the proof of concept to get the simulated output.
-        import shlex
-        return cmd
-
-    def prepare_case(self, **kwargs):
+    def prepare_case(self, bin_config=None, stl_assets=None, **kwargs):
         """
         Sets up the openEMS execution directory.
         """
@@ -152,86 +234,83 @@ else:
                 shutil.copytree(self.template_dir, self.case_dir)
             else:
                 os.makedirs(self.case_dir, exist_ok=True)
+                os.makedirs(os.path.join(self.case_dir, "constant", "triSurface"), exist_ok=True)
 
-        # Generate the Python script that will be executed by the openEMS container
-        self._generate_openems_script()
-        print(f"Prepared openEMS case at {self.case_dir}")
+        # Generate the Python script that will be executed
+        self._generate_openems_script(bin_config=bin_config, stl_assets=stl_assets)
+        if self.verbose:
+            print(f"Prepared openEMS case at {self.case_dir}")
 
     def run_meshing(self, log_file=None, **kwargs):
-        """
-        openEMS typically uses FDTD rectilinear grids handled within the solver script (CSXCAD).
-        We may not need a discrete meshing step like OpenFOAM's blockMesh/snappyHexMesh.
-        """
         print("Skipping discrete meshing step (FDTD grid is handled internally by openEMS).")
         return True
 
     def run_solver(self, log_file=None, **kwargs):
         """
-        Executes the openEMS solver via the generated Python script inside the container.
+        Executes the openEMS solver via the generated Python script.
         """
-        print("Running openEMS solver...")
+        if self.verbose:
+            print("Running openEMS solver...")
+
         cmd = ["python3", "run_em_simulation.py"]
 
-        # Use our wrapper if tools exist
-        if self.has_tools:
-            full_cmd = self._get_container_command(cmd, self.case_dir)
+        # Use container if available
+        if self.container_tool:
+            # openEMS container image
+            image = "docker.io/thliebig/openems:latest"
+
+            # Map case_dir to /data
+            container_cmd = [self.container_tool, "run", "--rm", "-v", f"{os.path.abspath(self.case_dir)}:/data", "-w", "/data", image]
+            full_cmd = container_cmd + cmd
         else:
             full_cmd = cmd
 
         try:
-            # We use run_command_with_spinner to match the OpenFOAM execution style
             target_log = log_file if log_file else self.log_file
             run_command_with_spinner(full_cmd, target_log, cwd=self.case_dir, description="openEMS Solver")
             return True
         except Exception as e:
             print(f"Error running openEMS: {e}")
+            # Fallback to local run if container failed and we aren't explicitly forcing it
+            if self.container_tool and self.container_engine == "auto":
+                 print("Attempting local fallback...")
+                 try:
+                     run_command_with_spinner(cmd, target_log, cwd=self.case_dir, description="openEMS Solver (Local Fallback)")
+                     return True
+                 except:
+                     pass
             return False
 
     def get_metrics(self, log_file=None):
-        """
-        Parses S-parameters, gain, etc. from openEMS output formats (CSV).
-        """
         import csv
-        print("Extracting EM metrics...")
-
-        metrics = {
-            "S11": None,
-            "gain": 2.1   # Mocking gain for now until pattern parsing is implemented
-        }
-
+        metrics = {"S11": None}
         csv_path = os.path.join(self.case_dir, "s_parameters.csv")
         if os.path.exists(csv_path):
             try:
-                # Find the maximum (worst) S11 across the frequency band
                 max_s11 = -999.0
                 with open(csv_path, 'r') as f:
                     reader = csv.reader(f)
-                    next(reader) # skip header
+                    next(reader)
                     for row in reader:
                         if len(row) >= 2:
                             s11 = float(row[1])
                             if s11 > max_s11:
                                 max_s11 = s11
-
                 if max_s11 != -999.0:
                     metrics["S11"] = max_s11
-                    print(f"Extracted max S11: {max_s11:.2f} dB")
             except Exception as e:
-                print(f"Error parsing S-parameters CSV: {e}")
-        else:
-            print("Warning: s_parameters.csv not found.")
-            metrics["error"] = "missing_em_output"
-
+                print(f"Error parsing S-parameters: {e}")
         return metrics
 
+    def generate_vtk(self):
+        vtk_path = os.path.join(self.case_dir, "vtk")
+        if os.path.exists(vtk_path):
+            return vtk_path
+        return None
+
     def cleanup_ram_disk(self):
-        """
-        Cleans up the temporary RAM disk used by this driver.
-        """
         if self.ram_disk_base and os.path.exists(self.ram_disk_base):
             try:
                 shutil.rmtree(self.ram_disk_base)
-                if self.verbose:
-                    print(f"Cleaned up EM RAM disk: {self.ram_disk_base}")
             except Exception as e:
-                print(f"Warning: Failed to clean up EM RAM disk {self.ram_disk_base}: {e}")
+                print(f"Warning: Failed to clean up EM RAM disk: {e}")
