@@ -9,8 +9,9 @@ physics:
 
 geometry:
   scad_file: "trace_optimizer.scad"
-  part_options: ["copper", "substrate", "port1", "port2"]
+  part_options: ["copper", "substrate", "port1", "port2", "ground", "inner1", "inner2"]
   parameters:
+    num_layers: { type: "int", min: 2, max: 4, default: 2 }
     trace_offset: { type: "float", min: -1.0, max: 2.0, default: 0.0 }
     substrate_thickness: { type: "float", min: 0.5, max: 2.0, default: 1.6 }
     substrate_width: { type: "float", min: 10.0, max: 40.0, default: 20.0 }

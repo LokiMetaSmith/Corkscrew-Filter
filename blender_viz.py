@@ -63,6 +63,12 @@ def setup_blender_scene(x3d_file):
     links.new(node_math.outputs[0], node_combine.inputs[2]) # Sine to Z-channel
     links.new(node_combine.outputs[0], node_transform.inputs[1]) # Combined XYZ to Translation
 
+    # Handle Radiation Pattern
+    rad_x3d = x3d_file.replace(".x3d", "_radiation.x3d")
+    if os.path.exists(rad_x3d):
+        print(f"Importing Radiation Pattern: {rad_x3d}")
+        bpy.ops.import_scene.x3d(filepath=rad_x3d)
+
     # Save the blend file
     output_blend = x3d_file.replace(".x3d", ".blend")
     bpy.ops.wm.save_as_mainfile(filepath=output_blend)

@@ -1,6 +1,7 @@
 google-genai
 numpy
 trimesh
+h5py
 pandas
 scipy
 Pillow

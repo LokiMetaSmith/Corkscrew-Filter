@@ -96,8 +96,12 @@ def run_simulation(scad_driver, physics_driver, params, output_stl_name="corkscr
         # EM Specific Geometry Generation
         stl_assets = {}
         if not dry_run:
+            part_options = physics_driver.config.get("geometry", {}).get("part_options", ["copper", "substrate", "port1", "port2", "ground"])
             with Timer("EM Geometry Generation"):
-                for part_name in ["copper", "substrate", "port1", "port2"]:
+                for part_name in part_options:
+                    # Skip inner layers if only 2 layers requested
+                    if part_name in ['inner1', 'inner2'] and params.get('num_layers', 2) < 4:
+                        continue
                     p = params.copy()
                     p["part"] = part_name
                     p["GENERATE_CFD_VOLUME"] = "false"
@@ -116,9 +120,21 @@ def run_simulation(scad_driver, physics_driver, params, output_stl_name="corkscr
 
             if success:
                 metrics = physics_driver.get_metrics(log_file=solver_log)
+                vtk_zip_path = None
                 if hasattr(physics_driver, 'generate_vtk'):
-                    physics_driver.generate_vtk()
-                return metrics, [], None, None, None
+                    vtk_dir = physics_driver.generate_vtk()
+                    if vtk_dir:
+                        zip_name = os.path.join("exports", f"run_{int(time.time())}_vtk")
+                        shutil.make_archive(zip_name, 'zip', vtk_dir)
+                        vtk_zip_path = zip_name + ".zip"
+
+                # EM visualization generation
+                vis_base = os.path.join("exports", f"run_{int(time.time())}_solid")
+                vis_params = params.copy()
+                vis_params["part"] = "all"
+                png_paths = scad_driver.generate_visualization(vis_params, vis_base, log_file=vis_log, params_file=params_file)
+
+                return metrics, png_paths, f"{vis_base}.stl", None, vtk_zip_path
             else:
                 return {"error": "solver_failed"}, [], None, None, None
         else:
