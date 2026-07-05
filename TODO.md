@@ -53,10 +53,10 @@ This file tracks planned enhancements and future work for the OpenAuto-CFD frame
 - [ ] **Improved LLM Feedback:** Update the LLM error feedback mechanism to provide specific, geometric reasons for simulation failures (e.g., "The mesh quality check failed due to high non-orthogonality near the slit") instead of generic OpenFOAM solver crash logs.
 
 ## Electromagnetic (EM) Optimization Pipeline
-- [ ] **Impedance Optimization Loop:** Create a specialized configuration and scoring system to iteratively optimize PCB trace widths for target impedance using the LLM agent.
-- [ ] **True VTK Field Extraction:** Implement the conversion of raw HDF5 field data from openEMS to VTK format for physically accurate visualizations.
-- [ ] **Complex PCB Stackups:** Extend the geometry generation and drivers to support multi-layer PCB stackups, internal planes, and vias.
-- [ ] **Radiation Pattern Visualization:** Add support for extracting and visualizing 3D far-field radiation patterns in Blender.
+- [x] **Impedance Optimization Loop:** Create a specialized configuration and scoring system to iteratively optimize PCB trace widths for target impedance using the LLM agent.
+- [x] **True VTK Field Extraction:** Implement the conversion of raw HDF5 field data from openEMS to VTK format for physically accurate visualizations.
+- [x] **Complex PCB Stackups:** Extend the geometry generation and drivers to support multi-layer PCB stackups, internal planes, and vias.
+- [x] **Radiation Pattern Visualization:** Add support for extracting and visualizing 3D far-field radiation patterns in Blender.
 
 ## CFD Resilient Execution Engine (Post-Review Architecture)
 - [ ] **Phase 1: Immediate Stability Fixes (Numerical Stability)**

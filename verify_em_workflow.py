@@ -55,11 +55,24 @@ def test_em_workflow():
     print(f"Metrics: {metrics}")
 
     print("Step 4: Checking VTK Export...")
-    vtk_path = em.generate_vtk()
-    if vtk_path and os.path.exists(os.path.join(vtk_path, "field_data.vtk")):
-        print(f"VTK Export verified at: {vtk_path}")
+    # Read script to debug if it was generated correctly
+    script_path = os.path.join(em.case_dir, "run_em_simulation.py")
+    if os.path.exists(script_path):
+        print("run_em_simulation.py exists.")
     else:
-        print("VTK Export FAILED")
+        print("run_em_simulation.py MISSING")
+
+    vtk_path = em.generate_vtk()
+    if vtk_path:
+        print(f"VTK Directory: {vtk_path}")
+        files = os.listdir(vtk_path)
+        print(f"Files in VTK dir: {files}")
+        if "field_data.vtk" in files:
+            print("VTK Export verified: field_data.vtk found.")
+        else:
+            print("VTK Export FAILED: field_data.vtk missing.")
+    else:
+        print("VTK Export FAILED: generate_vtk returned None")
 
     # Cleanup
     em.cleanup_ram_disk()

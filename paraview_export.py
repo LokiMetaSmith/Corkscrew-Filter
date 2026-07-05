@@ -39,6 +39,16 @@ def run_post_processing(vtk_file, output_x3d):
     print(f"Exporting X3D to: {output_x3d}")
     ExportView(output_x3d, view=view)
 
+    # Handle Radiation Pattern if it exists
+    rad_vtk = vtk_file.replace("field_data.vtk", "radiation_pattern.vtk")
+    if os.path.exists(rad_vtk):
+        rad_data = LegacyVTKReader(FileNames=[rad_vtk])
+        rad_view = CreateView('RenderView')
+        Show(rad_data, rad_view)
+        rad_view.ResetCamera()
+        rad_x3d = output_x3d.replace(".x3d", "_radiation.x3d")
+        ExportView(rad_x3d, view=rad_view)
+
 if __name__ == "__main__":
     if len(sys.argv) < 3:
         print("Usage: pvpython paraview_export.py <input_vtk> <output_x3d>")
