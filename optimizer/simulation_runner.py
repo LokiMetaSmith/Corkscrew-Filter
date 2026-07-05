@@ -433,10 +433,12 @@ def run_simulation(scad_driver, physics_driver, params, output_stl_name="corkscr
                             vtk_zip_path = zip_name + ".zip"
                 else:
                     print(f"Solver failed. Check {solver_log}")
-                    metrics = {"error": "solver_failed"}
+                    details = getattr(physics_driver, 'last_error_details', "Solver failed without specific details.")
+                    metrics = {"error": "solver_failed", "details": details}
         else:
             print(f"Meshing failed. Check {mesh_log}")
-            metrics = {"error": "meshing_failed"}
+            details = getattr(physics_driver, 'last_error_details', "Meshing failed without specific details.")
+            metrics = {"error": "meshing_failed", "details": details}
     elif skip_cfd:
         print("[Skip CFD] Skipping CFD simulation.")
         metrics = {"skipped": True, "note": "CFD simulation skipped by user request"}
