@@ -50,7 +50,7 @@ This file tracks planned enhancements and future work for the OpenAuto-CFD frame
 - [x] **End-to-End Non-CFD Testing:** Implement a "Dry-Mesh" testing step in the optimization loop that runs `blockMesh` and `snappyHexMesh` (without running the solver) and evaluates the output of `checkMesh`. Use this to validate manufacturability and meshability before running expensive CFD simulations.
 - [x] **Stricter Geometry Validation:** Enhance the Python `Validator` to check STLs for non-manifold edges and self-intersections (using `trimesh`) before attempting to mesh them in OpenFOAM.
 - [x] **Hardcode Safety Margins:** In OpenSCAD modules (e.g., `assemblies.scad`), enforce minimum geometric tolerances mathematically to prevent CGAL precondition violations, regardless of LLM parameter suggestions (e.g., explicitly prevent `helix_profile_radius` from equaling `helix_path_radius`).
-- [ ] **Improved LLM Feedback:** Update the LLM error feedback mechanism to provide specific, geometric reasons for simulation failures (e.g., "The mesh quality check failed due to high non-orthogonality near the slit") instead of generic OpenFOAM solver crash logs.
+- [x] **Improved LLM Feedback:** Update the LLM error feedback mechanism to provide specific, geometric reasons for simulation failures (e.g., "The mesh quality check failed due to high non-orthogonality near the slit") instead of generic OpenFOAM solver crash logs.
 
 ## Electromagnetic (EM) Optimization Pipeline
 - [x] **Impedance Optimization Loop:** Create a specialized configuration and scoring system to iteratively optimize PCB trace widths for target impedance using the LLM agent.

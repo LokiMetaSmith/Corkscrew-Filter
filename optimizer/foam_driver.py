@@ -31,6 +31,7 @@ class FoamDriver(PhysicsDriver):
         self.has_tools = False
         self.container_tool = None
         self.use_container = False
+        self.last_error_details = ""
 
         # Attempt to recover from previous crashes (if any)
         self._recover_from_crash()
@@ -264,7 +265,7 @@ class FoamDriver(PhysicsDriver):
         print("--------------------------------------------------\n")
 
     def _analyze_solver_log(self, log_file):
-        """Reads the solver log to extract and print a concise summary of failure reasons."""
+        """Reads the solver log to extract and return a concise summary of failure reasons."""
         print(f"\n--- Smart Log Summary ({os.path.basename(log_file)}) ---")
         summary_path = os.path.join(self.case_dir, "solver_summary.log")
 
@@ -272,6 +273,7 @@ class FoamDriver(PhysicsDriver):
         peak_continuity = 0.0
         last_residuals = {}
         fatal_error = None
+        summary_text = ""
 
         try:
             with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
@@ -320,6 +322,7 @@ class FoamDriver(PhysicsDriver):
             print(summary_text)
             print("--------------------------------------------------\n")
 
+            import datetime
             with open(summary_path, 'a', encoding='utf-8') as sf:
                 sf.write(f"\n--- Summary for {datetime.datetime.now()} ---\n")
                 sf.write(summary_text + "\n")
@@ -327,6 +330,9 @@ class FoamDriver(PhysicsDriver):
         except Exception as e:
             print(f"Error analyzing log: {e}")
             print("--------------------------------------------------\n")
+            summary_text = f"Error during log analysis: {e}"
+
+        return summary_text
 
     def _clean_results(self, processors_only=False):
         """
@@ -2044,6 +2050,7 @@ FoamFile
         Runs the meshing pipeline.
         stl_assets: dict of filenames {'fluid': '...', 'inlet': '...', ...}
         """
+        self.last_error_details = ""
         cfd_settings = self.config.get('cfd_settings', {})
         mesh_procs = cfd_settings.get('mesh_processors', self.num_processors)
         mesh_method = cfd_settings.get('mesh_decompose_method', 'hierarchical')
@@ -2060,10 +2067,14 @@ FoamFile
 
         # Ensure we capture output
         # Step 1: Base Mesh
-        if not self.run_command(["blockMesh"], log_file=log_file, description="Meshing (blockMesh)"): return False
+        if not self.run_command(["blockMesh"], log_file=log_file, description="Meshing (blockMesh)"):
+            self.last_error_details = "blockMesh failed. Check if background mesh size is too small or bounds are invalid."
+            return False
 
         # For surfaceFeatureExtract, if using assets, we might need to update that dict too?
-        if not self.run_command(["surfaceFeatureExtract"], log_file=log_file, description="Meshing (surfaceFeatureExtract)"): return False
+        if not self.run_command(["surfaceFeatureExtract"], log_file=log_file, description="Meshing (surfaceFeatureExtract)"):
+            self.last_error_details = "surfaceFeatureExtract failed. Check if STL files are valid and surfaceFeatureExtractDict is correct."
+            return False
 
         if mesh_procs > 1:
             self._generate_decomposeParDict(num_processors=mesh_procs, method=mesh_method)
@@ -2080,37 +2091,55 @@ FoamFile
             if os.path.exists(zero_bak):
                 shutil.move(zero_bak, zero_dir)
 
-            if not success_decompose: return False
+            if not success_decompose:
+                self.last_error_details = "decomposePar failed for meshing. Check for parallel configuration issues."
+                return False
 
             cmd = ["mpirun", "--allow-run-as-root", "--oversubscribe", "-np", str(mesh_procs), "snappyHexMesh", "-overwrite", "-parallel"]
             if not self.run_command(cmd, log_file=log_file, description="Meshing (snappyHexMesh Parallel)", timeout=3600):
                 print("Error: Meshing failed. Boundary layers are critical, design rejected.")
+                self.last_error_details = "snappyHexMesh (Parallel) failed. Check logs for geometry/cell limit issues."
                 return False
 
-            if not self.run_command(["reconstructParMesh", "-constant"], log_file=log_file, description="Reconstructing Mesh"): return False
+            if not self.run_command(["reconstructParMesh", "-constant"], log_file=log_file, description="Reconstructing Mesh"):
+                self.last_error_details = "reconstructParMesh failed. Mesh reconstruction after parallel snappyHexMesh failed."
+                return False
 
             # After reconstruction, clean up processor directories to save disk space
             self._clean_results(processors_only=True)
 
             # Step 2: Create Patches (Serial, after reconstruction to prevent boundary overlap bugs)
-            if not self.run_command(["topoSet"], log_file=log_file, description="Meshing (topoSet)"): return False
-            if not self.run_command(["createPatch", "-overwrite"], log_file=log_file, description="Meshing (createPatch)"): return False
+            if not self.run_command(["topoSet"], log_file=log_file, description="Meshing (topoSet)"):
+                self.last_error_details = "topoSet failed. Check if patches defined in topoSetDict exist in the mesh."
+                return False
+            if not self.run_command(["createPatch", "-overwrite"], log_file=log_file, description="Meshing (createPatch)"):
+                self.last_error_details = "createPatch failed. Check if sets created by topoSet are valid."
+                return False
 
         else:
             if not self.run_command(["snappyHexMesh", "-overwrite"], log_file=log_file, description="Meshing (snappyHexMesh)", timeout=3600):
                 print("Error: Meshing failed. Boundary layers are critical, design rejected.")
+                self.last_error_details = "snappyHexMesh (Serial) failed. Check logs for geometry/cell limit issues."
                 return False
 
             # Step 2: Create Patches (Serial)
-            if not self.run_command(["topoSet"], log_file=log_file, description="Meshing (topoSet)"): return False
-            if not self.run_command(["createPatch", "-overwrite"], log_file=log_file, description="Meshing (createPatch)"): return False
+            if not self.run_command(["topoSet"], log_file=log_file, description="Meshing (topoSet)"):
+                self.last_error_details = "topoSet failed. Check if patches defined in topoSetDict exist in the mesh."
+                return False
+            if not self.run_command(["createPatch", "-overwrite"], log_file=log_file, description="Meshing (createPatch)"):
+                self.last_error_details = "createPatch failed. Check if sets created by topoSet are valid."
+                return False
 
         # Step 3: Check
-        if not self.run_command(["checkMesh"], log_file=log_file, description="Meshing (checkMesh)"): return False
+        mesh_metrics = self._run_checkMesh(log_file=log_file)
+        if mesh_metrics["failed_checks"] > 0:
+            self.last_error_details = f"checkMesh failed: {mesh_metrics.get('failed_details', 'Unknown mesh error')}"
+            return False
 
         # Post-meshing verification
         if not self._check_boundary_patches():
             print("Meshing failed verification: missing or empty inlet/outlet patches.")
+            self.last_error_details = "Meshing failed verification: required patches (inlet, outlet, etc.) are missing or have 0 faces. Check locationInMesh and STL alignment."
             return False
 
         return True
@@ -2222,7 +2251,8 @@ FoamFile
         metrics = {
             "max_non_orthogonality": 0.0,
             "max_skewness": 0.0,
-            "failed_checks": 0
+            "failed_checks": 0,
+            "failed_details": ""
         }
 
         if os.path.exists(temp_log):
@@ -2245,6 +2275,21 @@ FoamFile
                 m_failed = re.search(r"Failed\s+(\d+)\s+mesh checks", log_content)
                 if m_failed and int(m_failed.group(1)) > 0:
                     metrics["failed_checks"] = int(m_failed.group(1))
+
+                # Extract specific failures
+                failures = []
+                if metrics["max_non_orthogonality"] > 70:
+                    failures.append(f"High non-orthogonality: {metrics['max_non_orthogonality']:.1f}")
+                if metrics["max_skewness"] > 4:
+                    failures.append(f"High skewness: {metrics['max_skewness']:.1f}")
+
+                # Check for specific geometry issues
+                if "zero or negative volume" in log_content.lower():
+                    failures.append("Mesh contains zero or negative volume cells.")
+                if "non-manifold edges" in log_content.lower():
+                    failures.append("Mesh contains non-manifold edges.")
+
+                metrics["failed_details"] = "; ".join(failures) if failures else "General mesh quality failure"
 
         return metrics
 
@@ -2344,6 +2389,7 @@ FoamFile
         """
         Runs the solver using a strategy ladder with progressive degradation and scoring.
         """
+        self.last_error_details = ""
         cfd_settings = self.config.get('cfd_settings', {})
         solve_procs = cfd_settings.get('solve_processors', self.num_processors)
         solve_method = cfd_settings.get('solve_decompose_method', 'scotch')
@@ -2444,6 +2490,9 @@ FoamFile
             self._clean_results()
 
             success, output = self._execute_simpleFoam(return_output=True, log_file=log_file, solve_procs=solve_procs, solve_method=solve_method)
+
+            if not success:
+                self.last_error_details = self._analyze_solver_log(log_file if log_file else self.log_file)
 
             metrics = self._parse_solver_metrics(output)
             score = self._score_run(metrics)
@@ -2796,6 +2845,8 @@ boundaryField
 
             # 4. Run Solver
             success = self.run_command(["icoUncoupledKinematicParcelFoam"], log_file=log_file, description="Particle Tracking", timeout=14400)
+            if not success:
+                self.last_error_details = "icoUncoupledKinematicParcelFoam failed. Particle tracking converged flow field might be too unstable."
 
             c_path = os.path.join(self.case_dir, "constant", "kinematicCloudProperties")
             was_using_dispersion = False

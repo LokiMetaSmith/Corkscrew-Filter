@@ -532,7 +532,14 @@ class LLMAgent:
 CRITICAL WARNING:
 The previous run FAILED with error: "{last_error}".
 Details: {details}
-YOU MUST ADJUST PARAMETERS TO FIX THIS ERROR.
+
+ANALYSIS INSTRUCTIONS:
+- If 'high non-orthogonality' or 'skewness' is reported, the helical channel might be too cramped. Try increasing 'helix_path_radius_mm' or decreasing 'helix_profile_radius_mm'.
+- If 'zero or negative volume cells' are reported, the geometry is non-manifold. Check if your parameters cause the corkscrew to intersect itself.
+- If 'blockMesh failed', the background grid might be too coarse for the requested feature size.
+- If 'diverging residuals' or 'massive continuity error' is reported, the physics is unstable. Check if flow velocity is too high for the current pitch.
+
+YOU MUST ADJUST PARAMETERS TO FIX THESE SPECIFIC ISSUES.
 """
 
         visual_instruction = ""
@@ -627,9 +634,16 @@ You must respond with valid JSON only. DO NOT include any conversational text, m
 CRITICAL WARNING:
 The previous run FAILED with error: "{last_error}".
 Details: {details}
-YOU MUST ADJUST PARAMETERS TO FIX THIS ERROR.
-If the error was 'invalid_parameters', you violated a geometric constraint.
-If 'helix_void_profile_radius_mm' >= 'helix_profile_radius_mm', you MUST decrease void radius or increase profile radius significantly.
+
+ANALYSIS INSTRUCTIONS:
+- If 'high non-orthogonality' or 'skewness' is reported, the helical channel might be too cramped. Try increasing 'helix_path_radius_mm' or decreasing 'helix_profile_radius_mm'.
+- If 'zero or negative volume cells' are reported, the geometry is non-manifold. Check if your parameters cause the corkscrew to intersect itself.
+- If 'blockMesh failed', the background grid might be too coarse for the requested feature size.
+- If 'diverging residuals' or 'massive continuity error' is reported, the physics is unstable. Check if flow velocity is too high for the current pitch.
+- If 'invalid_parameters', you violated a geometric constraint.
+- Specifically, if 'helix_void_profile_radius_mm' >= 'helix_profile_radius_mm', you MUST decrease void radius or increase profile radius significantly.
+
+YOU MUST ADJUST PARAMETERS TO FIX THESE SPECIFIC ISSUES.
 """
 
         # Strict constraint reminder
