@@ -8,7 +8,7 @@ substrate_length = 100.0;
 copper_thickness = 0.035; // [mm] 1oz copper
 
 // Output control
-part = "all"; // [all, copper, substrate, port1, port2]
+part = "all"; // ["all", "copper", "substrate", "port1", "port2"]
 
 module trace_geometry() {
     offset(delta = trace_offset)

@@ -1,0 +1,26 @@
+project_name: "PCB_Trace_Impedance_Matching"
+physics:
+  type: "em"
+  solver: "openEMS"
+  frequency_range: [2.4e9, 2.5e9]
+  objectives:
+    minimize: ["S11"]
+    target_impedance: 50.0
+
+geometry:
+  scad_file: "trace_optimizer.scad"
+  part_options: ["copper", "substrate", "port1", "port2"]
+  parameters:
+    trace_offset: { type: "float", min: -1.0, max: 2.0, default: 0.0 }
+    substrate_thickness: { type: "float", min: 0.5, max: 2.0, default: 1.6 }
+    substrate_width: { type: "float", min: 10.0, max: 40.0, default: 20.0 }
+
+optimization:
+  target: "minimize"
+  objective_function: "S11"
+  description: "Optimize the width of a PCB microstrip trace to achieve a 50-ohm impedance match at 2.4 GHz. The LLM should adjust the trace_offset (which affects width) and substrate_thickness to minimize S11 (return loss)."
+  constraints:
+    - "S11 < -20"
+  extractors:
+    - type: "sparameter"
+      metric_name: "S11"

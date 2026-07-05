@@ -85,14 +85,48 @@ def run_simulation(scad_driver, physics_driver, params, output_stl_name="corkscr
         # Initialize base case directory and templates
         physics_driver.prepare_case(keep_mesh=reuse_mesh, turbulence=turbulence, bin_config=bin_config)
 
-    # 1. Generate Geometry (Fluid Volume + CFD Assets)
+    # 1. Generate Geometry (Fluid Volume + CFD/EM Assets)
     tri_surface_dir = os.path.join(physics_driver.case_dir, "constant", "triSurface")
     os.makedirs(tri_surface_dir, exist_ok=True)
 
+    physics_type = physics_driver.config.get("physics", {}).get("type", "cfd")
+    SCALE_FACTOR = 0.001 # mm to meters (used for CFD)
+
+    if physics_type == "em":
+        # EM Specific Geometry Generation
+        stl_assets = {}
+        if not dry_run:
+            with Timer("EM Geometry Generation"):
+                for part_name in ["copper", "substrate", "port1", "port2"]:
+                    p = params.copy()
+                    p["part"] = part_name
+                    p["GENERATE_CFD_VOLUME"] = "false"
+                    p["part_to_generate"] = part_name
+                    out_path = os.path.join(tri_surface_dir, f"{part_name}.stl")
+                    if scad_driver.generate_stl(p, out_path, log_file=geom_log, params_file=params_file):
+                        stl_assets[part_name] = f"{part_name}.stl"
+                    else:
+                        print(f"Failed to generate EM asset: {part_name}")
+
+            # Re-prepare case with assets for bounding box calculation
+            physics_driver.prepare_case(stl_assets=stl_assets)
+
+            with Timer("EM Solver"):
+                success = physics_driver.run_solver(log_file=solver_log)
+
+            if success:
+                metrics = physics_driver.get_metrics(log_file=solver_log)
+                if hasattr(physics_driver, 'generate_vtk'):
+                    physics_driver.generate_vtk()
+                return metrics, [], None, None, None
+            else:
+                return {"error": "solver_failed"}, [], None, None, None
+        else:
+            return {"S11": -15.0}, [], None, None, None
+
+    # --- CFD Flow Path ---
     # Use specified output name for fluid, others are fixed
     fluid_stl_path = os.path.join(tri_surface_dir, output_stl_name)
-
-    SCALE_FACTOR = 0.001 # mm to meters
     cfd_assets = {} # Dictionary of absolute paths
 
     if not dry_run:
