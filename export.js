@@ -260,8 +260,8 @@ async function main() {
         loadDir(instance, 'modules', '/modules');
         loadDir(instance, 'parameters', '/parameters');
 
-        // Mount root SCAD files
-        const rootFiles = fs.readdirSync('.').filter(f => f.endsWith('.scad'));
+        // Mount root SCAD and SVG files
+        const rootFiles = fs.readdirSync('.').filter(f => f.endsWith('.scad') || f.endsWith('.svg'));
         for(const f of rootFiles) {
             instance.FS.writeFile('/' + f, fs.readFileSync(f));
         }
