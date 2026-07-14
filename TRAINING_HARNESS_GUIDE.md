@@ -114,7 +114,52 @@ To keep the model from overfitting to raw numbers, the harness programmatically 
 
 ---
 
-## 5. Fine-Tuning Recipe (Axolotl / Hugging Face)
+## 5. Machine & Software Requirements
+
+When choosing hardware and setting up the training stack for model fine-tuning (SFT & DPO), you need to match your compute resources to the model size and training precision.
+
+### A. Hardware Recommendations (Based on Model Size)
+
+We recommend targeting **8B to 14B parameter models** (e.g., LLaMA-3-8B or Qwen-2.5-14B) as they provide an outstanding balance between reasoning capabilities and fast inference/training on mainstream enterprise hardware.
+
+| Model Size | Training Strategy | Minimum GPU Hardware | Recommended GPU Hardware | VRAM Needed |
+| :--- | :--- | :--- | :--- | :--- |
+| **8B Parameters** (e.g., LLaMA-3) | **QLoRA (4-bit)** | 1x NVIDIA T4 / L4 | 1x RTX 3090 / 4090 | ~16 GB - 24 GB |
+| **8B Parameters** | **LoRA (16-bit BF16)** | 1x RTX 3090 / 4090 | 1x NVIDIA A10G / A30 | ~24 GB - 32 GB |
+| **8B Parameters** | **Full Fine-Tuning** | 1x A100 (40GB) | 1x H100 (80GB) | ~40 GB - 80 GB |
+| **14B Parameters** (e.g., Qwen-2.5) | **QLoRA (4-bit)** | 1x RTX 3090 / 4090 | 1x NVIDIA L4 / A10G | ~24 GB |
+| **14B Parameters** | **LoRA (16-bit BF16)** | 1x A10G (24GB) | 1x A100 (40GB / 80GB) | ~32 GB - 40 GB |
+| **14B Parameters** | **Full Fine-Tuning** | 2x A100 (80GB) | 4x A100 / H100 (80GB) | ~160 GB+ |
+| **70B Parameters** (e.g., LLaMA-3-70B) | **QLoRA (4-bit)** | 1x A100 (80GB) | 2x RTX 3090/4090 (with Deepspeed) | ~48 GB - 80 GB |
+| **70B Parameters** | **LoRA (16-bit BF16)** | 2x A100 (80GB) | 4x A100 (80GB) | ~120 GB+ |
+
+#### Crucial Hardware Best Practices:
+* **Storage**: Fast SSD / NVMe (at least 100 GB free space) is critical to prevent I/O bottlenecks when loading models and periodically saving checkpoints.
+* **System RAM**: Standard rules-of-thumb require system RAM to be **at least 2x the VRAM size** of your configuration to avoid Out-of-Memory (OOM) failures during tokenization, logging, and dataset caching.
+* **Bfloat16 Support**: BF16 support is highly recommended. Ensure you use Ampere or newer architectures (RTX 30/40 series, A10, A100, L4, H100) to prevent gradient underflow/overflow stability issues common with older FP16 training on Volta or Pascal.
+
+---
+
+### B. Software Stack Guidelines
+
+To implement local fine-tuning within your cluster, use the following production-tested software stack:
+
+1. **Operating System**:
+   - Native **Linux (Ubuntu 22.04 LTS / 24.04 LTS)** or **WSL2** for Windows environments. (Avoid bare Windows setups as triton, deepspeed, and flash-attention are notoriously difficult to compile natively on Windows).
+2. **CUDA & GPU Driver Stack**:
+   - NVIDIA Driver `v535+` or `v550+`.
+   - CUDA Toolkit `12.1` or `12.4` (ensure your PyTorch, Deepspeed, and Flash-Attention compiles match the matching toolkit version).
+3. **Training & Fine-Tuning Libraries**:
+   - **Axolotl** (Highly recommended for configuration-driven LoRA, QLoRA, SFT, and DPO training).
+   - **Unsloth** (Extremely fast; reduces training time and memory usage by up to 80% on single-GPU SFT setups).
+   - **Hugging Face TRL (Transformer Reinforcement Learning)**: Standard script runner utilizing `SFTTrainer` and `DPOTrainer`.
+4. **Acceleration Libraries**:
+   - **Flash-Attention 2**: Essential for training with larger contexts ($4096+$ tokens) to reduce attention computational complexity from quadratic to linear.
+   - **DeepSpeed (ZeRO-2 or ZeRO-3)**: Required for distributed multi-GPU training or partitioning large model parameters/gradients across memory.
+
+---
+
+## 6. Fine-Tuning Recipe (Axolotl / Hugging Face)
 
 Once you've exported your datasets, you can launch a local fine-tuning job.
 
@@ -161,7 +206,7 @@ accelerate launch -m axolotl.cli.train config.yml
 
 ---
 
-## 6. Testing Your Fine-Tuned Model
+## 7. Testing Your Fine-Tuned Model
 
 After training, export your model weights and place them on your local Nomad, Docker, or local machine. You can activate the model in your optimization loop by pointing to it via environment variables:
 
