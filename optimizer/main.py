@@ -53,6 +53,8 @@ def main():
     parser.add_argument("--parallel-workers", type=int, default=0, help="Number of parallel worker processes to spawn (0 = sequential)")
     parser.add_argument("--params-file", type=str, help="Path to a SCAD parameter file to use as the base configuration (overrides defaults)")
     parser.add_argument("--turbulence", type=str, default="laminar", help="Turbulence model to use (default: laminar, can be kOmegaSST, RNGkEpsilon, etc.)")
+    parser.add_argument("--schema", action="store_true", help="Use the physicist-style Schema surrogate-planning harness loop")
+    parser.add_argument("--epsilon", type=float, default=5.0, help="Mismatch threshold for surrogate backtests")
     args = parser.parse_args()
 
     # Parse iterations argument
@@ -116,6 +118,85 @@ def main():
     except Exception as e:
         print(f"Warning: Failed to retrieve git commit info: {e}")
         git_commit = "unknown"
+
+    # If Schema Mode is active, run the dedicated Schema Loop instead
+    if args.schema:
+        print("[Schema] Activating physicist-style Schema surrogate-planning harness...")
+        from harness import SchemaEngine, State, parse_solver_outputs_to_state
+
+        # 1. Initialize Schema Engine
+        os.makedirs("exports", exist_ok=True)
+        # Use config's parameters
+        parameter_defs = config.get('geometry', {}).get('parameters', {})
+        engine = SchemaEngine(workspace_dir="exports", parameter_defs=parameter_defs, llm_agent=agent, epsilon=args.epsilon)
+
+        # 2. Get Initial State
+        initial_params = {}
+        for param_name, param_def in parameter_defs.items():
+            if 'default' in param_def:
+                initial_params[param_name] = param_def['default']
+            elif param_def.get('constant', False) and 'value' in param_def:
+                initial_params[param_name] = param_def['value']
+
+        # Ensure we have some default placeholder or run a bootstrap
+        print("[Schema] Bootstrapping initial state from default parameters...")
+
+        def run_real_solver(params_to_run):
+            metrics, png_paths, solid_stl_path, fluid_stl_path, vtk_zip_path = run_simulation(
+                scad,
+                physics_driver,
+                params_to_run,
+                output_stl_name=args.output_stl,
+                dry_run=args.dry_run,
+                skip_cfd=args.skip_cfd,
+                dry_mesh=args.dry_mesh,
+                iteration=0,
+                reuse_mesh=args.reuse_mesh,
+                verbose=args.verbose,
+                params_file=args.params_file,
+                turbulence=args.turbulence,
+                debug=args.debug
+            )
+            return metrics
+
+        # 3. Establish initial state
+        initial_metrics = run_real_solver(initial_params)
+        current_state = parse_solver_outputs_to_state(initial_params, initial_metrics)
+
+        # Define multi-physics objective scoring function
+        # High value = good. We use standard scoring weights or custom
+        def state_score_func(s: State) -> float:
+            # High efficiency, low pressure drop, high factor of safety, good impedance resonance
+            eff = s.fluid.get("separation_efficiency", 0.0)
+            p_drop = s.fluid.get("pressure_drop", 0.0)
+            fos = s.structural.get("factor_of_safety", 1.0)
+            s11 = s.electromagnetic.get("S11", 0.0)
+
+            # Simple combined scoring formula
+            score = eff - (p_drop * 0.1) + min(5.0, fos) * 2.0
+            if s11 < 0.0:
+                score -= s11 # Improve if S11 is strongly negative (e.g., -15 -> +15 contribution)
+            return score
+
+        print(f"[Schema] Initial State: {json.dumps(current_state.to_dict(), indent=2)}")
+        print(f"[Schema] Starting planning-simulation iterations (Total: {args.iterations})...")
+
+        i = 0
+        while True:
+            if not infinite_mode and i >= max_iterations:
+                break
+            print(f"\n=== Schema Iteration {i+1} ===")
+            _, action, current_state, dist = engine.run_one_iteration(
+                current_state=current_state,
+                score_func=state_score_func,
+                real_solver_func=run_real_solver
+            )
+            print(f"=== Completed Schema Iteration {i+1} (Discrepancy: {dist:.4f}) ===")
+            i += 1
+
+        physics_driver.cleanup_ram_disk()
+        print("\n[Schema] Optimization loop finished.")
+        return
 
     # Initial parameters
     if args.params_file:
