@@ -11,6 +11,9 @@ import yaml
 from dotenv import load_dotenv
 from scad_driver import ScadDriver
 from physics_factory import PhysicsEngineFactory
+
+from ml_optimizer import OptunaOptimizer
+from scoring import calculate_score
 from llm_agent import LLMAgent
 from data_store import DataStore
 from simulation_runner import run_simulation
@@ -55,6 +58,7 @@ def main():
     parser.add_argument("--turbulence", type=str, default="laminar", help="Turbulence model to use (default: laminar, can be kOmegaSST, RNGkEpsilon, etc.)")
     parser.add_argument("--schema", action="store_true", help="Use the physicist-style Schema surrogate-planning harness loop")
     parser.add_argument("--epsilon", type=float, default=5.0, help="Mismatch threshold for surrogate backtests")
+    parser.add_argument("--use-ml-optimizer", action="store_true", help="Use Optuna-based ML optimizer instead of LLM.")
     args = parser.parse_args()
 
     # Parse iterations argument
@@ -253,41 +257,62 @@ def main():
 
         # Refill Queue if empty
         if not parameter_queue:
-            print(f"Parameter queue empty. Requesting {args.batch_size} new sets from LLM...")
+            if args.use_ml_optimizer:
+                print(f"Parameter queue empty. Requesting {args.batch_size} new sets from Optuna ML Optimizer...")
+                # Lazily initialize ml_optimizer
+                if not hasattr(agent, 'ml_optimizer'):
+                    agent.ml_optimizer = OptunaOptimizer(config=config, study_name="openauto_cfd_study")
 
-            campaign_params = agent.suggest_campaign(
-                history=full_history,
-                constraints=constraints_str,
-                objective=objective_func,
-                target=optimization_target,
-                description=optimization_desc,
-                parameters_def=config.get('geometry', {}).get('parameters', {}),
-                count=args.batch_size,
-                image_paths=last_run_images
-            )
-
-            if campaign_params and campaign_params[0].get("stop_optimization") is True:
-                print("\n>>> OPTIMIZATION COMPLETE: LLM signaled stop. <<<")
-                break
-
-            if campaign_params:
-                print(f"LLM returned {len(campaign_params)} parameter sets.")
-                # Filter duplicates immediately
                 added = 0
-                for p in campaign_params:
-                     if get_params_hash(p) not in visited_params:
-                         parameter_queue.append(p)
-                         added += 1
-                     else:
-                         print("Skipping duplicate suggested by LLM.")
+                for _ in range(args.batch_size):
+                    # We grab trials one by one. In parallel mode, this puts them in a batch.
+                    trial, params = agent.ml_optimizer.suggest_next(config.get('geometry', {}).get('parameters', {}))
+                    # Stash trial reference for reporting later
+                    params["_optuna_trial_number"] = trial.number
+                    if get_params_hash(params) not in visited_params:
+                        parameter_queue.append(params)
+                        added += 1
+                    else:
+                        print("Skipping duplicate suggested by Optuna.")
+
                 if added == 0:
-                    print("All suggestions were duplicates.")
+                     print("All suggestions from Optuna were duplicates or queue is stuck.")
             else:
-                print("LLM failed/fallback. Generating random.")
-                base_params = full_history[-1]["parameters"] if full_history else initial_params
-                random_params = agent._generate_random_parameters(base_params, config.get('geometry', {}).get('parameters', {}))
-                if get_params_hash(random_params) not in visited_params:
-                    parameter_queue.append(random_params)
+                print(f"Parameter queue empty. Requesting {args.batch_size} new sets from LLM...")
+
+                campaign_params = agent.suggest_campaign(
+                    history=full_history,
+                    constraints=constraints_str,
+                    objective=objective_func,
+                    target=optimization_target,
+                    description=optimization_desc,
+                    parameters_def=config.get('geometry', {}).get('parameters', {}),
+                    count=args.batch_size,
+                    image_paths=last_run_images
+                )
+
+                if campaign_params and campaign_params[0].get("stop_optimization") is True:
+                    print("\n>>> OPTIMIZATION COMPLETE: LLM signaled stop. <<<")
+                    break
+
+                if campaign_params:
+                    print(f"LLM returned {len(campaign_params)} parameter sets.")
+                    # Filter duplicates immediately
+                    added = 0
+                    for p in campaign_params:
+                         if get_params_hash(p) not in visited_params:
+                             parameter_queue.append(p)
+                             added += 1
+                         else:
+                             print("Skipping duplicate suggested by LLM.")
+                    if added == 0:
+                        print("All suggestions were duplicates.")
+                else:
+                    print("LLM failed/fallback. Generating random.")
+                    base_params = full_history[-1]["parameters"] if full_history else initial_params
+                    random_params = agent._generate_random_parameters(base_params, config.get('geometry', {}).get('parameters', {}))
+                    if get_params_hash(random_params) not in visited_params:
+                        parameter_queue.append(random_params)
 
         if not parameter_queue:
             print("Queue empty after refill. Retrying next loop (or breaking if strictly limited).")
@@ -422,6 +447,25 @@ def main():
                     args.skip_cfd = True
                 elif metrics["error"] == "geometry_generation_failed":
                     print("Geometry generation failed.")
+
+            # Report to Optuna if active
+            if args.use_ml_optimizer and hasattr(agent, 'ml_optimizer') and "_optuna_trial_number" in current_params:
+                # Find the trial object
+                trial_num = current_params.pop("_optuna_trial_number") # Remove it before saving
+                # In a real multiprocessing setup, we'd report async. Here we cheat.
+                # Assuming single-process or sequential evaluation for tell
+                # For safety, let's just create a dummy trial and tell
+                # Calculate scalar score using calculate_score function
+                _, scalar_score, _, _ = calculate_score(metrics, config)
+
+                # Because optuna `tell` needs a trial object or trial_id, we can fetch it
+                try:
+                    trials = agent.ml_optimizer.study.get_trials()
+                    trial = next((t for t in trials if t.number == trial_num), None)
+                    if trial:
+                        agent.ml_optimizer.report_result(trial, scalar_score, metrics)
+                except Exception as e:
+                    print(f"Error reporting to optuna: {e}")
 
             # Save Results
             run_data = {
