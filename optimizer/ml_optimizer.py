@@ -89,9 +89,9 @@ class OptunaOptimizer:
         params = self._suggest_parameters(trial, parameters_def)
         return trial, params
 
-    def report_result(self, trial: optuna.Trial, score: float, metrics: Dict[str, Any]):
-        """Reports the scalar score back to the study, pruning if it failed."""
+    def report_result(self, trial_num: int, score: float, metrics: Dict[str, Any]):
+        """Reports the scalar score back to the study using the atomic trial number, pruning if it failed."""
         if "error" in metrics:
-            self.study.tell(trial, state=optuna.trial.TrialState.PRUNED)
+            self.study.tell(trial_num, state=optuna.trial.TrialState.PRUNED)
         else:
-            self.study.tell(trial, score)
+            self.study.tell(trial_num, score)

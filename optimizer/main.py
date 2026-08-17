@@ -450,20 +450,30 @@ def main():
 
             # Report to Optuna if active
             if args.use_ml_optimizer and hasattr(agent, 'ml_optimizer') and "_optuna_trial_number" in current_params:
-                # Find the trial object
                 trial_num = current_params.pop("_optuna_trial_number") # Remove it before saving
-                # In a real multiprocessing setup, we'd report async. Here we cheat.
-                # Assuming single-process or sequential evaluation for tell
-                # For safety, let's just create a dummy trial and tell
-                # Calculate scalar score using calculate_score function
-                _, scalar_score, _, _ = calculate_score(metrics, config)
 
-                # Because optuna `tell` needs a trial object or trial_id, we can fetch it
+                # Calculate a continuous scalar score for Optuna
+                scalar_score = 0.0
+                if "error" not in metrics:
+                    objective_func = config.get('optimization', {}).get('objective_function')
+                    if objective_func and objective_func in metrics:
+                        # Direct metric (Optuna already knows if we are maximizing or minimizing)
+                        scalar_score = float(metrics[objective_func])
+                    else:
+                        # Legacy Corkscrew Heuristic (assuming maximize direction)
+                        efficiency_pct = metrics.get("separation_efficiency", 0.0)
+                        delta_p_kinematic = metrics.get("delta_p", 1000.0)
+
+                        # Convert Pressure
+                        # Pressure (Pa) = p_kinematic * rho
+                        pressure_pa = delta_p_kinematic * 1.225
+                        pressure_psi = pressure_pa / 6894.76
+
+                        # Smooth gradient: Maximize efficiency while minimizing pressure drop
+                        scalar_score = efficiency_pct - (pressure_psi * 10.0)
+
                 try:
-                    trials = agent.ml_optimizer.study.get_trials()
-                    trial = next((t for t in trials if t.number == trial_num), None)
-                    if trial:
-                        agent.ml_optimizer.report_result(trial, scalar_score, metrics)
+                    agent.ml_optimizer.report_result(trial_num, scalar_score, metrics)
                 except Exception as e:
                     print(f"Error reporting to optuna: {e}")
 
