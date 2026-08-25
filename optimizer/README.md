@@ -62,6 +62,24 @@ python optimizer/main.py --iterations 5 --scad-file corkscrew.scad --case-dir co
 *   **`scad_driver.py`**: Wraps OpenSCAD command-line tools to generate STL files from parameter sets.
 *   **`data_store.py`**: Manages the persistent storage of optimization results in `optimization_log.jsonl`.
 *   **`constraints.py`**: Central definitions for optimization goals and parameter constraints.
+*   **`mcp_server.py`**: Model Context Protocol (MCP) server providing standard stdio tool execution for external LLMs.
+
+## Model Context Protocol (MCP) Server
+
+The MCP server (`optimizer/mcp_server.py`) exposes high-level tools for external LLM agents to direct the harness:
+
+### Exposed MCP Tools
+1. `list_available_configs`: Discovers all YAML problem definition files in the codebase.
+2. `run_simulation_tool`: Triggers OpenSCAD geometry generation and CFD/EM/FEA simulations with specific parameters.
+3. `get_harness_status`: Queries optimization history, total runs, and top-performing parameter sets.
+4. `get_run_details`: Fetches full details, metrics, and artifact paths for a specific run ID.
+5. `get_schema_state`: Retrieves the current Schema surrogate state, timeline discrepancy log, and notes.
+6. `run_schema_step`: Executes an iteration of the physicist-style Schema surrogate planning loop.
+
+### Launching the MCP Server
+```bash
+PYTHONPATH=optimizer python3 -m optimizer.mcp_server
+```
 
 ## Data Storage
 
