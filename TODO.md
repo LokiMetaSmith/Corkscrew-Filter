@@ -42,7 +42,7 @@ This file tracks planned enhancements and future work for the OpenAuto-CFD frame
 - [x] **Test Reliability:** Increased timeouts for WASM-based tests (`test/regression.js` and `test/test_parameter_stls.py`) to prevent false failures on slower environments.
 - [x] **Documentation:** Updated `README.md` with explicit installation/testing instructions and `TECHNICAL_REPORT.md` with notes on missing figures.
 - [x] **Geometry Stability:** Resolve persistent `CGAL error: precondition violation` in `single_cell_filter.scad` and `flat_end_screw.scad` when running in `openscad-wasm`. (Native OpenSCAD may work fine). *Update: Added unit tests in `test/test_wasm_cgal_error.py` tracking this as an upstream issue in openscad-wasm handling of complex boolean extrusions.*
-- [ ] **Visual Assets:** Generate and insert Figure 3 (Velocity Streamlines) into `TECHNICAL_REPORT.md` using ParaView.
+- [x] **Visual Assets:** Generate and insert Figure 3 (Velocity Streamlines) into `TECHNICAL_REPORT.md` using ParaView / PyVista pipeline.
 
 ## Post-Review Improvements (Code Review Action Items)
 - [ ] **CFD Stability:** Investigate why `k`, `epsilon`, `omega`, and `nut` turbulence fields are blowing up in steady-state simulations, rather than freezing them to `1e-8`. Consider alternative turbulence models (e.g., RNG k-epsilon) better suited for swirling, anisotropic flows.
@@ -76,7 +76,7 @@ This file tracks planned enhancements and future work for the OpenAuto-CFD frame
 To address the root cause of the numerical instabilities outlined in the technical report, the mesh quality must be improved at the source rather than relying solely on `foam_driver.py` workarounds.
 - [x] **Optimize OpenSCAD Geometry ($fn):** Increase facet resolution (`$fn = 60` to `120`) on helical modules to prevent `snappyHexMesh` from snapping to artificial sharp edges and creating highly skewed cells.
 - [x] **Eliminate Non-Manifold Geometry (Epsilon Rule):** Add tiny overlaps (e.g., `+ 0.01mm`) to cutting tools in OpenSCAD before `union()` or `difference()` operations to eliminate zero-thickness shared edges.
-- [ ] **Smooth Internal Corners:** Add small chamfers or fillets to the root of the corkscrew blade to smooth the 90-degree internal corner, preventing the mesher from generating severely distorted cells at the singularity.
+- [x] **Smooth Internal Corners:** Add small chamfers or fillets to the root of the corkscrew blade to smooth the 90-degree internal corner, preventing the mesher from generating severely distorted cells at the singularity.
 - [ ] **Tune `snappyHexMeshDict` (Background Grid):** Lower `target_cell_size` so at least 4 to 5 base cells fit across the narrowest gap in the corkscrew channel before refinement.
 - [x] **Tune `snappyHexMeshDict` (Surface Refinement):** Increase `refinementSurfaces` level for the corkscrew geometry (e.g., `level (3 4)`) to force the mesher to divide cells closer to the twisted walls.
 - [ ] **Tune `snappyHexMeshDict` (Boundary Layers):** Relax `meshQualityControls` and reduce `nSurfaceLayers` while increasing `featureAngle` to prevent prism layers from colliding on tight helices, or temporarily disable `addLayers` to isolate skewness causes.

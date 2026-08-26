@@ -140,7 +140,9 @@ Meshing helical geometries is notoriously difficult due to the complex curvature
 ### 5.2. Instrumentation
 The `FoamDriver` dynamically injects `functionObjects` (`surfaceFieldValue`) into the `controlDict`. This provides a robust, code-driven method to extract the area-averaged pressure at the inlet and outlet patches, automating the calculation of $$\Delta P$$.
 
-> **Note:** Figure 3 (Velocity streamlines) is generated via post-processing tools like ParaView after a successful OpenFOAM run. It illustrates the high-velocity core flow and the secondary Dean vortices near the walls.
+> **Note:** Figure 3 (Velocity streamlines) is generated via post-processing tools like ParaView / PyVista after a successful OpenFOAM run. It illustrates the high-velocity core flow and the secondary Dean vortices near the walls.
+
+![Figure 3: Velocity Streamlines ($U$) through the Helical Channel illustrating Dean Vortices.](images/figure3_velocity_streamlines.png)
 
 ![Figure 4: Pressure distribution ($p$) within the corkscrew filter geometry.](images/openfoam-pressure.PNG)
 
@@ -586,7 +588,7 @@ For lunar applications, the corkscrew filter offers a critical advantage: the ab
 
 The following figures require visual assets (screenshots or renders) that cannot be generated via Mermaid diagrams:
 
-*   **Figure 3:** Velocity streamlines through the helical channel (OpenFOAM Output) (Section 5.2).
+*   **Figure 3:** Velocity streamlines through the helical channel (OpenFOAM Output) (Section 5.2) - *Completed via PyVista post-processing pipeline.*
 
 
 ### Simulation Stability Challenges and Workarounds

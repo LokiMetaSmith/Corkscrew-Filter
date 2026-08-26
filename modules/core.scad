@@ -16,17 +16,20 @@
  */
 module HelicalShape(h, twist, path_r, profile_r) {
     $fn = $preview ? 32 : 128;
+    // Blend/fillet radius to smooth the sharp internal corner where the central web joins the helical blade profile
+    blend_r = min(1.0, profile_r * 0.2);
     linear_extrude(height = h, center = true, convexity = 10, twist = twist) {
-        // Create the main elliptical profile
-        // and a fillet that connects it smoothly to the central axis (r=0)
-        union() {
-            translate([path_r, 0, 0]) {
-                scale([1, helix_profile_scale_ratio]) {
-                    circle(r = profile_r);
+        // Smooth internal corners using 2D offset blend
+        offset(r = -blend_r) offset(r = blend_r) {
+            union() {
+                translate([path_r, 0, 0]) {
+                    scale([1, helix_profile_scale_ratio]) {
+                        circle(r = profile_r);
+                    }
                 }
-            }
-            translate([path_r / 2, 0, 0]) {
-                square([path_r, profile_r], center=true);
+                translate([path_r / 2, 0, 0]) {
+                    square([path_r, profile_r], center=true);
+                }
             }
         }
     }
@@ -64,12 +67,15 @@ module Corkscrew(h, twist, void = false) {
  */
 module HollowHelicalShape(h, twist, path_r, outer_r, inner_r) {
     $fn = $preview ? 32 : 128;
+    blend_r = min(1.0, outer_r * 0.2);
     linear_extrude(height = h, center = true, convexity = 10, twist = twist) {
         difference() {
-            union() {
-                translate([path_r, 0, 0]) scale([1, helix_profile_scale_ratio]) circle(r = outer_r);
-                translate([path_r / 2, 0, 0]) {
-                    square([path_r, outer_r], center=true);
+            offset(r = -blend_r) offset(r = blend_r) {
+                union() {
+                    translate([path_r, 0, 0]) scale([1, helix_profile_scale_ratio]) circle(r = outer_r);
+                    translate([path_r / 2, 0, 0]) {
+                        square([path_r, outer_r], center=true);
+                    }
                 }
             }
             translate([path_r, 0, 0]) scale([1, helix_profile_scale_ratio]) circle(r = inner_r);
