@@ -1,7 +1,13 @@
 import os
+import sys
 import pytest
 import trimesh
 import numpy as np
+
+# Ensure sys.path includes optimizer directory
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'optimizer')))
+
 from optimizer.scad_driver import ScadDriver
 from optimizer.build123d_driver import Build123dDriver
 
