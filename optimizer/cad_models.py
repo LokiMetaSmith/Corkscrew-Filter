@@ -1,7 +1,8 @@
 """
 cad_models.py
 Pure Python build123d geometry definitions matching OpenSCAD models.
-Fully rewrites all OpenSCAD modules into build123d native operations.
+Fully rewrites all OpenSCAD modules into build123d native operations with
+support for parametric 3D filleting and chamfering.
 """
 
 import math
@@ -21,14 +22,13 @@ def get_param(params, key, default):
             return float(val)
         except ValueError:
             try:
-                # Safely evaluate simple math expressions like (350/2)/6
                 return float(eval(val, {"__builtins__": None}, {}))
             except Exception:
                 return val
     return val
 
-def build_helical_shape(h, twist_deg, path_r, profile_r, scale_ratio=1.0, hollow_inner_r=None):
-    """Builds a helical extrusion using build123d."""
+def build_helical_shape(h, twist_deg, path_r, profile_r, scale_ratio=1.0, hollow_inner_r=None, blade_chamfer=0.0, fillet_r=0.0):
+    """Builds a helical extrusion using build123d with optional 3D filleting and chamfering."""
     if abs(twist_deg) < 1e-3 or h <= 0:
         with b3d.BuildPart() as p:
             with b3d.BuildSketch(b3d.Plane.XY) as s:
@@ -40,6 +40,20 @@ def build_helical_shape(h, twist_deg, path_r, profile_r, scale_ratio=1.0, hollow
                     with b3d.Locations((path_r, 0)):
                         b3d.Ellipse(hollow_inner_r, hollow_inner_r * scale_ratio, mode=b3d.Mode.SUBTRACT)
             b3d.extrude(amount=h, centered=True)
+            if blade_chamfer > 0.0:
+                try:
+                    edges = [e for e in p.edges() if e.geom_type == b3d.GeomType.LINE]
+                    if edges:
+                        b3d.chamfer(edges, amount=min(blade_chamfer, profile_r * 0.3))
+                except Exception:
+                    pass
+            if fillet_r > 0.0:
+                try:
+                    edges = p.edges()
+                    if edges:
+                        b3d.fillet(edges, radius=min(fillet_r, profile_r * 0.3))
+                except Exception:
+                    pass
         return p.part
 
     pitch = h / (abs(twist_deg) / 360.0)
@@ -61,6 +75,22 @@ def build_helical_shape(h, twist_deg, path_r, profile_r, scale_ratio=1.0, hollow
 
         b3d.sweep(sections=s.sketch, path=helix)
 
+        if blade_chamfer > 0.0:
+            try:
+                edges = [e for e in p.edges() if e.geom_type == b3d.GeomType.LINE]
+                if edges:
+                    b3d.chamfer(edges, amount=min(blade_chamfer, profile_r * 0.3))
+            except Exception:
+                pass
+
+        if fillet_r > 0.0:
+            try:
+                edges = p.edges()
+                if edges:
+                    b3d.fillet(edges, radius=min(fillet_r, profile_r * 0.3))
+            except Exception:
+                pass
+
     return p.part
 
 def build_corkscrew(params, void=False):
@@ -80,8 +110,11 @@ def build_corkscrew(params, void=False):
     tolerance_ch = float(get_param(params, "tolerance_channel", 0.2))
     scale_ratio = float(get_param(params, "helix_profile_scale_ratio", 1.0))
 
+    blade_chamfer = float(get_param(params, "blade_chamfer_mm", 0.0))
+    fillet_r = float(get_param(params, "inlet_fillet_radius_mm", 0.0))
+
     profile_r = (void_profile_r + tolerance_ch) if void else safe_profile_r
-    return build_helical_shape(h, twist_deg, path_r, profile_r, scale_ratio=scale_ratio)
+    return build_helical_shape(h, twist_deg, path_r, profile_r, scale_ratio=scale_ratio, blade_chamfer=blade_chamfer, fillet_r=fillet_r)
 
 def build_modular_filter_assembly(params):
     tube_od = float(get_param(params, "tube_od_mm", 30.0))
@@ -95,6 +128,9 @@ def build_modular_filter_assembly(params):
     safe_profile_r = min(helix_profile_r, path_r - 0.5)
     void_profile_r = float(get_param(params, "helix_void_profile_radius_mm", 5.0))
     tolerance_ch = float(get_param(params, "tolerance_channel", 0.2))
+
+    blade_chamfer = float(get_param(params, "blade_chamfer_mm", 0.0))
+    fillet_r = float(get_param(params, "inlet_fillet_radius_mm", 0.0))
 
     total_spacer_length = (num_bins + 1) * spacer_h
     total_screw_length = total_length - total_spacer_length
@@ -111,12 +147,12 @@ def build_modular_filter_assembly(params):
     if gen_cfd:
         with b3d.BuildPart() as cfd_vol:
             b3d.Cylinder(radius=tube_id / 2.0, height=total_length)
-            solid_screw = build_helical_shape(total_length, sum(rates) * (total_length / max(1, num_bins)), path_r, safe_profile_r)
+            solid_screw = build_helical_shape(total_length, sum(rates) * (total_length / max(1, num_bins)), path_r, safe_profile_r, blade_chamfer=blade_chamfer, fillet_r=fillet_r)
             cfd_vol.part = cfd_vol.part - solid_screw
         return cfd_vol.part
 
     with b3d.BuildPart() as assy:
-        screw = build_helical_shape(total_length, sum(rates) * (total_length / max(1, num_bins)), path_r, safe_profile_r, hollow_inner_r=(void_profile_r + tolerance_ch))
+        screw = build_helical_shape(total_length, sum(rates) * (total_length / max(1, num_bins)), path_r, safe_profile_r, hollow_inner_r=(void_profile_r + tolerance_ch), blade_chamfer=blade_chamfer, fillet_r=fillet_r)
         assy.part = screw
 
     return assy.part
