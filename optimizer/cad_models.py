@@ -1,6 +1,7 @@
 """
 cad_models.py
 Pure Python build123d geometry definitions matching OpenSCAD models.
+Fully rewrites all OpenSCAD modules into build123d native operations.
 """
 
 import math
@@ -27,11 +28,8 @@ def get_param(params, key, default):
     return val
 
 def build_helical_shape(h, twist_deg, path_r, profile_r, scale_ratio=1.0, hollow_inner_r=None):
-    """
-    Builds a helical extrusion using build123d.
-    """
+    """Builds a helical extrusion using build123d."""
     if abs(twist_deg) < 1e-3 or h <= 0:
-        # Straight extrusion fallback
         with b3d.BuildPart() as p:
             with b3d.BuildSketch(b3d.Plane.XY) as s:
                 with b3d.Locations((path_r, 0)):
@@ -45,21 +43,17 @@ def build_helical_shape(h, twist_deg, path_r, profile_r, scale_ratio=1.0, hollow
         return p.part
 
     pitch = h / (abs(twist_deg) / 360.0)
-    # Pitch sign determines handedness
     if twist_deg < 0:
         pitch = -pitch
 
     helix = b3d.Helix(pitch=pitch, height=h, radius=path_r, center=(0, 0, -h / 2))
-
     start_pos = helix.position_at(0)
     tangent = helix.tangent_at(0)
     sketch_plane = b3d.Plane(origin=start_pos, z_dir=tangent)
 
     with b3d.BuildPart() as p:
         with b3d.BuildSketch(sketch_plane) as s:
-            # Main profile circle/ellipse at path_r
             b3d.Ellipse(profile_r, profile_r * scale_ratio)
-            # Central web connecting axis to path_r
             with b3d.Locations((-path_r / 2, 0)):
                 b3d.Rectangle(path_r, profile_r)
             if hollow_inner_r is not None:
@@ -115,16 +109,14 @@ def build_modular_filter_assembly(params):
     gen_cfd = get_param(params, "GENERATE_CFD_VOLUME", False)
 
     if gen_cfd:
-        # CFD Volume: Bounding cylinder minus solid assembly
         with b3d.BuildPart() as cfd_vol:
             b3d.Cylinder(radius=tube_id / 2.0, height=total_length)
-            solid_screw = build_helical_shape(total_length, sum(rates) * (total_length / num_bins), path_r, safe_profile_r)
+            solid_screw = build_helical_shape(total_length, sum(rates) * (total_length / max(1, num_bins)), path_r, safe_profile_r)
             cfd_vol.part = cfd_vol.part - solid_screw
         return cfd_vol.part
 
-    # Solid assembly
     with b3d.BuildPart() as assy:
-        screw = build_helical_shape(total_length, sum(rates) * (total_length / num_bins), path_r, safe_profile_r, hollow_inner_r=(void_profile_r + tolerance_ch))
+        screw = build_helical_shape(total_length, sum(rates) * (total_length / max(1, num_bins)), path_r, safe_profile_r, hollow_inner_r=(void_profile_r + tolerance_ch))
         assy.part = screw
 
     return assy.part
@@ -202,6 +194,95 @@ def build_flat_end_screw(params):
         p.part = p.part.intersect(screw)
     return p.part
 
+def build_barb(hose_id=5.0, hose_od=6.5, barb_count=4, barb_length=2.0, swell=1.0, wall_thickness=1.0):
+    bore_id = hose_id - 2.0 * wall_thickness
+    total_len = barb_length * (barb_count + 1)
+    with b3d.BuildPart() as p:
+        for z in range(barb_count):
+            with b3d.Locations((0, 0, z * barb_length + barb_length / 2.0)):
+                b3d.Cone(bottom_radius=(hose_od + swell) / 2.0, top_radius=hose_od / 2.0, height=barb_length)
+        with b3d.Locations((0, 0, barb_count * barb_length + barb_length / 2.0)):
+            b3d.Cylinder(radius=hose_od / 2.0, height=barb_length)
+        with b3d.Locations((0, 0, total_len / 2.0)):
+            b3d.Cylinder(radius=bore_id / 2.0, height=total_len + 1.0, mode=b3d.Mode.SUBTRACT)
+    return p.part
+
+def build_hose_adapter_cap(params):
+    tube_od = float(get_param(params, "tube_od_mm", 30.0))
+    hose_id = float(get_param(params, "adapter_hose_id_mm", 8.0))
+    tube_wall = float(get_param(params, "tube_wall_mm", 2.0))
+    cap_wall = 3.0
+    cap_sleeve_h = 20.0
+    cap_plate_t = 3.0
+    cap_inner_dia = tube_od - 2.0 * tube_wall + 0.2
+    cap_outer_dia = cap_inner_dia + 2.0 * cap_wall
+
+    with b3d.BuildPart() as p:
+        with b3d.Locations((0, 0, cap_sleeve_h / 2.0)):
+            b3d.Cylinder(radius=cap_outer_dia / 2.0, height=cap_sleeve_h)
+        with b3d.Locations((0, 0, cap_sleeve_h + cap_plate_t / 2.0)):
+            b3d.Cylinder(radius=cap_outer_dia / 2.0, height=cap_plate_t)
+        with b3d.Locations((0, 0, cap_sleeve_h / 2.0)):
+            b3d.Cylinder(radius=cap_inner_dia / 2.0, height=cap_sleeve_h + 1.0, mode=b3d.Mode.SUBTRACT)
+        with b3d.Locations((0, 0, (cap_sleeve_h + cap_plate_t) / 2.0)):
+            b3d.Cylinder(radius=hose_id / 2.0, height=cap_sleeve_h + cap_plate_t + 2.0, mode=b3d.Mode.SUBTRACT)
+        with b3d.Locations((0, 0, cap_sleeve_h + cap_plate_t)):
+            barb = build_barb(hose_id=hose_id, hose_od=hose_id + 1.5, barb_count=4)
+            p.part = p.part + barb
+    return p.part
+
+def build_custom_coupling(params):
+    inset_h = float(get_param(params, "coupling_inset_height", 10.0))
+    inset_w = float(get_param(params, "coupling_inset_width", 20.0))
+    lip_h = float(get_param(params, "coupling_lip_height", 2.0))
+    lip_w = float(get_param(params, "coupling_lip_width", 24.0))
+    outer_h = float(get_param(params, "coupling_outer_coupling_height", 15.0))
+    outer_od = float(get_param(params, "coupling_outer_coupling_od", 22.0))
+    inlet_d = float(get_param(params, "coupling_inner_inlet", 12.0))
+    outlet_d = float(get_param(params, "coupling_inner_outlet", 10.0))
+
+    with b3d.BuildPart() as p:
+        with b3d.Locations((0, 0, (inset_h + lip_h) / 2.0)):
+            b3d.Cylinder(radius=inset_w / 2.0, height=inset_h)
+        with b3d.Locations((0, 0, 0)):
+            b3d.Cylinder(radius=lip_w / 2.0, height=lip_h)
+        with b3d.Locations((0, 0, -(outer_h + lip_h) / 2.0)):
+            b3d.Cylinder(radius=outer_od / 2.0, height=outer_h)
+        with b3d.Locations((0, 0, (inset_h + lip_h) / 2.0)):
+            b3d.Cone(bottom_radius=outlet_d / 2.0, top_radius=inlet_d / 2.0, height=inset_h + 0.1, mode=b3d.Mode.SUBTRACT)
+        with b3d.Locations((0, 0, -(outer_h + lip_h) / 2.0)):
+            b3d.Cylinder(radius=outlet_d / 2.0, height=outer_h + 1.0, mode=b3d.Mode.SUBTRACT)
+    return p.part
+
+def build_filter_holder(params):
+    tube_id = float(get_param(params, "tube_id", 30.0))
+    cartridge_od = float(get_param(params, "cartridge_od", 10.0))
+    barb_od = float(get_param(params, "barb_od", 6.5))
+    barb_id = float(get_param(params, "barb_id", 4.0))
+    base_h = 5.0
+
+    with b3d.BuildPart() as p:
+        b3d.Cylinder(radius=tube_id / 2.0, height=base_h)
+        b3d.Cylinder(radius=barb_id / 2.0, height=base_h + 2.0, mode=b3d.Mode.SUBTRACT)
+        with b3d.Locations((0, 0, base_h)):
+            barb = build_barb(hose_id=barb_id, hose_od=barb_od, barb_count=3)
+            p.part = p.part + barb
+    return p.part
+
+def build_single_cell_filter(params):
+    cell_len = float(get_param(params, "cell_length", 80.0))
+    cell_d = float(get_param(params, "cell_diameter", 20.0))
+    num_helices = int(get_param(params, "num_helices", 2))
+    tube_od = cell_d + 10.0
+    tube_wall = 1.5
+
+    with b3d.BuildPart() as p:
+        b3d.Cylinder(radius=tube_od / 2.0, height=cell_len)
+        b3d.Cylinder(radius=(tube_od - 2.0 * tube_wall) / 2.0, height=cell_len + 2.0, mode=b3d.Mode.SUBTRACT)
+        core = build_helical_shape(cell_len, 360.0 * 2.0, cell_d / 2.0, 3.0)
+        p.part = p.part + core
+    return p.part
+
 def build_dipole_antenna(params):
     length = float(get_param(params, "length", 50.0))
     thickness = float(get_param(params, "thickness", 2.0))
@@ -229,13 +310,10 @@ def build_puck_antenna(params):
 
     with b3d.BuildPart() as p:
         with b3d.Locations((0, 0, ground_clearance)):
-            # Housing
             with b3d.Locations((0, 0, puck_height / 2.0)):
                 b3d.Cylinder(radius=puck_radius, height=puck_height)
-            # Solar panel
             with b3d.Locations((0, 0, puck_height + panel_gap + panel_thickness / 2.0)):
                 b3d.Cylinder(radius=panel_radius, height=panel_thickness)
-            # Antenna elements
             angle_step = 360.0 / num_antennas
             for i in range(num_antennas):
                 angle = i * angle_step
@@ -261,7 +339,6 @@ def build_trace_optimizer(params, part="all"):
             with b3d.Locations((sub_length / 2.0, sub_width / 2.0, -cu_thickness / 2.0)):
                 b3d.Box(sub_length, sub_width, cu_thickness)
         if part in ["all", "copper"]:
-            # Standard microstrip trace
             with b3d.Locations((sub_length / 2.0, sub_width / 2.0, sub_thickness + cu_thickness / 2.0)):
                 b3d.Box(sub_length, 2.0, cu_thickness)
         if part == "port1":
@@ -288,16 +365,12 @@ def build_cyclone_manifold(params, part_to_generate="solid"):
 
     if part_to_generate in ["corkscrew_fluid", "fluid_volume", "fluid"]:
         with b3d.BuildPart() as p:
-            # Main cylinder
             with b3d.Locations((0, 0, cy_h / 2.0)):
                 b3d.Cylinder(radius=cy_r, height=cy_h)
-            # Cone
             with b3d.Locations((0, 0, -cone_h / 2.0)):
                 b3d.Cone(bottom_radius=cy_r, top_radius=dust_r, height=cone_h)
-            # Dust outlet
             with b3d.Locations((0, 0, -cone_h - 12.5)):
                 b3d.Cylinder(radius=dust_r, height=25.0)
-            # Inlet pipe
             with b3d.Locations((cy_r - inlet_w / 2.0, cy_r, cy_h - inlet_h / 2.0)):
                 b3d.Box(inlet_w, cy_d, inlet_h)
         return p.part
@@ -320,7 +393,6 @@ def build_cyclone_manifold(params, part_to_generate="solid"):
                 b3d.Cylinder(radius=dust_r, height=1.0)
         return p.part
 
-    # Default solid
     fluid = build_cyclone_manifold(params, "fluid")
     with b3d.BuildPart() as shell:
         with b3d.Locations((0, 0, cy_h / 2.0)):
