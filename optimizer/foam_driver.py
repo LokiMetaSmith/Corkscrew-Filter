@@ -1965,6 +1965,8 @@ FoamFile
         seen_patch_names = set()
 
         for key, filename in stl_assets.items():
+            if key == "mesh_anchor" or not isinstance(filename, str):
+                continue
             if key == "fluid":
                 final_patch_name = "corkscrew"
             elif key == "wall":
@@ -2249,6 +2251,8 @@ FoamFile
         self.run_command(["checkMesh"], log_file=temp_log, description="Quality Check (checkMesh)", ignore_error=True)
 
         metrics = {
+            "cell_count": 0,
+            "max_aspect_ratio": 0.0,
             "max_non_orthogonality": 0.0,
             "max_skewness": 0.0,
             "failed_checks": 0,
@@ -2258,6 +2262,16 @@ FoamFile
         if os.path.exists(temp_log):
             with open(temp_log, 'r') as f:
                 log_content = f.read()
+
+            # Parse Cell Count
+            m_cells = re.search(r"cells:\s*(\d+)", log_content)
+            if m_cells:
+                metrics["cell_count"] = int(m_cells.group(1))
+
+            # Parse Max Aspect Ratio
+            m_aspect = re.search(r"Max aspect ratio\s*=\s*([\d\.]+)", log_content)
+            if m_aspect:
+                metrics["max_aspect_ratio"] = float(m_aspect.group(1))
 
             # Parse Max non-orthogonality
             m_ortho = re.search(r"Mesh non-orthogonality Max:\s*([\d\.]+)", log_content)

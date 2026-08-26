@@ -112,6 +112,33 @@ def test_inlet_cap_parity(tmp_output_dir):
     print(f"Inlet Cap - Vol Diff: {vol_diff:.2f}%, Bounds Diff: {bounds_diff:.2f}%")
     assert bounds_diff <= 1.5
 
+def test_corkscrew_assembly_parity(tmp_output_dir):
+    params = {
+        "tube_od_mm": 30.0,
+        "tube_wall_mm": 2.0,
+        "insert_length_mm": 60.0,
+        "helix_path_radius_mm": 10.0,
+        "helix_profile_radius_mm": 4.0,
+        "helix_void_profile_radius_mm": 5.0,
+        "number_of_complete_revolutions": 2.0,
+        "num_bins": 2,
+        "spacer_height_mm": 5.0,
+        "part_to_generate": "modular_filter_assembly",
+        "GENERATE_CFD_VOLUME": True
+    }
+    scad_drv = ScadDriver("corkscrew.scad")
+    b3d_drv = Build123dDriver("corkscrew.scad")
+
+    scad_stl = os.path.join(tmp_output_dir, "corkscrew_scad.stl")
+    b3d_stl = os.path.join(tmp_output_dir, "corkscrew_b3d.stl")
+
+    assert scad_drv.generate_stl(params, scad_stl)
+    assert b3d_drv.generate_stl(params, b3d_stl)
+
+    vol_diff, bounds_diff = compare_stl_geometry(scad_stl, b3d_stl)
+    print(f"Corkscrew Assembly - Vol Diff: {vol_diff:.2f}%, Bounds Diff: {bounds_diff:.2f}%")
+    assert bounds_diff <= 1.5
+
 def test_cfd_wall_parity(tmp_output_dir):
     params = {
         "tube_od_mm": 30.0,
