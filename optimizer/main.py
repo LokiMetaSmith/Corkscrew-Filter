@@ -9,7 +9,7 @@ import sys
 import uuid
 import yaml
 from dotenv import load_dotenv
-from scad_driver import ScadDriver
+from cad_factory import CadEngineFactory
 from physics_factory import PhysicsEngineFactory
 
 from ml_optimizer import OptunaOptimizer
@@ -46,6 +46,7 @@ def main():
     parser.add_argument("--skip-cfd", action="store_true", help="Generate geometry but skip CFD simulation")
     parser.add_argument("--dry-mesh", action="store_true", help="Run geometry generation and meshing, evaluate mesh quality, but skip CFD simulation")
     parser.add_argument("--reuse-mesh", action="store_true", help="Reuse existing mesh (skips geometry generation and meshing)")
+    parser.add_argument("--cad-engine", type=str, default="build123d", choices=["build123d", "openscad", "scad"], help="CAD engine to use for 3D geometry generation (default: build123d)")
     parser.add_argument("--container-engine", type=str, default="auto", choices=["auto", "podman", "docker"], help="Force specific container engine")
     parser.add_argument("--cpus", type=int, default=1, help="Number of CPUs to use for parallel execution (default: 1)")
     parser.add_argument("--no-llm", action="store_true", help="Explicitly disable LLM and use random/fallback strategy (also suppresses prompts in startup script)")
@@ -88,7 +89,7 @@ def main():
     fluid_volume_module = config.get('geometry', {}).get('fluid_volume_module', 'modular_filter_assembly')
 
     # Initialize components
-    scad = ScadDriver(scad_file, fluid_volume_module=fluid_volume_module)
+    scad = CadEngineFactory.get_driver(scad_file, cad_engine=args.cad_engine, fluid_volume_module=fluid_volume_module)
 
     # Instantiate physics driver using the factory
     physics_driver = PhysicsEngineFactory.get_driver(

@@ -1,0 +1,71 @@
+project_name: "Parametric_Cyclone_Filter"
+geometry:
+  scad_file: "cyclone_filter_manifold.scad"
+  fluid_volume_module: "fluid_volume"
+  parameters:
+    cyclone_diameter: { type: "float", min: 50.0, max: 200.0, default: 100.0 }
+    cylinder_height: { type: "float", min: 50.0, max: 200.0, default: 100.0 }
+    cone_height: { type: "float", min: 100.0, max: 300.0, default: 150.0 }
+    inlet_width: { type: "float", min: 10.0, max: 50.0, default: 25.0 }
+    inlet_height: { type: "float", min: 20.0, max: 100.0, default: 50.0 }
+    vortex_finder_diameter: { type: "float", min: 20.0, max: 80.0, default: 50.0 }
+    vortex_finder_length: { type: "float", min: 20.0, max: 150.0, default: 75.0 }
+    dust_outlet_diameter: { type: "float", min: 10.0, max: 50.0, default: 25.0 }
+
+physics:
+  solver: "icoUncoupledKinematicParcelFoam" # For particle tracking
+  fluid: "air"
+  particle_velocity: "5.0" # Maps to the injected particle speed and inlet air speed
+  boundaries:
+    inlet:
+      type: "patch"
+      U: "fixedValue uniform (-5 0 0)" # Velocity towards inside of the cyclone tangentially
+      k: "fixedValue uniform 0.375"
+      epsilon: "fixedValue uniform 14.855"
+      alignment: "vertical"
+    clean_outlet:
+      type: "patch"
+      p: "fixedValue uniform 0"
+      alignment: "horizontal"
+    dust_outlet:
+      type: "patch"
+      p: "fixedValue uniform 0"
+      alignment: "vertical"
+
+optimization:
+  target: "maximize"
+  objective_function: "separation_efficiency - (0.001 * required_pressure)" # maximize efficiency while minimizing pressure drop
+  description: "Maximize particle capture efficiency at the dust outlet while minimizing the pressure drop between the inlet and clean outlet."
+  constraints:
+    - "required_pressure < 500" # Max allowed pressure drop
+  extractors:
+    - type: "surfaceFieldValue"
+      function_name: "inletPressure"
+      metric_name: "p_in"
+    - type: "surfaceFieldValue"
+      function_name: "outletPressure"
+      metric_name: "p_out"
+
+cfd_settings:
+  turbulence_model: "RNGkEpsilon"
+  mesh_decompose_method: "hierarchical"
+  solve_decompose_method: "scotch"
+  # mesh_processors: 4 # Override for parallel meshing (default: num_processors)
+  # solve_processors: 4 # Override for parallel solving (default: num_processors)
+  fallback_wall_functions:
+    nut: "nutkWallFunction"
+    epsilon: "epsilonWallFunction"
+    k: "kqRWallFunction"
+  initial_fields:
+    k:
+      internalField: "uniform 0.375"
+      wallFunction: "kqRWallFunction"
+    epsilon:
+      internalField: "uniform 14.855"
+      wallFunction: "epsilonWallFunction"
+  relaxation_factors:
+    p: 0.2
+    U: 0.5
+    k: 0.5
+    epsilon: 0.5
+    omega: 0.5

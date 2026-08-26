@@ -22,7 +22,7 @@ try:
 except ImportError:
     from mcp.server.fastmcp import FastMCP
 
-from optimizer.scad_driver import ScadDriver
+from optimizer.cad_factory import CadEngineFactory
 from optimizer.physics_factory import PhysicsEngineFactory
 from optimizer.simulation_runner import run_simulation
 from optimizer.data_store import DataStore
@@ -176,7 +176,8 @@ def run_simulation_tool(
     case_dir: str = "corkscrewFilter",
     output_stl: str = "corkscrew_fluid.stl",
     cpus: int = 1,
-    turbulence: str = "laminar"
+    turbulence: str = "laminar",
+    cad_engine: str = "build123d"
 ) -> Dict[str, Any]:
     """
     Execute a single CAD generation and physics simulation evaluation (CFD/EM/FEA) for a given set of parameters.
@@ -210,7 +211,7 @@ def run_simulation_tool(
             elif param_def.get('constant', False) and 'value' in param_def:
                 params[param_name] = param_def['value']
 
-    scad = ScadDriver(scad_file, fluid_volume_module=fluid_volume_module)
+    scad = CadEngineFactory.get_driver(scad_file, cad_engine=cad_engine, fluid_volume_module=fluid_volume_module)
     physics_driver = PhysicsEngineFactory.get_driver(
         case_dir,
         config=config,
@@ -343,7 +344,8 @@ def run_schema_step(
     config_file: str = "configs/corkscrew_config.yaml",
     workspace_dir: str = "exports",
     epsilon: float = 5.0,
-    dry_run: bool = True
+    dry_run: bool = True,
+    cad_engine: str = "build123d"
 ) -> Dict[str, Any]:
     """
     Execute a single iteration of the Schema surrogate-planning harness loop.
@@ -389,7 +391,7 @@ def run_schema_step(
     def real_solver_func(params_to_run):
         scad_file = config.get('geometry', {}).get('scad_file', 'corkscrew.scad')
         fluid_volume_module = config.get('geometry', {}).get('fluid_volume_module', 'modular_filter_assembly')
-        scad = ScadDriver(scad_file, fluid_volume_module=fluid_volume_module)
+        scad = CadEngineFactory.get_driver(scad_file, cad_engine=cad_engine, fluid_volume_module=fluid_volume_module)
         physics_driver = PhysicsEngineFactory.get_driver("corkscrewFilter", config=config)
 
         metrics, _, _, _, _ = run_simulation(
