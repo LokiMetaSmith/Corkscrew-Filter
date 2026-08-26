@@ -71,6 +71,14 @@ class Build123dDriver(CadDriverBase):
             return cad_models.build_cfd_wall(params)
         elif part_name == "flat_end_screw":
             return cad_models.build_flat_end_screw(params)
+        elif part_name == "hose_adapter_cap":
+            return cad_models.build_hose_adapter_cap(params)
+        elif part_name == "custom_coupling":
+            return cad_models.build_custom_coupling(params)
+        elif part_name == "filter_holder":
+            return cad_models.build_filter_holder(params)
+        elif part_name == "single_cell_filter":
+            return cad_models.build_single_cell_filter(params)
         else:
             return cad_models.build_modular_filter_assembly(params)
 
