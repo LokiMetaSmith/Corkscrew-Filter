@@ -80,8 +80,8 @@ class TestMCPServer(unittest.TestCase):
 
     @patch("optimizer.mcp_server.run_simulation")
     @patch("optimizer.mcp_server.PhysicsEngineFactory.get_driver")
-    @patch("optimizer.mcp_server.ScadDriver")
-    def test_run_simulation_tool(self, mock_scad_driver, mock_get_driver, mock_run_sim):
+    @patch("optimizer.mcp_server.CadEngineFactory.get_driver")
+    def test_run_simulation_tool(self, mock_cad_driver, mock_get_driver, mock_run_sim):
         mock_run_sim.return_value = (
             {"separation_efficiency": 99.0},
             ["render1.png"],

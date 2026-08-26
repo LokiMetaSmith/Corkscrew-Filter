@@ -11,7 +11,7 @@ from unittest.mock import patch
 # Ensure we can import from optimizer and its dependencies
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'optimizer')))
-from optimizer.scad_driver import ScadDriver
+from optimizer.cad_factory import CadEngineFactory
 
 class TestParameterSTLs(unittest.TestCase):
     @classmethod
@@ -63,7 +63,7 @@ def create_test_method(param_file):
                 if "fluid_volume_module:" in line:
                     fluid_volume_module = line.split("fluid_volume_module:")[1].strip().strip('"').strip("'")
 
-        driver = ScadDriver(scad_file, fluid_volume_module=fluid_volume_module)
+        driver = CadEngineFactory.get_driver(scad_file, cad_engine="build123d", fluid_volume_module=fluid_volume_module)
 
 
         # Patch subprocess.run to include a timeout

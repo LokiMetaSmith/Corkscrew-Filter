@@ -6,8 +6,9 @@ import numpy as np
 import warnings
 import tempfile
 from utils import run_command_with_spinner
+from cad_driver_base import CadDriverBase
 
-class ScadDriver:
+class ScadDriver(CadDriverBase):
     def __init__(self, scad_file_path, force_native=False, fluid_volume_module="modular_filter_assembly"):
         self.scad_file_path = scad_file_path
         self.fluid_volume_module = fluid_volume_module

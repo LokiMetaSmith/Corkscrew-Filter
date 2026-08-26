@@ -13,3 +13,5 @@ PyYAML
 Jinja2
 python-dotenv
 optuna
+build123d
+mcp
