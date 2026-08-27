@@ -85,7 +85,7 @@ def parse_solver_outputs_to_state(params: Dict[str, Any], metrics: Dict[str, Any
         "inlet_width", "helix_path_radius_mm", "helix_profile_radius_mm",
         "helix_void_profile_radius_mm", "slit_axial_length_mm", "slit_chamfer_height",
         "filter_height_mm", "number_of_complete_revolutions", "screw_OD_mm",
-        "screw_ID_mm", "num_screws", "num_bins"
+        "screw_ID_mm", "num_screws", "num_bins", "blade_chamfer_mm", "inlet_fillet_radius_mm"
     ]
     geometry = {}
     for k in geometry_keys:
