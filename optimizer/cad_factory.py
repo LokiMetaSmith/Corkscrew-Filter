@@ -3,8 +3,12 @@ cad_factory.py
 Factory for creating CAD drivers (Build123dDriver vs ScadDriver).
 """
 
-from scad_driver import ScadDriver
-from build123d_driver import Build123dDriver
+try:
+    from scad_driver import ScadDriver
+    from build123d_driver import Build123dDriver
+except ImportError:
+    from .scad_driver import ScadDriver
+    from .build123d_driver import Build123dDriver
 
 class CadEngineFactory:
     @staticmethod
