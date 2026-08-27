@@ -92,6 +92,12 @@ def main():
         else:
             print("\n--- Local Mode: Skipping Git Sync ---")
 
+        # 1.5 Check and requeue stale jobs from dead workers, record heartbeat
+        manager.record_heartbeat(worker_id)
+        requeued = manager.requeue_stale_jobs(stale_threshold_sec=300)
+        if requeued > 0:
+            print(f"Requeued {requeued} stale jobs from timed-out workers.")
+
         # 2. Check Queue
         pending_jobs = manager.get_pending_jobs()
         if not pending_jobs:
