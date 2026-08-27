@@ -32,27 +32,31 @@ def step(state_dict, action_dict):
     # higher wall thickness -> higher mass, higher factor of safety
     # S11 improves/degrades slightly with geometry changes
 
-    # Use delta path/profile radius to predict changes
+    # Use delta path/profile radius, wall thickness, chamfers, and fillets to predict changes
     delta_path = float(action_dict.get('helix_path_radius_mm', 0.0))
     delta_profile = float(action_dict.get('helix_profile_radius_mm', 0.0))
     delta_wall = float(action_dict.get('tube_wall_mm', 0.0))
+    delta_chamfer = float(action_dict.get('blade_chamfer_mm', 0.0))
+    delta_fillet = float(action_dict.get('inlet_fillet_radius_mm', 0.0))
 
-    if delta_path != 0 or delta_profile != 0:
-        # Narrower/wider channels affect fluid drag/pressure drop
+    if delta_path != 0 or delta_profile != 0 or delta_fillet != 0:
         p_drop = fluid.get('pressure_drop', 120.0)
         eff = fluid.get('separation_efficiency', 95.0)
 
-        # Increasing path radius or profile radius increases flow area -> reduces pressure drop
-        area_factor = (delta_path * 1.5) + (delta_profile * 2.0)
+        # Smooth fillets and larger area reduce flow separation losses & pressure drop
+        area_factor = (delta_path * 1.5) + (delta_profile * 2.0) + (delta_fillet * 3.0)
         fluid['pressure_drop'] = max(10.0, p_drop - area_factor * 10.0)
         fluid['separation_efficiency'] = max(1.0, min(100.0, eff + area_factor * 2.0))
 
-    if delta_wall != 0:
+    if delta_wall != 0 or delta_chamfer != 0:
         mass = struct.get('total_mass_g', 50.0)
         struct['total_mass_g'] = max(5.0, mass + delta_wall * 15.0)
 
+        # Chamfering blade edges reduces stress concentration factors
         fos = struct.get('factor_of_safety', 2.0)
-        struct['factor_of_safety'] = max(0.1, fos + delta_wall * 0.5)
+        stress = struct.get('max_von_mises_stress_MPa', 45.0)
+        struct['factor_of_safety'] = max(0.1, fos + delta_wall * 0.5 + delta_chamfer * 0.3)
+        struct['max_von_mises_stress_MPa'] = max(1.0, stress - delta_chamfer * 4.0)
 
     return next_state
 """
