@@ -185,6 +185,16 @@ def synthesize_cot_reasoning(run_n: Dict[str, Any], run_nplus1: Dict[str, Any], 
                 reasoning_parts.append(f"  Adjusting slit dimensions helps optimize the separation threshold, balancing particle rejection and minimizing pressure drops.")
             elif "thickness" in name or "wall" in name:
                 reasoning_parts.append(f"  Tuning structural walls to maintain a robust manifold shape and avoid self-intersection.")
+            elif "chamfer" in name:
+                if v_new > v_old:
+                    reasoning_parts.append(f"  Increasing blade chamfering reduces 3D stress concentration factors (Kt) and smoothes blade tip shear layer separation.")
+                else:
+                    reasoning_parts.append(f"  Decreasing blade chamfering maximizes effective blade surface area.")
+            elif "fillet" in name:
+                if v_new > v_old:
+                    reasoning_parts.append(f"  Increasing inlet filleting smoothes the entrance transition, reducing entry pressure drop and preventing vortex detachment.")
+                else:
+                    reasoning_parts.append(f"  Decreasing inlet filleting maintains a compact port footprint.")
     else:
         reasoning_parts.append("We retain the existing parameter configurations but refine local tolerances to explore the immediate neighborhood of this design space.")
 

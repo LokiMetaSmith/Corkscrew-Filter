@@ -31,14 +31,72 @@ class JobManager:
             print(f"Cannot claim job {job_id}: Status is '{latest.get('status') if latest else 'unknown'}'")
             return False
 
+        import time
         entry = {
             "id": job_id,
             "status": "running",
             "worker_id": worker_id,
+            "timestamp": time.time(),
             "parameters": latest["parameters"] # Carry forward params
         }
         self.store.append_result(entry)
         return True
+
+    def record_heartbeat(self, worker_id: str, job_id: Optional[str] = None):
+        """
+        Records a worker heartbeat entry in the append-only log.
+        """
+        import time
+        now = time.time()
+        entry = {
+            "id": f"hb_{worker_id}_{int(now)}",
+            "status": "heartbeat",
+            "type": "heartbeat",
+            "worker_id": worker_id,
+            "job_id": job_id,
+            "parameters": {"_heartbeat": True, "worker_id": worker_id},
+            "timestamp": now
+        }
+        self.store.append_result(entry)
+
+    def requeue_stale_jobs(self, stale_threshold_sec: float = 300.0) -> int:
+        """
+        Identifies running jobs whose worker heartbeat has timed out, and requeues them.
+        Returns count of requeued jobs.
+        """
+        import time
+        now = time.time()
+        all_states = self._get_all_latest_states()
+
+        # Build worker last active timestamp dictionary
+        history = self.store.load_history()
+        worker_last_active = {}
+        for entry in history:
+            w_id = entry.get("worker_id")
+            ts_raw = entry.get("timestamp")
+            try:
+                ts = float(ts_raw) if ts_raw is not None else now
+            except (ValueError, TypeError):
+                ts = now
+            if w_id:
+                worker_last_active[w_id] = max(worker_last_active.get(w_id, 0.0), ts)
+
+        requeued_count = 0
+        for job_id, job in all_states.items():
+            if job.get("status") == "running":
+                w_id = job.get("worker_id")
+                last_active = worker_last_active.get(w_id, 0.0)
+                if (now - last_active) >= stale_threshold_sec:
+                    # Worker timed out - requeue job
+                    entry = {
+                        "id": job_id,
+                        "status": "queued",
+                        "parameters": job.get("parameters", {}),
+                        "requeued_from": w_id
+                    }
+                    self.store.append_result(entry)
+                    requeued_count += 1
+        return requeued_count
 
     def complete_job(self, job_id: str, metrics: Dict[str, Any]) -> bool:
         """
@@ -125,10 +183,7 @@ class JobManager:
         # Since file is append-only, later entries override earlier ones.
         for entry in history:
             job_id = entry.get("id")
-            if job_id:
-                # If we already saw this ID, merge/overwrite.
-                # Since we iterate start to end, this entry is newer (or same).
-                # Ideally we check timestamps, but file order is a strong proxy here.
+            if job_id and entry.get("type") != "heartbeat" and not str(job_id).startswith("hb_"):
                 latest_states[job_id] = entry
 
         return latest_states
