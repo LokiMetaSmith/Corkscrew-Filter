@@ -97,7 +97,9 @@ class Build123dDriver(CadDriverBase):
             if out_dir and not os.path.exists(out_dir):
                 os.makedirs(out_dir, exist_ok=True)
 
-            b3d.export_stl(shape, output_path)
+            tol = float(cad_models.get_param(run_params, "stl_linear_tolerance", 0.05))
+            ang_tol = float(cad_models.get_param(run_params, "stl_angular_tolerance", 0.2))
+            b3d.export_stl(shape, output_path, tolerance=tol, angular_tolerance=ang_tol)
 
             if log_file:
                 with open(log_file, 'a') as f:

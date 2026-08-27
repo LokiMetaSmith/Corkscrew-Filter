@@ -15,6 +15,7 @@ logs/
 .venv/*
 *.bak
 *.stl
+*.db
 corkscrewFilter/constant/extendedFeatureEdgeMesh/
 corkscrewFilter/constant/polyMesh/
 corkscrewFilter/constant/triSurface/*.eMesh
