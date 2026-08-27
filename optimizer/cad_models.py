@@ -28,7 +28,7 @@ def get_param(params, key, default):
     return val
 
 def build_helical_shape(h, twist_deg, path_r, profile_r, scale_ratio=1.0, hollow_inner_r=None, blade_chamfer=0.0, fillet_r=0.0):
-    """Builds a helical extrusion using build123d with optional 3D filleting and chamfering."""
+    """Builds a helical extrusion using build123d with aligned local X-axis toward central Z-axis."""
     if abs(twist_deg) < 1e-3 or h <= 0:
         with b3d.BuildPart() as p:
             with b3d.BuildSketch(b3d.Plane.XY) as s:
@@ -63,7 +63,8 @@ def build_helical_shape(h, twist_deg, path_r, profile_r, scale_ratio=1.0, hollow
     helix = b3d.Helix(pitch=pitch, height=h, radius=path_r, center=(0, 0, -h / 2))
     start_pos = helix.position_at(0)
     tangent = helix.tangent_at(0)
-    sketch_plane = b3d.Plane(origin=start_pos, z_dir=tangent)
+    radial_in = b3d.Vector(-start_pos.X, -start_pos.Y, 0).normalized()
+    sketch_plane = b3d.Plane(origin=start_pos, x_dir=radial_in, z_dir=tangent)
 
     with b3d.BuildPart() as p:
         with b3d.BuildSketch(sketch_plane) as s:
@@ -412,7 +413,7 @@ def build_cyclone_manifold(params, part_to_generate="solid"):
             with b3d.Locations((0, 0, cy_h / 2.0)):
                 b3d.Cylinder(radius=cy_r, height=cy_h)
             with b3d.Locations((0, 0, -cone_h / 2.0)):
-                b3d.Cone(bottom_radius=cy_r, top_radius=dust_r, height=cone_h)
+                b3d.Cone(bottom_radius=dust_r, top_radius=cy_r, height=cone_h)
             with b3d.Locations((0, 0, -cone_h - 12.5)):
                 b3d.Cylinder(radius=dust_r, height=25.0)
             with b3d.Locations((cy_r - inlet_w / 2.0, cy_r, cy_h - inlet_h / 2.0)):
@@ -442,7 +443,7 @@ def build_cyclone_manifold(params, part_to_generate="solid"):
         with b3d.Locations((0, 0, cy_h / 2.0)):
             b3d.Cylinder(radius=cy_r + wt, height=cy_h)
         with b3d.Locations((0, 0, -cone_h / 2.0)):
-            b3d.Cone(bottom_radius=cy_r + wt, top_radius=dust_r + wt, height=cone_h)
+            b3d.Cone(bottom_radius=dust_r + wt, top_radius=cy_r + wt, height=cone_h)
         with b3d.Locations((0, 0, -cone_h - 12.5)):
             b3d.Cylinder(radius=dust_r + wt, height=25.0)
         with b3d.Locations((cy_r - inlet_w / 2.0, cy_r, cy_h - inlet_h / 2.0)):
