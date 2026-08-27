@@ -169,7 +169,9 @@ def build_inlet_cap(params):
             if shape == "square":
                 b3d.Box(tube_id, tube_id, 0.5)
             elif shape == "hex":
-                b3d.Cylinder(radius=tube_id / 2.0, height=0.5, rotation_by_sides=6)
+                with b3d.BuildSketch():
+                    b3d.RegularPolygon(radius=tube_id / 2.0, side_count=6)
+                b3d.extrude(amount=0.5)
             else:
                 b3d.Cylinder(radius=tube_id / 2.0, height=0.5)
     return p.part
@@ -186,7 +188,9 @@ def build_outlet_cap(params):
             if shape == "square":
                 b3d.Box(tube_id, tube_id, 0.5)
             elif shape == "hex":
-                b3d.Cylinder(radius=tube_id / 2.0, height=0.5, rotation_by_sides=6)
+                with b3d.BuildSketch():
+                    b3d.RegularPolygon(radius=tube_id / 2.0, side_count=6)
+                b3d.extrude(amount=0.5)
             else:
                 b3d.Cylinder(radius=tube_id / 2.0, height=0.5)
     return p.part
@@ -204,8 +208,12 @@ def build_cfd_wall(params):
             b3d.Box(tube_id + 2 * wt, tube_id + 2 * wt, h)
             b3d.Box(tube_id, tube_id, h + 1.0, mode=b3d.Mode.SUBTRACT)
         elif shape == "hex":
-            b3d.Cylinder(radius=(tube_id + 2 * wt) / 2.0, height=h, rotation_by_sides=6)
-            b3d.Cylinder(radius=tube_id / 2.0, height=h + 1.0, rotation_by_sides=6, mode=b3d.Mode.SUBTRACT)
+            with b3d.BuildSketch():
+                b3d.RegularPolygon(radius=(tube_id + 2 * wt) / 2.0, side_count=6)
+            b3d.extrude(amount=h)
+            with b3d.BuildSketch():
+                b3d.RegularPolygon(radius=tube_id / 2.0, side_count=6)
+            b3d.extrude(amount=h + 1.0, mode=b3d.Mode.SUBTRACT)
         else:
             b3d.Cylinder(radius=(tube_id + 2 * wt) / 2.0, height=h)
             b3d.Cylinder(radius=tube_id / 2.0, height=h + 1.0, mode=b3d.Mode.SUBTRACT)
@@ -357,8 +365,8 @@ def build_puck_antenna(params):
                 cx = (puck_radius + antenna_len / 2.0) * math.cos(rad)
                 cy = (puck_radius + antenna_len / 2.0) * math.sin(rad)
                 cz = puck_height / 2.0
-                with b3d.Locations((cx, cy, cz)):
-                    b3d.Box(antenna_len, antenna_w, antenna_t, rotation=(0, 0, angle))
+                with b3d.Locations(b3d.Location((cx, cy, cz), (0, 0, angle))):
+                    b3d.Box(antenna_len, antenna_w, antenna_t)
     return p.part
 
 def build_trace_optimizer(params, part="all"):

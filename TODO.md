@@ -2,6 +2,19 @@
 
 This file tracks planned enhancements and future work for the OpenAuto-CFD framework and the Corkscrew Filter validation study.
 
+## build123d CAD Engine & Multi-Physics Refactor
+- [x] **Pure Python CAD Engine (`build123d`):** Rewrote all project 3D models (`optimizer/cad_models.py`) into native Python `build123d` B-rep solids (corkscrew filter, dipole antenna, puck antenna, cyclone filter manifold, trace optimizer, hose adapter cap, custom couplings, and filter holders).
+- [x] **Parametric 3D Filleting & Chamfering:** Added native B-rep 3D chamfering (`blade_chamfer_mm`) and filleting (`inlet_fillet_radius_mm`) to eliminate flow turbulence and stress concentrations.
+- [x] **Legacy OpenSCAD Fallback:** Preserved existing OpenSCAD scripts in `legacy/openscad/` with configurable engine selection (`CadEngineFactory`).
+- [x] **Direct STEP-to-Mesh Volume Pipeline (`gmsh`):** Implemented `GmshDriver` (`optimizer/gmsh_driver.py`) for direct STEP CAD B-rep volume meshing into OpenFOAM (`gmshToFoam`).
+- [x] **Meshing Performance & Quality Benchmark Suite:** Created `scripts/benchmark_meshing.py` to compare SnappyHexMesh (STL surface) vs. Gmsh (STEP B-rep) on wall-clock time, peak memory footprint, cell counts, aspect ratio, non-orthogonality, and skewness.
+- [x] **Self-Contained Interactive 3D WebGL Visualizer:** Implemented Three.js WebGL HTML exporter (`CadDriverBase.generate_interactive_html`) with embedded STL models for interactive 3D browser viewing.
+- [x] **Automated FEA Structural Validation (`FeaDriver`):** Enhanced `FeaDriver` (`optimizer/fea_driver.py`) to evaluate von Mises stress (`max_von_mises_stress_MPa`), displacement (`max_displacement_mm`), and factor of safety (`factor_of_safety`).
+- [x] **Multi-Node Worker Fault-Tolerance:** Added worker heartbeats (`record_heartbeat`) and automatic dead-worker stale job recovery (`requeue_stale_jobs`) to `job_manager.py` and `worker.py`.
+- [x] **Fine-Tuning Dataset Generator Updates:** Updated `optimizer/generate_training_data.py` to synthesize Chain-of-Thought (CoT) reasoning for `build123d` parametric CAD mutations.
+- [x] **Multi-Objective Pareto Optimization & World Model:** Added non-dominated Pareto front calculation and plotting (`optimizer/scoring.py`), and updated Schema surrogate transition rules (`optimizer/harness/surrogate.py`).
+- [x] **1-to-1 Parity Test Suite:** Added `test/test_cad_parity.py` verifying 1-to-1 STL bounding box and volume parity (< 1.5% difference) between OpenSCAD and `build123d`.
+
 - [x] Add the ability to make different parameter configurations based on included config files.
 - [x] Refine the `CorkscrewSlitKnife` geometry to have a chamfered or ramped leading edge to improve separation efficiency.
 - [x] Conduct CFD analysis to test different design parameters (slit shape, screw pitch, etc.) - *Enabled via new parameters in config.scad and optimizer/constraints.py*
