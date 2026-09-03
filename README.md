@@ -11,6 +11,7 @@ By leveraging a universal Configuration-Driven Architecture (via YAML Problem De
 *   **Physics-Informed Agents**: The AI is prompted with the governing physics equations and makes decisions based on multivariable trade-offs (e.g., maximizing separation efficiency while minimizing pressure drop).
 *   **Automated CFD Pipeline**: Robustly drives OpenFOAM meshing (`blockMesh`, `snappyHexMesh`) and solving directly from generated STL files.
 *   **Multimodal Feedback**: The agent analyzes both numerical metrics and 3D renderings of the generated geometry to detect visual defects that might cause printability or flow issues.
+*   **Model Context Protocol (MCP) Interface**: Exposes a standard MCP server for external LLMs (e.g. Claude Desktop, Cursor) to directly query harness state, list configs, run parametric CAD & physics simulations, and execute Schema surrogate steps.
 
 ---
 
@@ -63,10 +64,33 @@ The 3D models for the filter are generated using OpenSCAD.
 ### 3. Automated Optimization & Parameters
 
 The `optimizer/` directory contains tools to automate the design-simulation-analysis loop using the OpenAuto-CFD framework.
-*   See [optimizer/README.md](./optimizer/README.md) for details on the AI-driven optimization workflow.
+*   See [optimizer/README.md](./optimizer/README.md) for details on the AI-driven optimization workflow and MCP server usage.
 *   See [parameters/README.md](./parameters/README.md) for information on parameter configuration files.
 
 > **Pro Tip:** When running the optimizer `main.py`, you can parallelize the meshing and CFD solver by using the `--cpus X` flag (where X is the number of cores). This makes OpenFOAM execute much faster!
+
+### 4. Running the MCP Server
+
+OpenAuto-CFD includes a Model Context Protocol (MCP) interface allowing AI assistants (Claude Desktop, Cursor, etc.) to drive evaluations and inspect harness state:
+
+```bash
+PYTHONPATH=optimizer python3 -m optimizer.mcp_server
+```
+
+To configure with Claude Desktop (`claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "openauto-cfd": {
+      "command": "python3",
+      "args": ["-m", "optimizer.mcp_server"],
+      "env": {
+        "PYTHONPATH": "/path/to/OpenAuto-CFD/optimizer"
+      }
+    }
+  }
+}
+```
 
 ### 4. CFD Simulation (Advanced)
 

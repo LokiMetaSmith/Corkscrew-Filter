@@ -62,6 +62,38 @@ python optimizer/main.py --iterations 5 --scad-file corkscrew.scad --case-dir co
 *   **`scad_driver.py`**: Wraps OpenSCAD command-line tools to generate STL files from parameter sets.
 *   **`data_store.py`**: Manages the persistent storage of optimization results in `optimization_log.jsonl`.
 *   **`constraints.py`**: Central definitions for optimization goals and parameter constraints.
+*   **`mcp_server.py`**: Model Context Protocol (MCP) server providing standard stdio tool execution for external LLMs.
+
+## Model Context Protocol (MCP) Server
+
+The MCP server (`optimizer/mcp_server.py`) exposes high-level tools for external LLM agents to direct the harness:
+
+### Exposed MCP Capabilities
+
+#### Tools (`@mcp.tool`)
+1. `list_available_configs`: Discovers all YAML problem definition files in the codebase.
+2. `run_simulation_tool`: Triggers OpenSCAD geometry generation and CFD/EM/FEA simulations with specific parameters.
+3. `get_harness_status`: Queries optimization history, total runs, and top-performing parameter sets.
+4. `get_run_details`: Fetches full details, metrics, and artifact paths for a specific run ID.
+5. `get_schema_state`: Retrieves the current Schema surrogate state, timeline discrepancy log, and notes.
+6. `run_schema_step`: Executes an iteration of the physicist-style Schema surrogate planning loop.
+7. `validate_parameters_tool`: Performs pre-flight constraint validation on proposed CAD parameter sets.
+8. `suggest_parameters_tool`: Invokes the internal AI agent / Optuna optimizer to propose candidate parameters.
+9. `generate_training_dataset_tool`: Formats historical simulation logs into OpenAI, Alpaca, or DPO fine-tuning datasets with synthesized CoT reasoning.
+
+#### Resources (`@mcp.resource`)
+* `config://corkscrew_config.yaml`: Read standard Corkscrew Filter CFD configuration YAML.
+* `log://latest`: Read the latest simulation run record from the optimization log.
+* `schema://notes`: Read physicist notes (`notes.md`) recorded during Schema surrogate iterations.
+
+#### Prompts (`@mcp.prompt`)
+* `analyze_simulation_results`: Generates structured prompt guiding an LLM on analyzing simulation metrics and recommending parameter mutations.
+* `schema_surrogate_reasoning`: Generates prompt template for mechanism discovery and surrogate updates when state discrepancy occurs.
+
+### Launching the MCP Server
+```bash
+PYTHONPATH=optimizer python3 -m optimizer.mcp_server
+```
 
 ## Data Storage
 

@@ -2,6 +2,19 @@
 
 This file tracks planned enhancements and future work for the OpenAuto-CFD framework and the Corkscrew Filter validation study.
 
+## build123d CAD Engine & Multi-Physics Refactor
+- [x] **Pure Python CAD Engine (`build123d`):** Rewrote all project 3D models (`optimizer/cad_models.py`) into native Python `build123d` B-rep solids (corkscrew filter, dipole antenna, puck antenna, cyclone filter manifold, trace optimizer, hose adapter cap, custom couplings, and filter holders).
+- [x] **Parametric 3D Filleting & Chamfering:** Added native B-rep 3D chamfering (`blade_chamfer_mm`) and filleting (`inlet_fillet_radius_mm`) to eliminate flow turbulence and stress concentrations.
+- [x] **Legacy OpenSCAD Fallback:** Preserved existing OpenSCAD scripts in `legacy/openscad/` with configurable engine selection (`CadEngineFactory`).
+- [x] **Direct STEP-to-Mesh Volume Pipeline (`gmsh`):** Implemented `GmshDriver` (`optimizer/gmsh_driver.py`) for direct STEP CAD B-rep volume meshing into OpenFOAM (`gmshToFoam`).
+- [x] **Meshing Performance & Quality Benchmark Suite:** Created `scripts/benchmark_meshing.py` to compare SnappyHexMesh (STL surface) vs. Gmsh (STEP B-rep) on wall-clock time, peak memory footprint, cell counts, aspect ratio, non-orthogonality, and skewness.
+- [x] **Self-Contained Interactive 3D WebGL Visualizer:** Implemented Three.js WebGL HTML exporter (`CadDriverBase.generate_interactive_html`) with embedded STL models for interactive 3D browser viewing.
+- [x] **Automated FEA Structural Validation (`FeaDriver`):** Enhanced `FeaDriver` (`optimizer/fea_driver.py`) to evaluate von Mises stress (`max_von_mises_stress_MPa`), displacement (`max_displacement_mm`), and factor of safety (`factor_of_safety`).
+- [x] **Multi-Node Worker Fault-Tolerance:** Added worker heartbeats (`record_heartbeat`) and automatic dead-worker stale job recovery (`requeue_stale_jobs`) to `job_manager.py` and `worker.py`.
+- [x] **Fine-Tuning Dataset Generator Updates:** Updated `optimizer/generate_training_data.py` to synthesize Chain-of-Thought (CoT) reasoning for `build123d` parametric CAD mutations.
+- [x] **Multi-Objective Pareto Optimization & World Model:** Added non-dominated Pareto front calculation and plotting (`optimizer/scoring.py`), and updated Schema surrogate transition rules (`optimizer/harness/surrogate.py`).
+- [x] **1-to-1 Parity Test Suite:** Added `test/test_cad_parity.py` verifying 1-to-1 STL bounding box and volume parity (< 1.5% difference) between OpenSCAD and `build123d`.
+
 - [x] Add the ability to make different parameter configurations based on included config files.
 - [x] Refine the `CorkscrewSlitKnife` geometry to have a chamfered or ramped leading edge to improve separation efficiency.
 - [x] Conduct CFD analysis to test different design parameters (slit shape, screw pitch, etc.) - *Enabled via new parameters in config.scad and optimizer/constraints.py*
@@ -42,7 +55,7 @@ This file tracks planned enhancements and future work for the OpenAuto-CFD frame
 - [x] **Test Reliability:** Increased timeouts for WASM-based tests (`test/regression.js` and `test/test_parameter_stls.py`) to prevent false failures on slower environments.
 - [x] **Documentation:** Updated `README.md` with explicit installation/testing instructions and `TECHNICAL_REPORT.md` with notes on missing figures.
 - [x] **Geometry Stability:** Resolve persistent `CGAL error: precondition violation` in `single_cell_filter.scad` and `flat_end_screw.scad` when running in `openscad-wasm`. (Native OpenSCAD may work fine). *Update: Added unit tests in `test/test_wasm_cgal_error.py` tracking this as an upstream issue in openscad-wasm handling of complex boolean extrusions.*
-- [ ] **Visual Assets:** Generate and insert Figure 3 (Velocity Streamlines) into `TECHNICAL_REPORT.md` using ParaView.
+- [x] **Visual Assets:** Generate and insert Figure 3 (Velocity Streamlines) into `TECHNICAL_REPORT.md` using ParaView / PyVista pipeline.
 
 ## Post-Review Improvements (Code Review Action Items)
 - [ ] **CFD Stability:** Investigate why `k`, `epsilon`, `omega`, and `nut` turbulence fields are blowing up in steady-state simulations, rather than freezing them to `1e-8`. Consider alternative turbulence models (e.g., RNG k-epsilon) better suited for swirling, anisotropic flows.
@@ -50,7 +63,13 @@ This file tracks planned enhancements and future work for the OpenAuto-CFD frame
 - [x] **End-to-End Non-CFD Testing:** Implement a "Dry-Mesh" testing step in the optimization loop that runs `blockMesh` and `snappyHexMesh` (without running the solver) and evaluates the output of `checkMesh`. Use this to validate manufacturability and meshability before running expensive CFD simulations.
 - [x] **Stricter Geometry Validation:** Enhance the Python `Validator` to check STLs for non-manifold edges and self-intersections (using `trimesh`) before attempting to mesh them in OpenFOAM.
 - [x] **Hardcode Safety Margins:** In OpenSCAD modules (e.g., `assemblies.scad`), enforce minimum geometric tolerances mathematically to prevent CGAL precondition violations, regardless of LLM parameter suggestions (e.g., explicitly prevent `helix_profile_radius` from equaling `helix_path_radius`).
-- [ ] **Improved LLM Feedback:** Update the LLM error feedback mechanism to provide specific, geometric reasons for simulation failures (e.g., "The mesh quality check failed due to high non-orthogonality near the slit") instead of generic OpenFOAM solver crash logs.
+- [x] **Improved LLM Feedback:** Update the LLM error feedback mechanism to provide specific, geometric reasons for simulation failures (e.g., "The mesh quality check failed due to high non-orthogonality near the slit") instead of generic OpenFOAM solver crash logs.
+
+## Electromagnetic (EM) Optimization Pipeline
+- [x] **Impedance Optimization Loop:** Create a specialized configuration and scoring system to iteratively optimize PCB trace widths for target impedance using the LLM agent.
+- [x] **True VTK Field Extraction:** Implement the conversion of raw HDF5 field data from openEMS to VTK format for physically accurate visualizations.
+- [x] **Complex PCB Stackups:** Extend the geometry generation and drivers to support multi-layer PCB stackups, internal planes, and vias.
+- [x] **Radiation Pattern Visualization:** Add support for extracting and visualizing 3D far-field radiation patterns in Blender.
 
 ## CFD Resilient Execution Engine (Post-Review Architecture)
 - [ ] **Phase 1: Immediate Stability Fixes (Numerical Stability)**
@@ -70,7 +89,7 @@ This file tracks planned enhancements and future work for the OpenAuto-CFD frame
 To address the root cause of the numerical instabilities outlined in the technical report, the mesh quality must be improved at the source rather than relying solely on `foam_driver.py` workarounds.
 - [x] **Optimize OpenSCAD Geometry ($fn):** Increase facet resolution (`$fn = 60` to `120`) on helical modules to prevent `snappyHexMesh` from snapping to artificial sharp edges and creating highly skewed cells.
 - [x] **Eliminate Non-Manifold Geometry (Epsilon Rule):** Add tiny overlaps (e.g., `+ 0.01mm`) to cutting tools in OpenSCAD before `union()` or `difference()` operations to eliminate zero-thickness shared edges.
-- [ ] **Smooth Internal Corners:** Add small chamfers or fillets to the root of the corkscrew blade to smooth the 90-degree internal corner, preventing the mesher from generating severely distorted cells at the singularity.
+- [x] **Smooth Internal Corners:** Add small chamfers or fillets to the root of the corkscrew blade to smooth the 90-degree internal corner, preventing the mesher from generating severely distorted cells at the singularity.
 - [ ] **Tune `snappyHexMeshDict` (Background Grid):** Lower `target_cell_size` so at least 4 to 5 base cells fit across the narrowest gap in the corkscrew channel before refinement.
 - [x] **Tune `snappyHexMeshDict` (Surface Refinement):** Increase `refinementSurfaces` level for the corkscrew geometry (e.g., `level (3 4)`) to force the mesher to divide cells closer to the twisted walls.
 - [ ] **Tune `snappyHexMeshDict` (Boundary Layers):** Relax `meshQualityControls` and reduce `nSurfaceLayers` while increasing `featureAngle` to prevent prism layers from colliding on tight helices, or temporarily disable `addLayers` to isolate skewness causes.
@@ -79,12 +98,12 @@ To address the root cause of the numerical instabilities outlined in the technic
 ## Codebase Cleanup and Refactoring
 This section tracks necessary repository cleanup tasks to reorganize misplaced files, remove orphaned code, and improve project structure. **Important:** Every file must be carefully examined before deletion to ensure we do not introduce regressions. This codebase has extensive debug and recovery methods that are core functionality, so do not indiscriminately delete anything that says "fix/resolve/verify".
 
-- [ ] **Group 1: Investigate Test Files Outside of the `test/` Folder.**
+- [x] **Group 1: Investigate Test Files Outside of the `test/` Folder.**
     - Carefully review the following test files in the root directory. If they are actual tests or test utilities, move them to `test/`. If they are redundant or outdated, delete them.
     - Files to investigate: `check_tests.py`, `generalize_tests.py`, `run_cfd_test.py`, `run_cfd_test2.py`, `test_boundaries.py`, `test_fvschemes.py`, `test_fvschemes2.py`, `test_fvsolution.py`, `test_fvsolution2.py`, `test_meshing.py`, `test_nan.py`, `update_tests.py`.
-- [ ] **Group 2: Investigate Orphaned Plan Files.**
+- [x] **Group 2: Investigate Orphaned Plan Files.**
     - Review `plan17.md` and `plan18.md` to see if they contain any relevant unsaved documentation. Otherwise, they appear to be orphaned agent execution plans and should be removed.
-- [ ] **Group 3: Investigate Debug, Recovery, and One-Off Scripts.**
+- [x] **Group 3: Investigate Debug, Recovery, and One-Off Scripts.**
     - Many scripts in the root seem related to debugging or resolving specific issues (e.g., `fix_final_merge.py`, `fix_inletoutlet.py`, `fix_merge.py`, `investigate.py`, `resolve_conflicts.py`, `resolve_foam_driver.py`, `verify_fvschemes.py`, `verify_fvsolution.py`). Examine them carefully. If they are no longer needed, they can be deleted. If they still serve a purpose, consider moving them to a `scripts/` or `tools/` folder. Do not blindly delete files that are core recovery functionalities.
-- [ ] **Group 4: Investigate Log Files in the Root Directory.**
+- [x] **Group 4: Investigate Log Files in the Root Directory.**
     - Review `.pip_install.log` and `test_meshing3.log`. If they are not needed for reference, delete them or add them to `.gitignore` and untrack them from the repository to clean up the root folder.

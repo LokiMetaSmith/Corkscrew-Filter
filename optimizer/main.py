@@ -9,8 +9,11 @@ import sys
 import uuid
 import yaml
 from dotenv import load_dotenv
-from scad_driver import ScadDriver
-from foam_driver import FoamDriver
+from cad_factory import CadEngineFactory
+from physics_factory import PhysicsEngineFactory
+
+from ml_optimizer import OptunaOptimizer
+from scoring import calculate_score
 from llm_agent import LLMAgent
 from data_store import DataStore
 from simulation_runner import run_simulation
@@ -43,6 +46,7 @@ def main():
     parser.add_argument("--skip-cfd", action="store_true", help="Generate geometry but skip CFD simulation")
     parser.add_argument("--dry-mesh", action="store_true", help="Run geometry generation and meshing, evaluate mesh quality, but skip CFD simulation")
     parser.add_argument("--reuse-mesh", action="store_true", help="Reuse existing mesh (skips geometry generation and meshing)")
+    parser.add_argument("--cad-engine", type=str, default="build123d", choices=["build123d", "openscad", "scad"], help="CAD engine to use for 3D geometry generation (default: build123d)")
     parser.add_argument("--container-engine", type=str, default="auto", choices=["auto", "podman", "docker"], help="Force specific container engine")
     parser.add_argument("--cpus", type=int, default=1, help="Number of CPUs to use for parallel execution (default: 1)")
     parser.add_argument("--no-llm", action="store_true", help="Explicitly disable LLM and use random/fallback strategy (also suppresses prompts in startup script)")
@@ -53,6 +57,9 @@ def main():
     parser.add_argument("--parallel-workers", type=int, default=0, help="Number of parallel worker processes to spawn (0 = sequential)")
     parser.add_argument("--params-file", type=str, help="Path to a SCAD parameter file to use as the base configuration (overrides defaults)")
     parser.add_argument("--turbulence", type=str, default="laminar", help="Turbulence model to use (default: laminar, can be kOmegaSST, RNGkEpsilon, etc.)")
+    parser.add_argument("--schema", action="store_true", help="Use the physicist-style Schema surrogate-planning harness loop")
+    parser.add_argument("--epsilon", type=float, default=5.0, help="Mismatch threshold for surrogate backtests")
+    parser.add_argument("--use-ml-optimizer", action="store_true", help="Use Optuna-based ML optimizer instead of LLM.")
     args = parser.parse_args()
 
     # Parse iterations argument
@@ -82,8 +89,17 @@ def main():
     fluid_volume_module = config.get('geometry', {}).get('fluid_volume_module', 'modular_filter_assembly')
 
     # Initialize components
-    scad = ScadDriver(scad_file, fluid_volume_module=fluid_volume_module)
-    foam = FoamDriver(args.case_dir, config=config, container_engine=args.container_engine, num_processors=args.cpus, verbose=args.verbose, debug=args.debug)
+    scad = CadEngineFactory.get_driver(scad_file, cad_engine=args.cad_engine, fluid_volume_module=fluid_volume_module)
+
+    # Instantiate physics driver using the factory
+    physics_driver = PhysicsEngineFactory.get_driver(
+        args.case_dir,
+        config=config,
+        container_engine=args.container_engine,
+        num_processors=args.cpus,
+        verbose=args.verbose,
+        debug=args.debug
+    )
 
     # Handle --no-llm logic
     if args.no_llm and "GEMINI_API_KEY" in os.environ:
@@ -108,6 +124,85 @@ def main():
         print(f"Warning: Failed to retrieve git commit info: {e}")
         git_commit = "unknown"
 
+    # If Schema Mode is active, run the dedicated Schema Loop instead
+    if args.schema:
+        print("[Schema] Activating physicist-style Schema surrogate-planning harness...")
+        from harness import SchemaEngine, State, parse_solver_outputs_to_state
+
+        # 1. Initialize Schema Engine
+        os.makedirs("exports", exist_ok=True)
+        # Use config's parameters
+        parameter_defs = config.get('geometry', {}).get('parameters', {})
+        engine = SchemaEngine(workspace_dir="exports", parameter_defs=parameter_defs, llm_agent=agent, epsilon=args.epsilon)
+
+        # 2. Get Initial State
+        initial_params = {}
+        for param_name, param_def in parameter_defs.items():
+            if 'default' in param_def:
+                initial_params[param_name] = param_def['default']
+            elif param_def.get('constant', False) and 'value' in param_def:
+                initial_params[param_name] = param_def['value']
+
+        # Ensure we have some default placeholder or run a bootstrap
+        print("[Schema] Bootstrapping initial state from default parameters...")
+
+        def run_real_solver(params_to_run):
+            metrics, png_paths, solid_stl_path, fluid_stl_path, vtk_zip_path = run_simulation(
+                scad,
+                physics_driver,
+                params_to_run,
+                output_stl_name=args.output_stl,
+                dry_run=args.dry_run,
+                skip_cfd=args.skip_cfd,
+                dry_mesh=args.dry_mesh,
+                iteration=0,
+                reuse_mesh=args.reuse_mesh,
+                verbose=args.verbose,
+                params_file=args.params_file,
+                turbulence=args.turbulence,
+                debug=args.debug
+            )
+            return metrics
+
+        # 3. Establish initial state
+        initial_metrics = run_real_solver(initial_params)
+        current_state = parse_solver_outputs_to_state(initial_params, initial_metrics)
+
+        # Define multi-physics objective scoring function
+        # High value = good. We use standard scoring weights or custom
+        def state_score_func(s: State) -> float:
+            # High efficiency, low pressure drop, high factor of safety, good impedance resonance
+            eff = s.fluid.get("separation_efficiency", 0.0)
+            p_drop = s.fluid.get("pressure_drop", 0.0)
+            fos = s.structural.get("factor_of_safety", 1.0)
+            s11 = s.electromagnetic.get("S11", 0.0)
+
+            # Simple combined scoring formula
+            score = eff - (p_drop * 0.1) + min(5.0, fos) * 2.0
+            if s11 < 0.0:
+                score -= s11 # Improve if S11 is strongly negative (e.g., -15 -> +15 contribution)
+            return score
+
+        print(f"[Schema] Initial State: {json.dumps(current_state.to_dict(), indent=2)}")
+        print(f"[Schema] Starting planning-simulation iterations (Total: {args.iterations})...")
+
+        i = 0
+        while True:
+            if not infinite_mode and i >= max_iterations:
+                break
+            print(f"\n=== Schema Iteration {i+1} ===")
+            _, action, current_state, dist = engine.run_one_iteration(
+                current_state=current_state,
+                score_func=state_score_func,
+                real_solver_func=run_real_solver
+            )
+            print(f"=== Completed Schema Iteration {i+1} (Discrepancy: {dist:.4f}) ===")
+            i += 1
+
+        physics_driver.cleanup_ram_disk()
+        print("\n[Schema] Optimization loop finished.")
+        return
+
     # Initial parameters
     if args.params_file:
         print(f"Using parameters file: {args.params_file}. Clearing initial_params to allow file to take precedence.")
@@ -122,6 +217,10 @@ def main():
                 initial_params[param_name] = param_def['default']
             elif param_def.get('constant', False) and 'value' in param_def:
                 initial_params[param_name] = param_def['value']
+
+    # Fallback to avoid empty initial parameters if no parameters are defined but the optimization loop expects them
+    if not initial_params and not args.params_file:
+        initial_params = {"_dummy": True}
 
     # Extract constraints for the LLM
     constraints_str = config.get('optimization', {}).get('constraints', '')
@@ -159,41 +258,62 @@ def main():
 
         # Refill Queue if empty
         if not parameter_queue:
-            print(f"Parameter queue empty. Requesting {args.batch_size} new sets from LLM...")
+            if args.use_ml_optimizer:
+                print(f"Parameter queue empty. Requesting {args.batch_size} new sets from Optuna ML Optimizer...")
+                # Lazily initialize ml_optimizer
+                if not hasattr(agent, 'ml_optimizer'):
+                    agent.ml_optimizer = OptunaOptimizer(config=config, study_name="openauto_cfd_study")
 
-            campaign_params = agent.suggest_campaign(
-                history=full_history,
-                constraints=constraints_str,
-                objective=objective_func,
-                target=optimization_target,
-                description=optimization_desc,
-                parameters_def=config.get('geometry', {}).get('parameters', {}),
-                count=args.batch_size,
-                image_paths=last_run_images
-            )
-
-            if campaign_params and campaign_params[0].get("stop_optimization") is True:
-                print("\n>>> OPTIMIZATION COMPLETE: LLM signaled stop. <<<")
-                break
-
-            if campaign_params:
-                print(f"LLM returned {len(campaign_params)} parameter sets.")
-                # Filter duplicates immediately
                 added = 0
-                for p in campaign_params:
-                     if get_params_hash(p) not in visited_params:
-                         parameter_queue.append(p)
-                         added += 1
-                     else:
-                         print("Skipping duplicate suggested by LLM.")
+                for _ in range(args.batch_size):
+                    # We grab trials one by one. In parallel mode, this puts them in a batch.
+                    trial, params = agent.ml_optimizer.suggest_next(config.get('geometry', {}).get('parameters', {}))
+                    # Stash trial reference for reporting later
+                    params["_optuna_trial_number"] = trial.number
+                    if get_params_hash(params) not in visited_params:
+                        parameter_queue.append(params)
+                        added += 1
+                    else:
+                        print("Skipping duplicate suggested by Optuna.")
+
                 if added == 0:
-                    print("All suggestions were duplicates.")
+                     print("All suggestions from Optuna were duplicates or queue is stuck.")
             else:
-                print("LLM failed/fallback. Generating random.")
-                base_params = full_history[-1]["parameters"] if full_history else initial_params
-                random_params = agent._generate_random_parameters(base_params, config.get('geometry', {}).get('parameters', {}))
-                if get_params_hash(random_params) not in visited_params:
-                    parameter_queue.append(random_params)
+                print(f"Parameter queue empty. Requesting {args.batch_size} new sets from LLM...")
+
+                campaign_params = agent.suggest_campaign(
+                    history=full_history,
+                    constraints=constraints_str,
+                    objective=objective_func,
+                    target=optimization_target,
+                    description=optimization_desc,
+                    parameters_def=config.get('geometry', {}).get('parameters', {}),
+                    count=args.batch_size,
+                    image_paths=last_run_images
+                )
+
+                if campaign_params and campaign_params[0].get("stop_optimization") is True:
+                    print("\n>>> OPTIMIZATION COMPLETE: LLM signaled stop. <<<")
+                    break
+
+                if campaign_params:
+                    print(f"LLM returned {len(campaign_params)} parameter sets.")
+                    # Filter duplicates immediately
+                    added = 0
+                    for p in campaign_params:
+                         if get_params_hash(p) not in visited_params:
+                             parameter_queue.append(p)
+                             added += 1
+                         else:
+                             print("Skipping duplicate suggested by LLM.")
+                    if added == 0:
+                        print("All suggestions were duplicates.")
+                else:
+                    print("LLM failed/fallback. Generating random.")
+                    base_params = full_history[-1]["parameters"] if full_history else initial_params
+                    random_params = agent._generate_random_parameters(base_params, config.get('geometry', {}).get('parameters', {}))
+                    if get_params_hash(random_params) not in visited_params:
+                        parameter_queue.append(random_params)
 
         if not parameter_queue:
             print("Queue empty after refill. Retrying next loop (or breaking if strictly limited).")
@@ -299,7 +419,7 @@ def main():
             # output_stl is strictly 'corkscrew_fluid.stl' for OpenFOAM compatibility
             metrics, png_paths, solid_stl_path, fluid_stl_path, vtk_zip_path = run_simulation(
                 scad,
-                foam,
+                physics_driver,
                 current_params,
                 output_stl_name=args.output_stl,
                 dry_run=args.dry_run,
@@ -328,6 +448,35 @@ def main():
                     args.skip_cfd = True
                 elif metrics["error"] == "geometry_generation_failed":
                     print("Geometry generation failed.")
+
+            # Report to Optuna if active
+            if args.use_ml_optimizer and hasattr(agent, 'ml_optimizer') and "_optuna_trial_number" in current_params:
+                trial_num = current_params.pop("_optuna_trial_number") # Remove it before saving
+
+                # Calculate a continuous scalar score for Optuna
+                scalar_score = 0.0
+                if "error" not in metrics:
+                    objective_func = config.get('optimization', {}).get('objective_function')
+                    if objective_func and objective_func in metrics:
+                        # Direct metric (Optuna already knows if we are maximizing or minimizing)
+                        scalar_score = float(metrics[objective_func])
+                    else:
+                        # Legacy Corkscrew Heuristic (assuming maximize direction)
+                        efficiency_pct = metrics.get("separation_efficiency", 0.0)
+                        delta_p_kinematic = metrics.get("delta_p", 1000.0)
+
+                        # Convert Pressure
+                        # Pressure (Pa) = p_kinematic * rho
+                        pressure_pa = delta_p_kinematic * 1.225
+                        pressure_psi = pressure_pa / 6894.76
+
+                        # Smooth gradient: Maximize efficiency while minimizing pressure drop
+                        scalar_score = efficiency_pct - (pressure_psi * 10.0)
+
+                try:
+                    agent.ml_optimizer.report_result(trial_num, scalar_score, metrics)
+                except Exception as e:
+                    print(f"Error reporting to optuna: {e}")
 
             # Save Results
             run_data = {
@@ -370,7 +519,7 @@ def main():
             i += 1
 
     # Cleanup the driver RAM disk when loop is finished
-    foam.cleanup_ram_disk()
+    physics_driver.cleanup_ram_disk()
 
     print("\nOptimization loop finished.")
 

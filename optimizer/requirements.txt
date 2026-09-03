@@ -1,6 +1,7 @@
 google-genai
 numpy
 trimesh
+h5py
 pandas
 scipy
 Pillow
@@ -11,3 +12,7 @@ pytest
 PyYAML
 Jinja2
 python-dotenv
+optuna
+build123d
+mcp
+gmsh

@@ -69,6 +69,96 @@ def calculate_score(metrics: Dict[str, Any], config: Dict[str, Any] = None) -> T
         # We return (validity, met_target, efficiency, -pressure_psi)
         return (validity_score, is_target_met, efficiency_pct, -pressure_psi)
 
+def compute_pareto_front(history: list, objectives: list = None) -> list:
+    """
+    Computes non-dominated Pareto front runs from history across multi-objective metrics.
+    objectives: list of tuples (metric_key, 'maximize'|'minimize')
+    """
+    if not history:
+        return []
+
+    if objectives is None:
+        objectives = [("separation_efficiency", "maximize"), ("delta_p", "minimize")]
+
+    valid_runs = [r for r in history if r.get("metrics") and "error" not in r.get("metrics")]
+    if not valid_runs:
+        return []
+
+    pareto_runs = []
+    for i, run_a in enumerate(valid_runs):
+        m_a = run_a["metrics"]
+        is_dominated = False
+
+        for j, run_b in enumerate(valid_runs):
+            if i == j:
+                continue
+            m_b = run_b["metrics"]
+
+            # Check if B dominates A
+            better_or_equal = True
+            strictly_better = False
+
+            for key, direction in objectives:
+                val_a = m_a.get(key, 0.0 if direction == "maximize" else float('inf'))
+                val_b = m_b.get(key, 0.0 if direction == "maximize" else float('inf'))
+
+                if direction == "maximize":
+                    if val_b < val_a:
+                        better_or_equal = False
+                    if val_b > val_a:
+                        strictly_better = True
+                else: # minimize
+                    if val_b > val_a:
+                        better_or_equal = False
+                    if val_b < val_a:
+                        strictly_better = True
+
+            if better_or_equal and strictly_better:
+                is_dominated = True
+                break
+
+        if not is_dominated:
+            pareto_runs.append(run_a)
+
+    return pareto_runs
+
+def export_pareto_plot(history: list, output_path: str = "exports/pareto_front.png", objectives: list = None):
+    """
+    Generates a 2D/3D scatter plot highlighting the non-dominated Pareto front.
+    """
+    import os
+    import matplotlib.pyplot as plt
+
+    if objectives is None:
+        objectives = [("separation_efficiency", "maximize"), ("delta_p", "minimize")]
+
+    pareto_front = compute_pareto_front(history, objectives)
+
+    obj1_key, obj1_dir = objectives[0]
+    obj2_key, obj2_dir = objectives[1]
+
+    all_x = [r["metrics"].get(obj1_key, 0.0) for r in history if r.get("metrics") and "error" not in r["metrics"]]
+    all_y = [r["metrics"].get(obj2_key, 0.0) for r in history if r.get("metrics") and "error" not in r["metrics"]]
+
+    pf_x = [r["metrics"].get(obj1_key, 0.0) for r in pareto_front]
+    pf_y = [r["metrics"].get(obj2_key, 0.0) for r in pareto_front]
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.scatter(all_x, all_y, color="#89b4fa", alpha=0.6, label="All Runs", s=30)
+    ax.scatter(pf_x, pf_y, color="#f38ba8", alpha=0.9, label="Pareto Front", s=80, edgecolors="black")
+
+    ax.set_xlabel(f"{obj1_key} ({obj1_dir})")
+    ax.set_ylabel(f"{obj2_key} ({obj2_dir})")
+    ax.set_title("Multi-Objective Optimization Pareto Frontier")
+    ax.grid(True, linestyle="--", alpha=0.5)
+    ax.legend()
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150)
+    plt.close(fig)
+    return output_path
+
 def is_top_performer(run: Dict[str, Any], all_runs: list, config: Dict[str, Any] = None, top_n: int = 10) -> bool:
     """
     Determines if a specific run is in the top N performers of all provided runs.

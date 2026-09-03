@@ -6,7 +6,7 @@ import uuid
 import sys
 from job_manager import JobManager
 from data_store import DataStore
-from scad_driver import ScadDriver
+from cad_factory import CadEngineFactory
 from foam_driver import FoamDriver
 from simulation_runner import run_simulation
 from git_utils import git_pull_rebase, git_commit, git_push_with_retry, get_git_commit
@@ -53,6 +53,7 @@ def main():
     parser.add_argument("--case-dir", type=str, default="corkscrewFilter")
     parser.add_argument("--poll-interval", type=int, default=10, help="Seconds to wait between polls in loop mode")
     parser.add_argument("--local", action="store_true", help="Run in local mode (skip git sync)")
+    parser.add_argument("--cad-engine", type=str, default="build123d", choices=["build123d", "openscad", "scad"], help="CAD engine to use for 3D geometry generation (default: build123d)")
     parser.add_argument("--turbulence", type=str, default="laminar", help="Turbulence model to use (default: laminar)")
     args = parser.parse_args()
 
@@ -76,7 +77,7 @@ def main():
     # Initialize components
     store = DataStore()
     manager = JobManager(store)
-    scad = ScadDriver(scad_file, fluid_volume_module=fluid_volume_module)
+    scad = CadEngineFactory.get_driver(scad_file, cad_engine=args.cad_engine, fluid_volume_module=fluid_volume_module)
     foam = FoamDriver(args.case_dir, config=config)
 
     while True:
@@ -90,6 +91,12 @@ def main():
                 continue
         else:
             print("\n--- Local Mode: Skipping Git Sync ---")
+
+        # 1.5 Check and requeue stale jobs from dead workers, record heartbeat
+        manager.record_heartbeat(worker_id)
+        requeued = manager.requeue_stale_jobs(stale_threshold_sec=300)
+        if requeued > 0:
+            print(f"Requeued {requeued} stale jobs from timed-out workers.")
 
         # 2. Check Queue
         pending_jobs = manager.get_pending_jobs()
