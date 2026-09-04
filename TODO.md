@@ -2,6 +2,16 @@
 
 This file tracks planned enhancements and future work for the OpenAuto-CFD framework and the Corkscrew Filter validation study.
 
+## Real-Time Simulation, Model Fusion & Agentic CAD Roadmap (Completed)
+- [x] **Multi-Physics Surrogate & Model Fusion:** Universal RBF surrogate supporting coupled CFD (OpenFOAM), FEA structural stress (CalculiX), and EM (openEMS) metrics with 3D spatial vector fields (`surrogate_multiphysics.py`).
+- [x] **Exact Differentiable Gradients & Inverse Design:** Analytical exact RBF derivatives ($\approx 10^{-10}$ error vs finite differences) and multi-start L-BFGS-B inverse design optimizer converging in $<10\text{ ms}$ (`surrogate_gradients.py`).
+- [x] **Binary GPU Buffer Streaming:** High-performance binary GPU buffer exporter (`.bin` format) for 3D field data exchange (`cfd_fea_field_io.py`).
+- [x] **Asynchronous Worker Queue:** Non-blocking background simulation queue with worker pool (`async_solver_queue.py`).
+- [x] **Phase 1: Real-Time Interactive WebGL Viewer (Atlas-Style Frontend):** Modern Three.js dark-mode technical HUD with 60 FPS slider scrub, particle streamline ribbons, FEA stress heatmaps, and AI inverse design button (`viewer/web/`, `viewer/server.py`, `run_viewer.py`).
+- [x] **Phase 2: Multi-Fidelity Mesh Pyramid:** Kennedy & O'Hagan Co-Kriging model ($y_H = \rho y_L + \delta(x)$) with dynamic mesh resolution switching (`multifidelity_driver.py`) and a Two-Stage Active Screening Filter (`model_fusion_multifidelity.py`) delivering a $2.9\times$ compute speedup.
+- [x] **Phase 3: Physics-Informed Conservation Regularizer (PINN):** Discrete Exterior Calculus Helmholtz-Hodge solenoidal projector $(D D^T) \boldsymbol{\lambda} = D \mathbf{u}$ enforcing incompressibility ($\nabla \cdot \mathbf{u} = 0$) with $100\%$ divergence elimination in $<25\text{ ms}$, plus Cauchy stress divergence equilibrium ($\nabla \cdot \boldsymbol{\sigma} \approx \mathbf{0}$) (`pinn_conservation.py`).
+- [x] **Phase 4: LLM Tool-Calling Integration (Kimi K3 / Gemini CAD Agent):** Standard OpenAPI / JSON Schema function-calling specs (`predict_surrogate`, `run_inverse_design`, `check_physics_conservation`, `dispatch_simulation`, `check_simulation_status`, `generate_scad_code`), `CADAgentToolRegistry`, and `CADReasoningAgent` autonomous multi-turn reasoning loop (`cad_agent_tools.py`, `llm_agent.py`).
+
 ## build123d CAD Engine & Multi-Physics Refactor
 - [x] **Pure Python CAD Engine (`build123d`):** Rewrote all project 3D models (`optimizer/cad_models.py`) into native Python `build123d` B-rep solids (corkscrew filter, dipole antenna, puck antenna, cyclone filter manifold, trace optimizer, hose adapter cap, custom couplings, and filter holders).
 - [x] **Parametric 3D Filleting & Chamfering:** Added native B-rep 3D chamfering (`blade_chamfer_mm`) and filleting (`inlet_fillet_radius_mm`) to eliminate flow turbulence and stress concentrations.

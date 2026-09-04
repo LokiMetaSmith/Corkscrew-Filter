@@ -1,0 +1,25 @@
+{
+  "$schema": "https://go.kicad.org/pcm/schemas/v1",
+  "name": "OpenAuto EM Live Bridge",
+  "description": "Real-time electromagnetic & SI/PI simulation loop on save for KiCad PCB traces. Computes controlled impedance, S-parameters, HyperLynx (.hyp), and openEMS FDTD models.",
+  "description_full": "OpenAuto EM Live Bridge connects KiCad PCB Editor directly to high-speed electromagnetic simulation and real-time WebGL visualization. Whenever a PCB trace is modified and saved, the plugin instantly recalculates Wheeler conformal impedance, S11/S21 frequency response, skin depth attenuation, and updates simulation bridge files.",
+  "category": "Simulation",
+  "author": {
+    "name": "OpenAuto Engineering",
+    "contact": {
+      "web": "https://github.com/LokiMetaSmith/Corkscrew-Filter"
+    }
+  },
+  "license": "MIT",
+  "resources": {
+    "homepage": "https://github.com/LokiMetaSmith/Corkscrew-Filter"
+  },
+  "versions": [
+    {
+      "version": "1.0.0",
+      "status": "stable",
+      "kicad_version": "10.0",
+      "kicad_version_min": "7.0.0"
+    }
+  ]
+}

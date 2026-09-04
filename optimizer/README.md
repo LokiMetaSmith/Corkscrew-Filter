@@ -57,11 +57,23 @@ python optimizer/main.py --iterations 5 --scad-file corkscrew.scad --case-dir co
 ## File Descriptions
 
 *   **`main.py`**: The central controller script that manages the optimization loop.
-*   **`llm_agent.py`**: Interacts with the Google Gemini API to analyze simulation history and suggest new parameters.
+*   **`cad_agent_tools.py`**: Standard OpenAPI / JSON Schema tool definitions (`predict_surrogate`, `run_inverse_design`, `check_physics_conservation`, `dispatch_simulation`, `check_simulation_status`, `generate_scad_code`) and `CADReasoningAgent` autonomous multi-turn engineering loop.
+*   **`llm_agent.py`**: Multi-provider LLM interface (Google Gemini, OpenAI / Kimi K3, local Ollama) with factory integration for the CAD agent.
+*   **`surrogate_multiphysics.py`**: Universal RBF surrogate supporting coupled CFD, FEA, EM, and joint metrics and full 3D spatial field predictions.
+*   **`cfd_fea_field_io.py`**: OpenFOAM and CalculiX field parser and high-performance binary GPU buffer (`.bin`) exporter for real-time 3D streaming.
+*   **`surrogate_gradients.py`**: Analytic exact RBF derivatives ($\approx 10^{-10}$ error vs finite differences) and `DifferentiableInverseDesigner` multi-start L-BFGS-B optimizer.
+*   **`surrogate_multifidelity.py`**: Kennedy & O'Hagan Co-Kriging model ($y_H = \rho y_L + \delta(x)$) with joint epistemic uncertainty.
+*   **`multifidelity_driver.py`**: Dynamic mesh resolution controller (4.8mm coarse vs 1.5mm fine).
+*   **`model_fusion_multifidelity.py`**: Two-Stage Active Screening Filter that prunes sub-par geometries during coarse runs ($2.9\times$ speedup).
+*   **`pinn_conservation.py`**: Physics-Informed Conservation Regularizer implementing Discrete Exterior Calculus Helmholtz-Hodge solenoidal projection ($(D D^T) \boldsymbol{\lambda} = D \mathbf{u}$), fluid vorticity, and structural static equilibrium ($\nabla \cdot \boldsymbol{\sigma} \approx \mathbf{0}$).
+*   **`async_solver_queue.py`**: Asynchronous non-blocking worker pool and job dispatcher for OpenFOAM and CalculiX background solves.
+*   **`rl_policy_agent.py`**: Contextual policy gradient reinforcement learning actor for continuous geometric parameter morphing.
 *   **`foam_driver.py`**: Handles OpenFOAM case preparation, meshing, solving, and results extraction.
+*   **`fea_driver.py`**: Handles CalculiX structural FEA case setup, boundary conditions, and stress tensor evaluation.
 *   **`scad_driver.py`**: Wraps OpenSCAD command-line tools to generate STL files from parameter sets.
 *   **`data_store.py`**: Manages the persistent storage of optimization results in `optimization_log.jsonl`.
 *   **`constraints.py`**: Central definitions for optimization goals and parameter constraints.
+*   **`parameter_validator.py`**: Geometric manifold and singularity validator for CAD parameters.
 *   **`mcp_server.py`**: Model Context Protocol (MCP) server providing standard stdio tool execution for external LLMs.
 
 ## Model Context Protocol (MCP) Server

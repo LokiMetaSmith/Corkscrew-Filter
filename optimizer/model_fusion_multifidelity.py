@@ -20,6 +20,41 @@ from async_solver_queue import AsyncSolverQueue
 from cfd_fea_field_io import export_multiphysics_field_bin
 
 
+class TwoStageScreeningFilter:
+    """
+    Evaluates coarse candidates against physical threshold criteria
+    to prune non-viable geometries before expensive fine simulation.
+    """
+
+    def __init__(
+        self,
+        min_efficiency_threshold: float = 88.0,
+        max_pressure_drop_threshold: float = 4500.0,
+        min_fos_threshold: float = 1.4
+    ):
+        self.min_efficiency_threshold = min_efficiency_threshold
+        self.max_pressure_drop_threshold = max_pressure_drop_threshold
+        self.min_fos_threshold = min_fos_threshold
+
+    def evaluate_coarse_candidate(
+        self,
+        coarse_metrics: Dict[str, float],
+        domain: str = "cfd"
+    ) -> Tuple[bool, str]:
+        if domain == "cfd":
+            eff = coarse_metrics.get("separation_efficiency", 0.0)
+            dp = coarse_metrics.get("delta_p", 9999.0)
+            if eff >= self.min_efficiency_threshold and dp <= self.max_pressure_drop_threshold:
+                return True, f"Passed: eff={eff:.1f}%, dp={dp:.1f}Pa"
+            return False, f"Rejected: eff={eff:.1f}% (min {self.min_efficiency_threshold}%), dp={dp:.1f}Pa (max {self.max_pressure_drop_threshold}Pa)"
+        elif domain in ("fea", "structural"):
+            fos = coarse_metrics.get("factor_of_safety", 0.0)
+            if fos >= self.min_fos_threshold:
+                return True, f"Passed: FoS={fos:.2f}"
+            return False, f"Rejected: FoS={fos:.2f} (min {self.min_fos_threshold})"
+        return True, "Passed generic domain"
+
+
 class MultiFidelityModelFusionOptimizer:
     """
     Two-stage multi-fidelity model fusion optimizer.

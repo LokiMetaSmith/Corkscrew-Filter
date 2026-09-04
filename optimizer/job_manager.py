@@ -1,11 +1,15 @@
 from typing import Dict, List, Any, Optional, Callable
 import uuid
 import random
+import numpy as np
 from data_store import DataStore
+
+import threading
 
 class JobManager:
     def __init__(self, data_store: DataStore):
         self.store = data_store
+        self._lock = threading.Lock()
 
     def create_job(self, parameters: Dict[str, Any]) -> str:
         """
@@ -18,29 +22,41 @@ class JobManager:
             "status": "queued",
             "parameters": parameters
         }
-        self.store.append_result(entry)
+        with self._lock:
+            self.store.append_result(entry)
         return job_id
 
-    def claim_job(self, job_id: str, worker_id: str) -> bool:
+    def verify_claim_leadership(self, job_id: str, worker_id: str) -> bool:
+        """
+        Verifies if the specified worker is the legitimate claimant of the job.
+        Rule: The first 'running' entry determines the owner.
+        """
+        history = self.store.load_history()
+        for event in history:
+            if event.get("id") == job_id and event.get("status") == "running":
+                return event.get("worker_id") == worker_id
+        return False
+
+    def claim_job(self, job_id: str, worker_id: str, timestamp: Optional[float] = None) -> bool:
         """
         Marks a job as 'running'.
         Returns True if successful (job was previously queued), False otherwise.
         """
-        latest = self._get_job_state(job_id)
-        if not latest or latest["status"] != "queued":
-            print(f"Cannot claim job {job_id}: Status is '{latest.get('status') if latest else 'unknown'}'")
-            return False
+        with self._lock:
+            latest = self._get_job_state(job_id)
+            if not latest or latest["status"] != "queued":
+                return False
 
-        import time
-        entry = {
-            "id": job_id,
-            "status": "running",
-            "worker_id": worker_id,
-            "timestamp": time.time(),
-            "parameters": latest["parameters"] # Carry forward params
-        }
-        self.store.append_result(entry)
-        return True
+            import time
+            entry = {
+                "id": job_id,
+                "status": "running",
+                "worker_id": worker_id,
+                "timestamp": timestamp if timestamp is not None else time.time(),
+                "parameters": latest["parameters"] # Carry forward params
+            }
+            self.store.append_result(entry)
+            return True
 
     def record_heartbeat(self, worker_id: str, job_id: Optional[str] = None):
         """
@@ -188,12 +204,74 @@ class JobManager:
 
         return latest_states
 
+    def claim_next_job(self, worker_id: str, filter_func: Optional[Callable[[Dict], bool]] = None) -> Optional[Dict[str, Any]]:
+        """
+        Atomically finds and claims the next available queued job.
+        Returns the claimed job object, or None if no jobs are available or race was lost.
+        """
+        with self._lock:
+            pending = self.get_pending_jobs(filter_func=filter_func)
+            for job in pending:
+                job_id = job["id"]
+                latest = self._get_job_state(job_id)
+                if latest and latest.get("status") == "queued":
+                    import time
+                    entry = {
+                        "id": job_id,
+                        "status": "running",
+                        "worker_id": worker_id,
+                        "timestamp": time.time(),
+                        "parameters": latest["parameters"]
+                    }
+                    self.store.append_result(entry)
+                    return self._get_job_state(job_id)
+            return None
+
+    def sync_surrogate_from_completed_jobs(self, surrogate: Any) -> int:
+        """
+        Synchronizes an in-memory MultiPhysicsSurrogate with all completed jobs
+        from the distributed log and refits the surrogate.
+        Returns number of newly added samples.
+        """
+        all_states = self._get_all_latest_states()
+        completed_jobs = [j for j in all_states.values() if j.get("status") == "completed"]
+
+        added_count = 0
+        existing_params = [p.tolist() if hasattr(p, "tolist") else list(p) for p in getattr(surrogate, "param_history", [])]
+
+        for job in completed_jobs:
+            params = job.get("parameters", {})
+            metrics = job.get("metrics", {})
+            if not params or not metrics:
+                continue
+
+            # Check if already in surrogate
+            p_vec = surrogate._extract_param_vector(params) if hasattr(surrogate, "_extract_param_vector") else list(params.values())
+            p_list = p_vec.tolist() if hasattr(p_vec, "tolist") else list(p_vec)
+
+            is_duplicate = False
+            for ep in existing_params:
+                if len(ep) == len(p_list) and np.allclose(ep, p_list, atol=1e-5):
+                    is_duplicate = True
+                    break
+
+            if not is_duplicate:
+                surrogate.add_sample(params, metrics)
+                existing_params.append(p_list)
+                added_count += 1
+
+        if added_count > 0 and hasattr(surrogate, "fit"):
+            surrogate.fit()
+
+        return added_count
+
     def _get_job_state(self, job_id: str) -> Optional[Dict[str, Any]]:
         """
         Gets the latest state for a single job.
         """
         states = self._get_all_latest_states()
         return states.get(job_id)
+
 
 if __name__ == "__main__":
     # Simple test

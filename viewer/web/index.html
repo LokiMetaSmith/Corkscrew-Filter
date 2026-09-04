@@ -24,9 +24,20 @@
         <button class="domain-btn" data-domain="fea" onclick="switchDomain('fea')">FEA Stress</button>
         <button class="domain-btn" data-domain="joint" onclick="switchDomain('joint')">Joint Multi-Physics</button>
         <button class="domain-btn" data-domain="em" onclick="switchDomain('em')">EM Phasor</button>
+        <button class="domain-btn" id="btn-domain-pcb" data-domain="pcb" onclick="switchDomain('pcb')">⚡ KiCad PCB 3D</button>
+      </div>
+
+      <div class="fidelity-selector">
+        <span class="fidelity-label">Tier:</span>
+        <button id="btn-fidelity-t1" class="fidelity-btn active" onclick="setFidelity('tier1')">T1: Surrogate (2ms)</button>
+        <button id="btn-fidelity-t2" class="fidelity-btn" onclick="setFidelity('tier2')">T2: Fine Mesh CFD</button>
       </div>
 
       <div class="top-telemetry">
+        <div id="kicad-sync-badge" class="kicad-badge standby" onclick="switchDomain('pcb')" style="cursor: pointer;" title="Click to view 3D KiCad PCB Live">
+          <div class="kicad-dot"></div>
+          <span id="kicad-sync-text">KiCad: Standby</span>
+        </div>
         <div class="status-badge">
           <div class="status-dot"></div>
           <span id="backend-status">Surrogate Live (2ms)</span>
@@ -35,24 +46,67 @@
       </div>
     </header>
 
+    <!-- KiCad Live Notification Toast -->
+    <div id="kicad-toast" class="kicad-toast hidden"></div>
+
     <!-- Workspace -->
     <div id="workspace">
       <!-- Left Drawer: Parametric Controls & Inverse Design -->
       <aside class="drawer drawer-left">
-        <div class="section-header">Geometric Parameters</div>
-        <div id="sliders-container">
-          <!-- Dynamic parameter sliders injected here -->
+        <!-- CFD/CAD Sliders Container -->
+        <div id="cfd-panel">
+          <div class="section-header">Geometric Parameters</div>
+          <div id="sliders-container">
+            <!-- Dynamic parameter sliders injected here -->
+          </div>
+
+          <div class="section-header" style="margin-top: 12px;">Active Optimization</div>
+          <button class="action-btn btn-optimize" onclick="triggerInverseDesign()">
+            <span>⚡</span>
+            <span>AI Inverse Design (L-BFGS-B)</span>
+          </button>
+          <button class="action-btn btn-dispatch" onclick="dispatchBackgroundSolver()">
+            <span>▶</span>
+            <span>Dispatch Ground-Truth Solver</span>
+          </button>
         </div>
 
-        <div class="section-header" style="margin-top: 12px;">Active Optimization</div>
-        <button class="action-btn btn-optimize" onclick="triggerInverseDesign()">
-          <span>⚡</span>
-          <span>AI Inverse Design (L-BFGS-B)</span>
-        </button>
-        <button class="action-btn btn-dispatch" onclick="dispatchBackgroundSolver()">
-          <span>▶</span>
-          <span>Dispatch Ground-Truth Solver</span>
-        </button>
+        <!-- KiCad PCB RF Inspector Container -->
+        <div id="kicad-panel" style="display: none;">
+          <div class="section-header">KiCad PCB RF Inspector</div>
+          <div style="background: rgba(0, 240, 255, 0.05); border: 1px solid rgba(0, 240, 255, 0.2); border-radius: 8px; padding: 10px; margin-bottom: 12px;">
+            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">ACTIVE BOARD</div>
+            <div id="kicad-board-name-display" style="font-weight: bold; color: var(--text-main); font-size: 13px;">amplifier.kicad_pcb</div>
+            <div id="kicad-board-dim-display" style="font-size: 11px; color: var(--accent-cyan); margin-top: 2px;">55.0 × 52.0 mm | 153 Traces</div>
+          </div>
+
+          <div class="section-header" style="margin-top: 8px;">Inspect Net</div>
+          <select id="kicad-net-select" class="tool-btn" style="width: 100%; margin-bottom: 10px; background: rgba(15, 23, 42, 0.8);" onchange="selectKicadNet(this.value)">
+            <option value="">Auto: Primary Signal Trace</option>
+          </select>
+
+          <div class="section-header" style="margin-top: 8px;">Substrate Stackup (PTFE)</div>
+          <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6; margin-bottom: 12px; background: rgba(255,255,255,0.02); padding: 8px; border-radius: 6px;">
+            <div>Height ($h$): <span id="kicad-h-val" style="color: var(--text-main); font-weight: bold;">0.80 mm</span></div>
+            <div>Permittivity ($\epsilon_r$): <span id="kicad-er-val" style="color: var(--text-main); font-weight: bold;">2.10</span></div>
+            <div>Loss Tangent ($\tan\delta$): <span id="kicad-tand-val" style="color: var(--text-main); font-weight: bold;">0.0002</span></div>
+            <div>Copper ($t$): <span id="kicad-t-val" style="color: var(--text-main); font-weight: bold;">35 µm (1 oz)</span></div>
+          </div>
+
+          <div class="section-header">RF Frequency Sweep</div>
+          <div style="margin-bottom: 12px; background: rgba(255,255,255,0.02); padding: 8px; border-radius: 6px;">
+            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
+              <span>Frequency:</span>
+              <span id="kicad-freq-val" style="color: var(--accent-cyan); font-weight: bold;">5.0 GHz</span>
+            </div>
+            <input type="range" id="kicad-freq-slider" min="0.5" max="30.0" step="0.5" value="5.0" style="width: 100%;" oninput="updateKicadFrequency(this.value)" />
+          </div>
+
+          <button class="action-btn btn-optimize" onclick="calculate50OhmMatch()">
+            <span>⚡</span>
+            <span>Synthesize 50Ω Matching Width</span>
+          </button>
+        </div>
 
         <div id="job-status-card" class="metric-card" style="display: none; border-color: var(--accent-cyan);">
           <div class="metric-title">BACKGROUND SOLVER QUEUE</div>
@@ -76,6 +130,32 @@
             <option value="Twilight">Twilight (Phase)</option>
           </select>
         </div>
+
+        <!-- AI Agent Chat Drawer -->
+        <div id="agent-drawer" class="agent-drawer collapsed">
+          <div class="agent-drawer-header" onclick="toggleAgentDrawer()">
+            <div class="agent-drawer-title">
+              <span class="agent-icon">🤖</span>
+              <span>Autonomous Engineering Agent Console (CAD / EDA / PINN)</span>
+              <span id="agent-active-tag" class="agent-badge">READY</span>
+            </div>
+            <button id="agent-drawer-toggle" class="drawer-toggle-btn">▲</button>
+          </div>
+          <div class="agent-drawer-body">
+            <div id="agent-chat-messages" class="agent-messages">
+              <div class="agent-msg system">
+                <strong>Autonomous CAD / EDA Agent Initialized.</strong><br>
+                Execute design directives across fluid dynamics, structural stress, or RF transmission lines:<br>
+                • <em>"Optimize corkscrew geometry for 99.9% separation under 0.5 PSI"</em><br>
+                • <em>"Design 50 ohm RF microstrip trace on FR4 at 2.4 GHz with KiCad PCB export"</em>
+              </div>
+            </div>
+            <div class="agent-input-container">
+              <input type="text" id="agent-input" placeholder="Type design directive (e.g. optimize geometry for lunar dust, design 50 ohm RF trace)..." onkeydown="handleAgentKey(event)" />
+              <button class="agent-send-btn" onclick="sendAgentMessage()">Send</button>
+            </div>
+          </div>
+        </div>
       </main>
 
       <!-- Right Drawer: Multi-Objective Telemetry & Gauges -->
@@ -92,6 +172,12 @@
           <div class="metric-title">PRESSURE DROP (Δp)</div>
           <div class="metric-num" id="metric-dp">0.42 PSI</div>
           <div class="metric-sub" id="sub-dp">Target: &lt; 0.70 PSI (~2900 Pa)</div>
+        </div>
+
+        <div class="metric-card" id="card-conservation">
+          <div class="metric-title">PINN CONSERVATION RESIDUAL</div>
+          <div class="metric-num" id="metric-div">∇·u = 0.00028</div>
+          <div class="metric-sub" id="sub-div"><span class="badge-status-dot admissible"></span> Physically Admissible</div>
         </div>
 
         <div class="metric-card" id="card-stress">
