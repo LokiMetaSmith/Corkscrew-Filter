@@ -5,14 +5,23 @@ Factory for creating CAD drivers (Build123dDriver vs ScadDriver).
 
 try:
     from scad_driver import ScadDriver
+except ImportError:
+    try:
+        from .scad_driver import ScadDriver
+    except ImportError:
+        ScadDriver = None
+
+try:
     from build123d_driver import Build123dDriver
 except ImportError:
-    from .scad_driver import ScadDriver
-    from .build123d_driver import Build123dDriver
+    try:
+        from .build123d_driver import Build123dDriver
+    except ImportError:
+        Build123dDriver = None
 
 class CadEngineFactory:
     @staticmethod
-    def get_driver(scad_file_path, cad_engine="build123d", fluid_volume_module="modular_filter_assembly", force_native=False):
+    def get_driver(scad_file_path, cad_engine="openscad", fluid_volume_module="modular_filter_assembly", force_native=False):
         """
         Instantiates and returns the selected CAD driver.
 
@@ -25,8 +34,9 @@ class CadEngineFactory:
         Returns:
             CadDriverBase: Initialized CAD driver instance.
         """
-        engine = str(cad_engine).lower().strip()
-        if engine in ["build123d", "b3d", "python"]:
-            return Build123dDriver(scad_file_path=scad_file_path, fluid_volume_module=fluid_volume_module)
+        if cad_engine == "build123d" and Build123dDriver is not None:
+            return Build123dDriver(model_name=scad_file_path, part_name=fluid_volume_module)
+        elif ScadDriver is not None:
+            return ScadDriver(scad_file_path, fluid_volume_module=fluid_volume_module, force_native=force_native)
         else:
-            return ScadDriver(scad_file_path=scad_file_path, force_native=force_native, fluid_volume_module=fluid_volume_module)
+            raise RuntimeError("No CAD engine driver available (neither build123d nor OpenSCAD).")

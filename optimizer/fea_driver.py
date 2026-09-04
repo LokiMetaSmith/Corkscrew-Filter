@@ -118,7 +118,7 @@ print(f"FEA metrics written to {{output_dat}}")
 
     def run_solver(self, log_file=None, **kwargs):
         """Executes the CalculiX FEA solver."""
-        cmd = ["python3", "run_fea_simulation.py"]
+        cmd = [sys.executable, "run_fea_simulation.py"]
         target_log = log_file if log_file else self.log_file
         try:
             run_command_with_spinner(cmd, target_log, cwd=self.case_dir, description="FEA Solver (CalculiX)")

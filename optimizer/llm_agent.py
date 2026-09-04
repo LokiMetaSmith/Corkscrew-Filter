@@ -758,6 +758,18 @@ You must respond with valid JSON only. DO NOT include any conversational text, m
                 print(f"Failed JSON snippet: {clean_text[:500]}...")
                 raise e
 
+    def create_cad_reasoning_agent(self, registry=None):
+        """
+        Creates an autonomous CAD reasoning agent equipped with the full
+        suite of multi-physics surrogate, inverse design, physics conservation,
+        and OpenSCAD tool-calling capabilities.
+        """
+        from cad_agent_tools import CADReasoningAgent, CADAgentToolRegistry
+        reg = registry or CADAgentToolRegistry()
+        provider = self.providers[0] if self.providers else None
+        return CADReasoningAgent(registry=reg, llm_provider=provider)
+
+
 if __name__ == "__main__":
     # Test initialization
     agent = LLMAgent(api_key="TEST_KEY")

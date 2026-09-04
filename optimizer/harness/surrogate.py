@@ -22,15 +22,10 @@ def step(state_dict, action_dict):
     for param, mutation in action_dict.items():
         geom[param] = float(geom.get(param, 0.0)) + float(mutation)
 
-    # 2. Heuristics for predicting multi-physics domain updates based on standard physics sensitivities
+    # 2. Multi-physics domain updates with EM surrogate fusion
     fluid = next_state.setdefault('fluid', {})
     struct = next_state.setdefault('structural', {})
     em = next_state.setdefault('electromagnetic', {})
-
-    # Simple default linear sensitivity model to prevent static state
-    # e.g., wider channels (higher radius) -> lower pressure drop, lower efficiency
-    # higher wall thickness -> higher mass, higher factor of safety
-    # S11 improves/degrades slightly with geometry changes
 
     # Use delta path/profile radius, wall thickness, chamfers, and fillets to predict changes
     delta_path = float(action_dict.get('helix_path_radius_mm', 0.0))
@@ -57,6 +52,22 @@ def step(state_dict, action_dict):
         stress = struct.get('max_von_mises_stress_MPa', 45.0)
         struct['factor_of_safety'] = max(0.1, fos + delta_wall * 0.5 + delta_chamfer * 0.3)
         struct['max_von_mises_stress_MPa'] = max(1.0, stress - delta_chamfer * 4.0)
+
+    # Electromagnetic domain (S-parameters & Return Loss)
+    try:
+        from surrogate_rbf import RBFFieldSurrogate
+        if os.path.exists("artifacts/surrogate_memory.json"):
+            surr = RBFFieldSurrogate.load("artifacts/surrogate_memory.json")
+            pred_m, unc = surr.predict_metrics(geom)
+            for mk, mv in pred_m.items():
+                em[mk] = mv
+            em['uncertainty'] = unc
+        else:
+            prev_s11 = em.get('S11', -12.0)
+            em['S11'] = prev_s11 - (delta_path * 0.8) - (delta_profile * 0.5)
+    except Exception:
+        prev_s11 = em.get('S11', -12.0)
+        em['S11'] = prev_s11 - (delta_path * 0.8) - (delta_profile * 0.5)
 
     return next_state
 """

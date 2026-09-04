@@ -12,7 +12,10 @@ from dotenv import load_dotenv
 from cad_factory import CadEngineFactory
 from physics_factory import PhysicsEngineFactory
 
-from ml_optimizer import OptunaOptimizer
+try:
+    from ml_optimizer import OptunaOptimizer
+except ImportError:
+    OptunaOptimizer = None
 from scoring import calculate_score
 from llm_agent import LLMAgent
 from data_store import DataStore
@@ -60,6 +63,8 @@ def main():
     parser.add_argument("--schema", action="store_true", help="Use the physicist-style Schema surrogate-planning harness loop")
     parser.add_argument("--epsilon", type=float, default=5.0, help="Mismatch threshold for surrogate backtests")
     parser.add_argument("--use-ml-optimizer", action="store_true", help="Use Optuna-based ML optimizer instead of LLM.")
+    parser.add_argument("--use-model-fusion", action="store_true", help="Use closed-loop Model Fusion (RBF/FNO surrogate + solver verification)")
+    parser.add_argument("--physics-type", type=str, default=None, choices=["cfd", "em", "fea", "joint"], help="Physics driver type (overrides config)")
     args = parser.parse_args()
 
     # Parse iterations argument
@@ -87,6 +92,11 @@ def main():
 
     scad_file = config.get('geometry', {}).get('scad_file', 'corkscrew.scad')
     fluid_volume_module = config.get('geometry', {}).get('fluid_volume_module', 'modular_filter_assembly')
+
+    if args.physics_type:
+        if 'physics' not in config:
+            config['physics'] = {}
+        config['physics']['type'] = args.physics_type
 
     # Initialize components
     scad = CadEngineFactory.get_driver(scad_file, cad_engine=args.cad_engine, fluid_volume_module=fluid_volume_module)
@@ -201,6 +211,54 @@ def main():
 
         physics_driver.cleanup_ram_disk()
         print("\n[Schema] Optimization loop finished.")
+        return
+
+    # If Model Fusion Mode is active, run the closed-loop surrogate fusion optimizer
+    if args.use_model_fusion:
+        print("\n[ModelFusion] Activating Multi-Physics Closed-Loop Model Fusion Optimizer...")
+        from model_fusion_multiphysics import MultiPhysicsModelFusionOptimizer
+        parameter_defs = config.get('geometry', {}).get('parameters', {})
+        fusion_opt = MultiPhysicsModelFusionOptimizer(
+            physics_driver=physics_driver,
+            parameter_defs=parameter_defs,
+            domain=args.physics_type,
+            exploration_weight=0.25,
+            verbose=True
+        )
+        i = 0
+        while i < max_iterations:
+            print(f"\n=== Model Fusion Iteration {i+1}/{max_iterations} ===")
+            step_record = fusion_opt.step(mock_run=args.dry_run)
+            
+            # Domain-specific logging score
+            actual_m = step_record.get("actual_metrics", {})
+            if fusion_opt.domain == "cfd":
+                score = actual_m.get("separation_efficiency", 0.0) - (actual_m.get("delta_p", 0.0) / 1000.0)
+            elif fusion_opt.domain in ("fea", "structural"):
+                score = actual_m.get("factor_of_safety", 1.0) * 10.0 - actual_m.get("max_von_mises_stress_MPa", 0.0)
+            elif fusion_opt.domain == "joint":
+                score = actual_m.get("separation_efficiency", 0.0) - (actual_m.get("delta_p", 0.0) / 1000.0) + actual_m.get("factor_of_safety", 1.0) * 5.0
+            else:
+                score = float(-actual_m.get("S11", -10.0))
+
+            merged_metrics = {}
+            merged_metrics.update(actual_m)
+            for k, v in step_record.get("pred_metrics", {}).items():
+                merged_metrics[f"pred_{k}"] = v
+            merged_metrics.update(step_record.get("residuals", {}))
+
+            store.append_result({
+                "id": str(uuid.uuid4()),
+                "status": "success",
+                "parameters": step_record["params"],
+                "metrics": merged_metrics,
+                "score": float(score),
+                "iteration": i,
+                "git_commit": git_commit
+            })
+            i += 1
+        physics_driver.cleanup_ram_disk()
+        print("\n[ModelFusion] Closed-loop multi-physics optimization finished successfully.")
         return
 
     # Initial parameters

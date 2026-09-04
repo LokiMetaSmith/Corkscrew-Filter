@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Atlas Fields Studio — Corkscrew Multi-Physics</title>
+  <link rel="stylesheet" href="viewer.css">
+  <!-- Three.js & OrbitControls -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+  <div id="app-container">
+    <!-- Top Bar -->
+    <header id="top-bar">
+      <div class="brand">
+        <div class="brand-icon"></div>
+        <div class="brand-title">Atlas Fields Studio</div>
+        <div class="brand-tag">SURROGATE 3.0</div>
+      </div>
+
+      <div class="domain-tabs">
+        <button class="domain-btn active" data-domain="cfd" onclick="switchDomain('cfd')">CFD Fluid</button>
+        <button class="domain-btn" data-domain="fea" onclick="switchDomain('fea')">FEA Stress</button>
+        <button class="domain-btn" data-domain="joint" onclick="switchDomain('joint')">Joint Multi-Physics</button>
+        <button class="domain-btn" data-domain="em" onclick="switchDomain('em')">EM Phasor</button>
+      </div>
+
+      <div class="top-telemetry">
+        <div class="status-badge">
+          <div class="status-dot"></div>
+          <span id="backend-status">Surrogate Live (2ms)</span>
+        </div>
+        <div id="fps-counter" style="color: var(--text-muted)">60 FPS</div>
+      </div>
+    </header>
+
+    <!-- Workspace -->
+    <div id="workspace">
+      <!-- Left Drawer: Parametric Controls & Inverse Design -->
+      <aside class="drawer drawer-left">
+        <div class="section-header">Geometric Parameters</div>
+        <div id="sliders-container">
+          <!-- Dynamic parameter sliders injected here -->
+        </div>
+
+        <div class="section-header" style="margin-top: 12px;">Active Optimization</div>
+        <button class="action-btn btn-optimize" onclick="triggerInverseDesign()">
+          <span>⚡</span>
+          <span>AI Inverse Design (L-BFGS-B)</span>
+        </button>
+        <button class="action-btn btn-dispatch" onclick="dispatchBackgroundSolver()">
+          <span>▶</span>
+          <span>Dispatch Ground-Truth Solver</span>
+        </button>
+
+        <div id="job-status-card" class="metric-card" style="display: none; border-color: var(--accent-cyan);">
+          <div class="metric-title">BACKGROUND SOLVER QUEUE</div>
+          <div id="job-status-text" class="metric-num" style="font-size: 14px;">PENDING</div>
+          <div id="job-id-text" class="metric-sub">Waiting for worker...</div>
+        </div>
+      </aside>
+
+      <!-- Center 3D Viewport -->
+      <main id="viewport-container">
+        <canvas id="webgl-canvas"></canvas>
+
+        <div class="viewport-overlay">
+          <button class="tool-btn" onclick="resetCamera()">Reset View</button>
+          <button class="tool-btn" onclick="toggleParticles()">Toggle Streamlines</button>
+          <button class="tool-btn" onclick="toggleWireframe()">Wireframe</button>
+          <select id="cmap-select" class="tool-btn" onchange="changeColormap(this.value)">
+            <option value="Turbo">Turbo (CFD)</option>
+            <option value="Viridis">Viridis</option>
+            <option value="Plasma">Plasma (FEA)</option>
+            <option value="Twilight">Twilight (Phase)</option>
+          </select>
+        </div>
+      </main>
+
+      <!-- Right Drawer: Multi-Objective Telemetry & Gauges -->
+      <aside class="drawer drawer-right">
+        <div class="section-header">Live Telemetry (Surrogate)</div>
+
+        <div class="metric-card" id="card-eff">
+          <div class="metric-title">PARTICLE COLLECTION EFFICIENCY</div>
+          <div class="metric-num" id="metric-eff">99.96%</div>
+          <div class="metric-sub" id="sub-eff">Target: &gt; 99.95% (Moon Dust)</div>
+        </div>
+
+        <div class="metric-card" id="card-dp">
+          <div class="metric-title">PRESSURE DROP (Δp)</div>
+          <div class="metric-num" id="metric-dp">0.42 PSI</div>
+          <div class="metric-sub" id="sub-dp">Target: &lt; 0.70 PSI (~2900 Pa)</div>
+        </div>
+
+        <div class="metric-card" id="card-stress">
+          <div class="metric-title">MAX VON MISES STRESS</div>
+          <div class="metric-num" id="metric-stress">22.4 MPa</div>
+          <div class="metric-sub" id="sub-stress">Yield: 60 MPa (PETG/PLA)</div>
+        </div>
+
+        <div class="metric-card" id="card-fos">
+          <div class="metric-title">FACTOR OF SAFETY</div>
+          <div class="metric-num" id="metric-fos">2.68</div>
+          <div class="metric-sub" id="sub-fos">Target: ≥ 1.50</div>
+        </div>
+
+        <div class="metric-card" id="card-unc">
+          <div class="metric-title">EPISTEMIC UNCERTAINTY</div>
+          <div class="metric-num" id="metric-unc" style="font-size: 16px;">0.042</div>
+          <div class="metric-sub">Confidence: 95.8%</div>
+        </div>
+
+        <div class="section-header" style="margin-top: 12px;">Active Learning Status</div>
+        <div class="metric-card">
+          <div class="metric-title">SURROGATE MEMORY SAMPLES</div>
+          <div class="metric-num" id="surrogate-samples">--</div>
+          <div class="metric-sub">Online Closed-Loop Residuals</div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script src="viewer.js"></script>
+</body>
+</html>
