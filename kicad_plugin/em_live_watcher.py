@@ -240,6 +240,7 @@ class EMLiveSyncDaemon:
                 "segments": norm_segments,
                 "edge_cuts": norm_edge_cuts,
                 "pads": parser.component_pads,
+                "components": getattr(parser, "components", []),
                 "zones": parser.zones,
                 "nets_summary": parser.get_all_nets_summary(),
                 "differential_pairs": parser.differential_pairs

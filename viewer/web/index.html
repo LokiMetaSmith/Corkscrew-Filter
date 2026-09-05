@@ -106,6 +106,55 @@
             <span>⚡</span>
             <span>Synthesize 50Ω Matching Width</span>
           </button>
+
+          <div id="kicad-synth-container" style="margin-top: 10px; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 10px;">
+            <div style="font-size: 11px; color: var(--accent-emerald); font-weight: bold; margin-bottom: 6px;">50Ω MATCH SYNTHESIS</div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-size: 12px; color: var(--text-muted);">Target Width (w):</span>
+              <div style="display: flex; align-items: center; gap: 4px;">
+                <input type="number" id="kicad-target-width-input" value="2.43" step="0.05" min="0.1" max="10.0" style="width: 68px; background: #0b1120; border: 1px solid rgba(16, 185, 129, 0.5); color: #fff; padding: 4px 6px; border-radius: 4px; font-family: var(--font-mono); font-size: 12px; text-align: right;" />
+                <span style="font-size: 12px; color: var(--text-muted);">mm</span>
+              </div>
+            </div>
+            <button id="btn-push-kicad" class="action-btn" style="background: linear-gradient(135deg, #10b981, #059669); margin-top: 6px; width: 100%;" onclick="pushTraceWidthToKiCad()">
+              <span>💾</span>
+              <span>Push to KiCad (.kicad_pcb)</span>
+            </button>
+          
+          <!-- Power Integrity & Thermal Inspector -->
+          <div class="section-header" style="margin-top: 14px;">Power &amp; Thermal Integrity</div>
+          <div style="background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 8px; padding: 10px; margin-bottom: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-size: 11px; color: #f87171; font-weight: bold;">DC IR-DROP &amp; HEATMAP</span>
+              <button class="tool-btn" style="padding: 2px 6px; font-size: 10px;" onclick="runPowerThermalAnalysis()">Simulate</button>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px;">
+              <div>Drop: <span id="pwr-drop-val" style="color: #fff; font-weight: bold;">-- mV</span></div>
+              <div>J_max: <span id="pwr-jmax-val" style="color: #f87171; font-weight: bold;">-- A/mm²</span></div>
+              <div>Peak Temp: <span id="pwr-temp-val" style="color: #f59e0b; font-weight: bold;">-- °C</span></div>
+              <div>Loss: <span id="pwr-loss-val" style="color: #fff; font-weight: bold;">-- mW</span></div>
+            </div>
+          </div>
+
+          <!-- DRC & DFM Copilot -->
+          <div class="section-header">DRC &amp; DFM Copilot</div>
+          <div style="background: rgba(245, 158, 11, 0.05); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 8px; padding: 10px; margin-bottom: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-size: 11px; color: #fbbf24; font-weight: bold;">GEOMETRY AUDIT</span>
+              <button class="tool-btn" style="padding: 2px 6px; font-size: 10px;" onclick="runDrcInspection()">Audit Rules</button>
+            </div>
+            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">
+              Violations: <span id="drc-summary-val" style="color: #fbbf24; font-weight: bold;">--</span>
+            </div>
+            <div id="drc-items-container" style="max-height: 120px; overflow-y: auto; font-size: 10px; line-height: 1.4;">
+              <div style="color: var(--text-muted); font-style: italic;">Click 'Audit Rules' to scan for acid traps and spacing defects.</div>
+            </div>
+            <button id="btn-fix-drc-all" class="action-btn" style="background: linear-gradient(135deg, #f59e0b, #d97706); margin-top: 8px; width: 100%; font-size: 11px; padding: 6px;" onclick="autoFixAllAcidTraps()">
+              <span>⚡</span>
+              <span>1-Click Auto-Fix Acid Traps</span>
+            </button>
+          </div>
+          </div>
         </div>
 
         <div id="job-status-card" class="metric-card" style="display: none; border-color: var(--accent-cyan);">
@@ -123,6 +172,11 @@
           <button class="tool-btn" onclick="resetCamera()">Reset View</button>
           <button class="tool-btn" onclick="toggleParticles()">Toggle Streamlines</button>
           <button class="tool-btn" onclick="toggleWireframe()">Wireframe</button>
+          <button id="btn-toggle-ics" class="tool-btn" onclick="toggleComponents()" style="display: none;">Toggle 3D ICs</button>
+          <button id="btn-toggle-em" class="tool-btn" onclick="toggleEMWaves()" style="display: none;">Toggle EM Waves</button>
+          <button id="btn-toggle-thermal" class="tool-btn" onclick="toggleThermalIR()" style="display: none;">Thermal IR</button>
+          <button id="btn-toggle-drc" class="tool-btn" onclick="toggleDrcMarkers()" style="display: none;">DRC Copilot</button>
+          <button id="btn-toggle-vna" class="tool-btn" onclick="toggleVnaDock()" style="display: none;">VNA &amp; Eye Studio</button>
           <select id="cmap-select" class="tool-btn" onchange="changeColormap(this.value)">
             <option value="Turbo">Turbo (CFD)</option>
             <option value="Viridis">Viridis</option>
@@ -154,6 +208,221 @@
               <input type="text" id="agent-input" placeholder="Type design directive (e.g. optimize geometry for lunar dust, design 50 ohm RF trace)..." onkeydown="handleAgentKey(event)" />
               <button class="agent-send-btn" onclick="sendAgentMessage()">Send</button>
             </div>
+          </div>
+        </div>
+
+        <!-- VNA & Signal Integrity Dock -->
+        <div id="vna-dock" class="vna-dock collapsed" style="display: none;">
+          <div class="vna-dock-header" onclick="toggleVnaDock()">
+            <div class="vna-dock-title">
+              <span class="vna-icon">📡</span>
+              <span>Vector Network Analyzer &amp; High-Speed Eye Diagram</span>
+              <div class="vna-telemetry-pills">
+                <span id="vna-pill-z0" class="vna-pill">Z₀: 149.8 Ω</span>
+                <span id="vna-pill-s11" class="vna-pill">S₁₁: -6.0 dB</span>
+                <span id="vna-pill-eye" class="vna-pill">Eye: 490 mV</span>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div class="vna-tabs" onclick="event.stopPropagation()">
+                <button id="vna-tab-btn-smith" class="vna-tab-btn active" onclick="switchVnaTab('smith')">Smith Chart</button>
+                <button id="vna-tab-btn-sparam" class="vna-tab-btn" onclick="switchVnaTab('sparam')">S-Parameters (S₁₁/S₂₁)</button>
+                <button id="vna-tab-btn-eye" class="vna-tab-btn" onclick="switchVnaTab('eye')">Live Eye Diagram (10 Gbps)</button>
+                <button id="vna-tab-btn-tdr" class="vna-tab-btn" onclick="switchVnaTab('tdr')">TDR &amp; Crosstalk</button>
+                <button id="vna-tab-btn-nanopore" class="vna-tab-btn" onclick="switchVnaTab('nanopore')">🧬 Nanopore Oscilloscope</button>
+                <button id="vna-tab-btn-fdtd" class="vna-tab-btn" onclick="switchVnaTab('fdtd')">🌊 Full-Wave FDTD Slice</button>
+              </div>
+              <button id="vna-dock-toggle" class="drawer-toggle-btn">▲</button>
+            </div>
+          </div>
+          <div class="vna-dock-body">
+            <!-- Smith Chart Tab -->
+            <div id="vna-tab-smith" class="vna-tab-content active">
+              <div class="vna-canvas-wrapper">
+                <canvas id="smith-canvas" width="280" height="230"></canvas>
+              </div>
+              <div class="vna-tab-sidebar">
+                <div class="vna-metric-group">
+                  <div class="vna-sub-label">INPUT IMPEDANCE (Z_in @ f₀)</div>
+                  <div id="smith-zin-val" class="vna-stat-val">149.8 + j0.0 Ω</div>
+                </div>
+                <div class="vna-metric-group">
+                  <div class="vna-sub-label">REFLECTION COEFF (Γ)</div>
+                  <div id="smith-gamma-val" class="vna-stat-val">0.500 ∠ 0.0°</div>
+                </div>
+                <div class="vna-metric-group">
+                  <div class="vna-sub-label">VOLTAGE STANDING WAVE RATIO</div>
+                  <div id="smith-vswr-val" class="vna-stat-val">3.00 : 1</div>
+                </div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: auto; line-height: 1.4;">
+                  Green center dot indicates 50Ω normalization point. Cyan locus shows 0.5–30 GHz impedance rotation.
+                </div>
+              </div>
+            </div>
+
+            <!-- S-Parameters Tab -->
+            <div id="vna-tab-sparam" class="vna-tab-content">
+              <div class="vna-canvas-wrapper" style="flex: 1;">
+                <canvas id="sparam-canvas" width="560" height="230"></canvas>
+              </div>
+              <div class="vna-tab-sidebar" style="width: 170px;">
+                <div class="vna-legend-item">
+                  <span class="vna-legend-dot" style="background: #00f0ff;"></span>
+                  <span>S₁₁ Return Loss</span>
+                </div>
+                <div class="vna-legend-item">
+                  <span class="vna-legend-dot" style="background: #10b981;"></span>
+                  <span>S₂₁ Insertion Loss</span>
+                </div>
+                <div class="vna-legend-item">
+                  <span class="vna-legend-dot" style="border: 1px dashed #f59e0b; background: transparent;"></span>
+                  <span>-15 dB Target Match</span>
+                </div>
+                <div class="vna-metric-group" style="margin-top: 10px;">
+                  <div class="vna-sub-label">CURRENT FREQUENCY</div>
+                  <div id="sparam-freq-readout" class="vna-stat-val">5.0 GHz</div>
+                </div>
+                <div class="vna-metric-group">
+                  <div class="vna-sub-label">S₁₁ AT f₀</div>
+                  <div id="sparam-s11-readout" class="vna-stat-val" style="color: #00f0ff;">-6.0 dB</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Eye Diagram Tab -->
+            <div id="vna-tab-eye" class="vna-tab-content">
+              <div class="vna-canvas-wrapper" style="flex: 1;">
+                <canvas id="eye-canvas" width="560" height="230"></canvas>
+              </div>
+              <div class="vna-tab-sidebar" style="width: 190px;">
+                <div class="vna-metric-group">
+                  <div class="vna-sub-label">EYE HEIGHT</div>
+                  <div id="eye-height-val" class="vna-stat-val" style="color: #10b981;">490.7 mV</div>
+                  <div class="vna-sub-target">Mask: &gt; 250 mV</div>
+                </div>
+                <div class="vna-metric-group">
+                  <div class="vna-sub-label">EYE WIDTH</div>
+                  <div id="eye-width-val" class="vna-stat-val" style="color: #38bdf8;">86.9 ps</div>
+                  <div class="vna-sub-target">UI = 100.0 ps (10 Gbps)</div>
+                </div>
+                <div class="vna-metric-group">
+                  <div class="vna-sub-label">DETERMINISTIC JITTER</div>
+                  <div id="eye-jitter-val" class="vna-stat-val" style="color: #f59e0b;">13.1 ps</div>
+                  <div class="vna-sub-target">Target: &lt; 20 ps</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- TDR & Crosstalk Tab -->
+            <div id="vna-tab-tdr" class="vna-tab-content">
+              <div class="vna-canvas-wrapper" style="flex: 1.1; display: flex; flex-direction: column; gap: 4px; padding: 6px;">
+                <div style="font-size: 10px; color: var(--accent-cyan); font-weight: bold; letter-spacing: 0.5px; width: 100%;">TDR IMPEDANCE STEP PROFILE Z(x)</div>
+                <canvas id="tdr-canvas" width="310" height="195"></canvas>
+              </div>
+              <div class="vna-canvas-wrapper" style="flex: 1; display: flex; flex-direction: column; gap: 4px; padding: 6px;">
+                <div style="font-size: 10px; color: var(--accent-emerald); font-weight: bold; letter-spacing: 0.5px; width: 100%;">COUPLED CROSSTALK (NEXT / FEXT)</div>
+                <canvas id="crosstalk-canvas" width="270" height="195"></canvas>
+              </div>
+              <div class="vna-tab-sidebar" style="width: 175px;">
+                <div class="vna-metric-group">
+                  <div class="vna-sub-label">MIN / MAX IMPEDANCE</div>
+                  <div id="tdr-zrange-val" class="vna-stat-val" style="font-size: 12px;">43.5 / 167.8 Ω</div>
+                  <div class="vna-sub-target">Launch Dip / Via Spike</div>
+                </div>
+                <div class="vna-metric-group">
+                  <div class="vna-sub-label">PEAK NEXT (NEAR-END)</div>
+                  <div id="tdr-next-val" class="vna-stat-val" style="color: #f59e0b;">-32.4 dB</div>
+                </div>
+                <div class="vna-metric-group">
+                  <div class="vna-sub-label">PEAK FEXT (FAR-END)</div>
+                  <div id="tdr-fext-val" class="vna-stat-val" style="color: #38bdf8;">-45.1 dB</div>
+                </div>
+                <div class="vna-metric-group">
+                  <div class="vna-sub-label">ISOLATION STATUS</div>
+                  <div id="tdr-isolation-val" class="vna-stat-val" style="color: #10b981; font-size: 11px;">GOOD (&lt; -30dB)</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Nanopore Oscilloscope Tab -->
+            <div id="vna-tab-nanopore" class="vna-tab-content">
+              <div class="vna-canvas-wrapper" style="flex: 1; display: flex; flex-direction: column; gap: 4px; padding: 6px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                  <span style="font-size: 10px; color: var(--accent-cyan); font-weight: bold; letter-spacing: 0.5px;">NANOPORE IONIC CURRENT STREAM (H1 + LMP7721 TIA)</span>
+                  <span id="nano-scope-status" style="font-size: 10px; color: var(--accent-emerald); font-family: var(--font-mono);">● RUNNING 500 kS/s</span>
+                </div>
+                <canvas id="nanopore-canvas" width="600" height="195"></canvas>
+              </div>
+              <div class="vna-tab-sidebar" style="width: 215px;">
+                <div class="vna-metric-group">
+                  <div class="vna-sub-label">BASELINE CURRENT (I₀)</div>
+                  <div id="nano-baseline-val" class="vna-stat-val" style="color: #38bdf8;">2.50 nA</div>
+                  <div class="vna-sub-target">1M KCl @ 100 mV Bias</div>
+                </div>
+                <div class="vna-metric-group">
+                  <div class="vna-sub-label">RMS NOISE / SNR</div>
+                  <div id="nano-noise-val" class="vna-stat-val" style="font-size: 12px;">14.8 pA | 38.5 dB</div>
+                  <div class="vna-sub-target">BW = 79.6 kHz (1MΩ / 2pF)</div>
+                </div>
+                <div class="vna-metric-group">
+                  <div class="vna-sub-label">TRANSLOCATION EVENTS</div>
+                  <div id="nano-events-val" class="vna-stat-val" style="color: #10b981;">0 Events (0 Hz)</div>
+                  <div id="nano-dwell-val" class="vna-sub-target">Mean Dwell: 72 µs</div>
+                </div>
+                <!-- Interactive Controls -->
+                <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); padding: 6px 8px; border-radius: 6px; font-size: 10px;">
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                    <span>Pore Diam:</span>
+                    <span id="nano-diam-disp" style="color: var(--accent-cyan); font-weight: bold;">4.0 nm</span>
+                  </div>
+                  <input type="range" id="nano-diam-slider" min="1.5" max="10.0" step="0.5" value="4.0" style="width: 100%; margin-bottom: 4px;" oninput="updateNanoporeParams()" />
+
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                    <span>Bias Voltage:</span>
+                    <span id="nano-bias-disp" style="color: var(--accent-cyan); font-weight: bold;">100 mV</span>
+                  </div>
+                  <input type="range" id="nano-bias-slider" min="20" max="300" step="10" value="100" style="width: 100%;" oninput="updateNanoporeParams()" />
+                </div>
+              </div>
+            
+            <!-- Full-Wave FDTD Slice Tab -->
+            <div id="vna-tab-fdtd" class="vna-tab-content">
+              <div class="vna-canvas-wrapper" style="flex: 1; display: flex; flex-direction: column;">
+                <canvas id="fdtd-canvas" width="560" height="200" style="width: 100%; height: 100%; border-radius: 6px; background: #030712;"></canvas>
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 6px; padding: 0 4px;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <button id="fdtd-play-btn" class="tool-btn" style="padding: 2px 8px; font-size: 11px;" onclick="toggleFdtdPlayback()">⏸ Pause</button>
+                    <span style="font-size: 11px; color: var(--text-muted);">Frame: <span id="fdtd-frame-num" style="color: var(--accent-cyan); font-family: var(--font-mono);">1/15</span></span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 11px; color: var(--text-muted);">RF Freq:</span>
+                    <select id="fdtd-freq-select" class="tool-btn" style="padding: 2px 6px; font-size: 11px;" onchange="changeFdtdFreq(this.value)">
+                      <option value="2.4">2.4 GHz</option>
+                      <option value="5.0" selected>5.0 GHz</option>
+                      <option value="10.0">10.0 GHz</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div class="vna-tab-sidebar" style="width: 190px;">
+                <div class="vna-metric-group">
+                  <div class="vna-sub-label">YEE-CELL TIMESTEP (Δt)</div>
+                  <div id="fdtd-dt-val" class="vna-stat-val">1.04 ps</div>
+                </div>
+                <div class="vna-metric-group">
+                  <div class="vna-sub-label">PEAK ELECTRIC FIELD (E_z)</div>
+                  <div id="fdtd-peake-val" class="vna-stat-val" style="color: #00f0ff;">100.0 V/m</div>
+                </div>
+                <div class="vna-metric-group">
+                  <div class="vna-sub-label">GRID RESOLUTION</div>
+                  <div id="fdtd-grid-val" class="vna-stat-val">60 × 50 (Mur ABC)</div>
+                </div>
+                <div style="font-size: 10px; color: var(--text-muted); margin-top: auto; line-height: 1.3;">
+                  Simulates 2.5D TM Maxwell wave propagation, microstrip boundary confinement, and via diffraction.
+                </div>
+              </div>
+            </div>
+          </div>
           </div>
         </div>
       </main>

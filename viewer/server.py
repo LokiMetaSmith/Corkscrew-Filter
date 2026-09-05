@@ -28,9 +28,27 @@ from model_fusion_multiphysics import MultiPhysicsModelFusionOptimizer
 from cfd_fea_field_io import read_multiphysics_field_bin
 from cad_agent_tools import CADReasoningAgent, CADAgentToolRegistry
 from eda_agent_tools import EDAReasoningAgent, EDAAgentToolRegistry
+from eda_rf_driver import HighSpeedTransmissionLineEngine
 import time
+import math
+import cmath
+
+KICAD_PLUGIN_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "kicad_plugin"))
+if KICAD_PLUGIN_DIR not in sys.path:
+    sys.path.insert(0, KICAD_PLUGIN_DIR)
+
+from kicad_modifier import KiCadLayoutModifier
+from em_live_watcher import EMLiveSyncDaemon
+from tdr_crosstalk_engine import TDRCrosstalkEngine
+from nanopore_engine import NanoporeElectrophysiologyEngine
+from power_thermal_engine import PowerThermalEngine
+from drc_engine import DRCEngine
+from fdtd_engine import FullWaveFDTDEngine
+
 
 WEB_DIR = os.path.join(os.path.dirname(__file__), "web")
+DEFAULT_BOARD_PATH = r"C:\Users\Loki-VR\Documents\projects\Daemon Pore\daemon-pore\Amplifier\amplifier.kicad_pcb"
+
 
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
@@ -123,8 +141,222 @@ class MultiPhysicsViewerHandler(SimpleHTTPRequestHandler):
             }
             self._send_json(state)
 
+        elif path == "/api/kicad_rf_sweep":
+            query = urllib.parse.parse_qs(parsed.query)
+            net_name = query.get("net_name", ["/Signal_AMP"])[0]
+            z_load = float(query.get("z_load", [50.0])[0])
+            bit_rate_gbps = float(query.get("bit_rate", [10.0])[0])
+
+            state = self.kicad_state or {}
+            geom = state.get("board_geometry", {})
+            nets_summary = geom.get("nets_summary", {})
+            net_info = nets_summary.get(net_name, {})
+
+            w = float(net_info.get("trace_width_mm", 0.2))
+            l = float(net_info.get("total_length_mm", 15.0))
+            stackup = state.get("stackup", {})
+            h = float(stackup.get("substrate_height_mm", 0.8))
+            er = float(stackup.get("dielectric_constant", 2.1))
+            cu_t_um = float(stackup.get("copper_thickness_mm", 0.035)) * 1000.0
+
+            engine = HighSpeedTransmissionLineEngine()
+            z_res = engine.calculate_microstrip_z0(w, h, er, cu_t_um)
+            z0 = z_res["z0_ohms"]
+            e_eff = z_res.get("eps_eff", er)
+
+            freqs = [round(0.5 + i * (29.5 / 79.0), 2) for i in range(80)]
+            s11_list = []
+            s21_list = []
+            smith_points = []
+            zin_list = []
+
+            c_mm_s = 2.99792458e11
+            vp = c_mm_s / math.sqrt(max(1.0, e_eff))
+
+            for f_ghz in freqs:
+                f_hz = f_ghz * 1e9
+                omega = 2.0 * math.pi * f_hz
+                beta = omega / vp
+
+                rf_loss = engine.calculate_rf_loss_and_sparameters(
+                    trace_width_mm=w,
+                    substrate_height_mm=h,
+                    line_length_mm=l,
+                    frequency_ghz=f_ghz,
+                    dielectric_constant=er,
+                    copper_thickness_um=cu_t_um
+                )
+                s21_db = rf_loss["s21_insertion_loss_db"]
+                alpha_total_db = abs(s21_db)
+                alpha_np_mm = (alpha_total_db / 8.686) / max(l, 1.0)
+
+                gamma = complex(alpha_np_mm, beta)
+                gamma_l = gamma * l
+
+                tanh_gl = cmath.tanh(gamma_l)
+                zin = z0 * (z_load + z0 * tanh_gl) / (z0 + z_load * tanh_gl)
+
+                gamma_ref = (zin - z_load) / (zin + z_load)
+                s11_db = 20.0 * math.log10(max(1e-4, abs(gamma_ref)))
+
+                s11_list.append(round(s11_db, 2))
+                s21_list.append(round(s21_db, 2))
+                smith_points.append([round(gamma_ref.real, 4), round(gamma_ref.imag, 4)])
+                zin_list.append([round(zin.real, 2), round(zin.imag, 2)])
+
+            f_nyquist = bit_rate_gbps / 2.0
+            nyquist_loss = engine.calculate_rf_loss_and_sparameters(
+                trace_width_mm=w,
+                substrate_height_mm=h,
+                line_length_mm=l,
+                frequency_ghz=f_nyquist,
+                dielectric_constant=er,
+                copper_thickness_um=cu_t_um
+            )["s21_insertion_loss_db"]
+
+            v_ratio = 10.0 ** (nyquist_loss / 20.0)
+            mismatch_factor = 1.0 - abs(z0 - 50.0) / (z0 + 50.0)
+            eye_height_mv = round(max(50.0, 1000.0 * v_ratio * max(0.1, mismatch_factor)), 1)
+            ui_ps = 1000.0 / bit_rate_gbps
+            dispersion_ps = round(l * 0.15 * math.sqrt(bit_rate_gbps), 1)
+            jitter_ps = round(min(ui_ps * 0.65, 6.0 + dispersion_ps), 1)
+            eye_width_ps = round(max(5.0, ui_ps - jitter_ps), 1)
+
+            self._send_json({
+                "net_name": net_name,
+                "z0_ohms": round(z0, 2),
+                "trace_width_mm": w,
+                "total_length_mm": l,
+                "frequencies_ghz": freqs,
+                "s11_db": s11_list,
+                "s21_db": s21_list,
+                "smith_gamma": smith_points,
+                "zin": zin_list,
+                "eye_metrics": {
+                    "bit_rate_gbps": bit_rate_gbps,
+                    "eye_height_mv": eye_height_mv,
+                    "eye_width_ps": eye_width_ps,
+                    "total_jitter_ps": jitter_ps,
+                    "unit_interval_ps": round(ui_ps, 1)
+                }
+            })
+
+        elif path == "/api/kicad_tdr":
+            query = urllib.parse.parse_qs(parsed.query)
+            net_name = query.get("net_name", ["/Signal_AMP"])[0]
+            rise_time_ps = float(query.get("rise_time_ps", [25.0])[0])
+
+            state = self.kicad_state or {}
+            geom = state.get("board_geometry", {})
+            nets_summary = geom.get("nets_summary", {})
+            net_info = nets_summary.get(net_name, {})
+
+            w = float(net_info.get("trace_width_mm", 0.2))
+            l = float(net_info.get("total_length_mm", 35.0))
+            stackup = state.get("stackup", {})
+            h = float(stackup.get("substrate_height_mm", 0.8))
+            er = float(stackup.get("dielectric_constant", 2.1))
+            cu_t_um = float(stackup.get("copper_thickness_mm", 0.035)) * 1000.0
+
+            tdr_engine = TDRCrosstalkEngine()
+            tdr_profile = tdr_engine.simulate_tdr_profile(
+                trace_width_mm=w,
+                substrate_height_mm=h,
+                total_length_mm=l,
+                dielectric_constant=er,
+                copper_thickness_um=cu_t_um,
+                rise_time_ps=rise_time_ps
+            )
+
+            crosstalk = tdr_engine.simulate_crosstalk_spectra(
+                trace_width_mm=w,
+                trace_spacing_mm=0.35,
+                substrate_height_mm=h,
+                line_length_mm=l,
+                dielectric_constant=er,
+                copper_thickness_um=cu_t_um
+            )
+
+            tdr_profile["net_name"] = net_name
+            tdr_profile["crosstalk"] = crosstalk
+            self._send_json(tdr_profile)
+
+        elif path == "/api/nanopore_stream":
+            query = urllib.parse.parse_qs(parsed.query)
+            pore_diam = float(query.get("pore_diam_nm", [4.0])[0])
+            bias_mv = float(query.get("bias_mv", [100.0])[0])
+            event_rate = float(query.get("event_rate", [3000.0])[0])
+
+            engine = NanoporeElectrophysiologyEngine()
+            stream_data = engine.simulate_translocation_stream(
+                pore_diameter_nm=pore_diam,
+                bias_voltage_mv=bias_mv,
+                target_event_rate_hz=event_rate
+            )
+            self._send_json(stream_data)
+
+        elif path == "/api/kicad_power_thermal":
+            query = urllib.parse.parse_qs(parsed.query)
+            net_name = query.get("net_name", ["/Signal_AMP"])[0]
+            current_a = float(query.get("current_a", [0.50])[0])
+
+            state = self.kicad_state or {}
+            geom = state.get("board_geometry", {})
+            segments = geom.get("segments", [])
+            bounds = geom.get("bounds", {"width_mm": 55.0, "length_mm": 52.0})
+            stackup = state.get("stackup", {})
+            cu_t_um = float(stackup.get("copper_thickness_mm", 0.035)) * 1000.0
+
+            engine = PowerThermalEngine()
+            ir_res = engine.calculate_ir_drop(
+                net_name=net_name,
+                segments=segments,
+                load_current_a=current_a,
+                copper_thickness_um=cu_t_um
+            )
+            thermal_res = engine.simulate_board_thermal_grid(
+                board_width_mm=float(bounds.get("width_mm", 55.0)),
+                board_height_mm=float(bounds.get("length_mm", 52.0)),
+                board_thickness_mm=float(stackup.get("substrate_height_mm", 1.6)),
+                traces_dissipation_mw=ir_res.get("total_dissipation_mw", 45.0)
+            )
+            ir_res["thermal_heatmap"] = thermal_res
+            self._send_json(ir_res)
+
+        elif path == "/api/kicad_drc":
+            state = self.kicad_state or {}
+            geom = state.get("board_geometry", {})
+            segments = geom.get("segments", [])
+            bounds = geom.get("bounds", {})
+            board_path = state.get("board_path")
+
+            drc_engine = DRCEngine(board_path)
+            drc_res = drc_engine.inspect_layout(segments, bounds)
+            self._send_json(drc_res)
+
+        elif path == "/api/kicad_fdtd":
+            query = urllib.parse.parse_qs(parsed.query)
+            freq_ghz = float(query.get("freq_ghz", [5.0])[0])
+            net_name = query.get("net_name", ["/Signal_AMP"])[0]
+
+            state = self.kicad_state or {}
+            geom = state.get("board_geometry", {})
+            segments = geom.get("segments", [])
+            bounds = geom.get("bounds", {"width_mm": 55.0, "length_mm": 52.0})
+            stackup = state.get("stackup", {})
+            er = float(stackup.get("dielectric_constant", 2.1))
+
+            fdtd_engine = FullWaveFDTDEngine()
+            fdtd_res = fdtd_engine.run_fdtd_simulation(
+                board_width_mm=float(bounds.get("width_mm", 55.0)),
+                board_height_mm=float(bounds.get("length_mm", 52.0)),
+                trace_segments=[s for s in segments if s.get("net_name") == net_name] or segments[:20],
+                frequency_ghz=freq_ghz,
+                dielectric_constant=er
+            )
+            self._send_json(fdtd_res)
+
         else:
-            # Fallback to serving static HTML/JS/CSS
             super().do_GET()
 
     def do_POST(self):
@@ -287,6 +519,69 @@ class MultiPhysicsViewerHandler(SimpleHTTPRequestHandler):
                 "timestamp": time.time(),
                 "em_metrics": payload.get("em_metrics")
             })
+
+        elif path == "/api/kicad_update_trace":
+            board_path = payload.get("board_path")
+            if not board_path:
+                if MultiPhysicsViewerHandler.kicad_state:
+                    board_path = MultiPhysicsViewerHandler.kicad_state.get("board_path")
+                if not board_path and os.path.exists(DEFAULT_BOARD_PATH):
+                    board_path = DEFAULT_BOARD_PATH
+
+            net_name = payload.get("net_name", "/Signal_AMP")
+            try:
+                new_width_mm = float(payload.get("new_width_mm", 2.43))
+            except (ValueError, TypeError):
+                new_width_mm = 2.43
+
+            if not board_path or not os.path.exists(board_path):
+                self._send_json({"success": False, "error": f"Board file not found: {board_path}"}, 400)
+                return
+
+            modifier = KiCadLayoutModifier(board_path)
+            mod_res = modifier.update_net_trace_width(net_name, new_width_mm, create_backup=True)
+
+            if mod_res.get("success"):
+                try:
+                    daemon = EMLiveSyncDaemon(board_path)
+                    sync_payload = daemon.trigger_sync()
+                    if sync_payload:
+                        MultiPhysicsViewerHandler.kicad_state = sync_payload
+                        MultiPhysicsViewerHandler.kicad_state["connected"] = True
+                        mod_res["updated_em_metrics"] = sync_payload.get("em_metrics")
+                except Exception as e:
+                    mod_res["sync_warning"] = str(e)
+
+            self._send_json(mod_res)
+
+        elif path == "/api/kicad_autofix_drc":
+            violation_id = payload.get("violation_id", "DRC-AT-1")
+            board_path = payload.get("board_path")
+            if not board_path:
+                if MultiPhysicsViewerHandler.kicad_state:
+                    board_path = MultiPhysicsViewerHandler.kicad_state.get("board_path")
+                if not board_path and os.path.exists(DEFAULT_BOARD_PATH):
+                    board_path = DEFAULT_BOARD_PATH
+
+            if not board_path or not os.path.exists(board_path):
+                self._send_json({"success": False, "error": f"Board file not found: {board_path}"}, 400)
+                return
+
+            drc_engine = DRCEngine(board_path)
+            fix_res = drc_engine.execute_autofix(violation_id, board_path)
+
+            if fix_res.get("success"):
+                try:
+                    daemon = EMLiveSyncDaemon(board_path)
+                    sync_payload = daemon.trigger_sync()
+                    if sync_payload:
+                        MultiPhysicsViewerHandler.kicad_state = sync_payload
+                        MultiPhysicsViewerHandler.kicad_state["connected"] = True
+                        fix_res["updated_em_metrics"] = sync_payload.get("em_metrics")
+                except Exception as e:
+                    fix_res["sync_warning"] = str(e)
+
+            self._send_json(fix_res)
 
         else:
             self._send_json({"error": f"Unknown endpoint {path}"}, 404)

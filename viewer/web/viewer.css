@@ -631,3 +631,215 @@ input[type="range"]::-webkit-slider-thumb {
   transform: translate(-50%, -15px);
 }
 
+/* VNA & Signal Integrity Dock */
+.vna-dock {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(10, 14, 23, 0.94);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(0, 240, 255, 0.3);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.6);
+  z-index: 45;
+  transition: height 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.vna-dock.collapsed {
+  height: 42px;
+}
+
+.vna-dock:not(.collapsed) {
+  height: 290px;
+}
+
+.vna-dock-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 42px;
+  padding: 0 16px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.vna-dock-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.vna-icon {
+  font-size: 16px;
+}
+
+.vna-telemetry-pills {
+  display: flex;
+  gap: 8px;
+  margin-left: 12px;
+}
+
+.vna-pill {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(0, 240, 255, 0.1);
+  color: var(--accent-cyan);
+  border: 1px solid rgba(0, 240, 255, 0.25);
+}
+
+.vna-tabs {
+  display: flex;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 2px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+}
+
+.vna-tab-btn {
+  padding: 4px 10px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.vna-tab-btn.active {
+  background: var(--accent-blue);
+  color: #030712;
+  font-weight: 600;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+}
+
+.vna-dock-body {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.vna-tab-content {
+  display: none;
+  width: 100%;
+  height: 100%;
+  padding: 10px 16px;
+  gap: 16px;
+  box-sizing: border-box;
+}
+
+.vna-tab-content.active {
+  display: flex;
+}
+
+.vna-canvas-wrapper {
+  background: rgba(4, 7, 13, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 4px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.vna-tab-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 200px;
+}
+
+.vna-metric-group {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+
+.vna-sub-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+.vna-stat-val {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-top: 2px;
+}
+
+.vna-sub-target {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.vna-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.vna-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+/* DRC Copilot & Power Styles */
+.drc-violation-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+}
+
+.drc-badge-critical {
+  background: rgba(239, 68, 68, 0.25);
+  color: #f87171;
+  border: 1px solid #ef4444;
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: bold;
+  font-family: var(--font-mono);
+}
+
+.drc-badge-warning {
+  background: rgba(245, 158, 11, 0.25);
+  color: #fbbf24;
+  border: 1px solid #f59e0b;
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: bold;
+  font-family: var(--font-mono);
+}
+
+.drc-badge-advisory {
+  background: rgba(59, 130, 246, 0.25);
+  color: #60a5fa;
+  border: 1px solid #3b82f6;
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: bold;
+  font-family: var(--font-mono);
+}
+
+

@@ -297,6 +297,7 @@ class KiCadPcbParser:
     def _parse_component_pads(self):
         """Extracts component pads across all footprints, transforming them to world coordinates."""
         self.component_pads = []
+        self.components = []
         cx = self.board_bounds.get("center_x", 0.0)
         cy = self.board_bounds.get("center_y", 0.0)
 
@@ -313,8 +314,25 @@ class KiCadPcbParser:
             cos_r = math.cos(rad)
             sin_r = math.sin(rad)
 
+            fp_head = re.match(r'\(footprint\s+("[^"]*"|\S+)', fp)
             ref_m = re.search(r'\(property\s+"Reference"\s+"([^"]*)"', fp)
+            val_m = re.search(r'\(property\s+"Value"\s+"([^"]*)"', fp)
+            layer_fp_m = re.search(r'\(layer\s+("?[^"\)\s]+"?)', fp)
+
+            fp_pkg = fp_head.group(1).strip('"') if fp_head else "Unknown"
             ref_name = ref_m.group(1) if ref_m else ""
+            val_name = val_m.group(1) if val_m else ""
+            layer_fp = layer_fp_m.group(1).strip('"') if layer_fp_m else "F.Cu"
+
+            self.components.append({
+                "ref": ref_name,
+                "val": val_name,
+                "package": fp_pkg,
+                "x": round(fpx - cx, 4),
+                "y": round(fpy - cy, 4),
+                "rot": fprot,
+                "is_top": "F.Cu" in layer_fp
+            })
 
             pads = self._extract_s_exprs(fp, 'pad')
             for pad in pads:

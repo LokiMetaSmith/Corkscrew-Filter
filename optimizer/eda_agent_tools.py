@@ -17,6 +17,22 @@ import numpy as np
 from scipy.optimize import minimize_scalar, minimize
 
 from eda_rf_driver import HighSpeedTransmissionLineEngine, KiCadPcbExporter
+import sys
+KICAD_PLUGIN_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "kicad_plugin"))
+if KICAD_PLUGIN_DIR not in sys.path:
+    sys.path.insert(0, KICAD_PLUGIN_DIR)
+
+try:
+    from tdr_crosstalk_engine import TDRCrosstalkEngine
+    from nanopore_engine import NanoporeElectrophysiologyEngine
+    from power_thermal_engine import PowerThermalEngine
+    from drc_engine import DRCEngine
+    from fdtd_engine import FullWaveFDTDEngine
+    from kicad_modifier import KiCadLayoutModifier
+    from kicad_parser import KiCadPcbParser
+except Exception as _e:
+    print(f"[EDAAgentTools] Warning importing kicad_plugin engines: {_e}")
+
 
 
 # =====================================================================
@@ -146,6 +162,171 @@ EDA_TOOLS_SCHEMA = [
                 "required": ["trace_width_mm", "substrate_height_mm"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "push_trace_width_to_kicad",
+            "description": "Applies an optimized trace width directly to a KiCad PCB layout file (.kicad_pcb) with automatic safety backup.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "net_name": {
+                        "type": "string",
+                        "description": "Name of the target net to update (e.g. /Signal_AMP, /GUARD).",
+                        "default": "/Signal_AMP"
+                    },
+                    "new_width_mm": {
+                        "type": "number",
+                        "description": "New trace width in millimeters to write to the layout file."
+                    },
+                    "board_filepath": {
+                        "type": "string",
+                        "description": "Path to the .kicad_pcb file. If omitted, uses active board."
+                    }
+                },
+                "required": ["net_name", "new_width_mm"]
+            }
+        }
+    }
+,
+    {
+        "type": "function",
+        "function": {
+            "name": "run_tdr_simulation",
+            "description": "Simulates high-speed Time-Domain Reflectometry (TDR) step pulse impedance vs distance profile Z(x), pinpointing connector launch dips, microstrip plateaus, and inductive via spikes.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "net_name": {
+                        "type": "string",
+                        "description": "Target net name to simulate (e.g. /Signal_AMP).",
+                        "default": "/Signal_AMP"
+                    },
+                    "rise_time_ps": {
+                        "type": "number",
+                        "description": "Step pulse rise time in picoseconds (e.g. 25.0 ps).",
+                        "default": 25.0
+                    }
+                },
+                "required": ["net_name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "simulate_nanopore_signal",
+            "description": "Simulates biophysical nanopore electrophysiology, baseline ionic current I_0 in 1M KCl, TIA frontend noise floor, and single-molecule DNA translocation blockades.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pore_diameter_nm": {
+                        "type": "number",
+                        "description": "Pore diameter in nanometers (1.0 to 10.0 nm).",
+                        "default": 4.0
+                    },
+                    "bias_voltage_mv": {
+                        "type": "number",
+                        "description": "Trans-membrane bias voltage in millivolts (50 to 300 mV).",
+                        "default": 100.0
+                    },
+                    "event_rate_hz": {
+                        "type": "number",
+                        "description": "Translocation event frequency in Hz.",
+                        "default": 3000.0
+                    }
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calculate_ir_drop",
+            "description": "Computes DC IR-drop, trace resistance, current density (A/mm^2), Joule dissipation, and flags IPC-2152 bottlenecks.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "net_name": {
+                        "type": "string",
+                        "description": "Name of the target power or signal net.",
+                        "default": "/Signal_AMP"
+                    },
+                    "load_current_a": {
+                        "type": "number",
+                        "description": "DC load current in Amperes.",
+                        "default": 0.50
+                    },
+                    "supply_voltage_v": {
+                        "type": "number",
+                        "description": "Nominal supply rail voltage.",
+                        "default": 3.3
+                    }
+                },
+                "required": ["net_name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "inspect_board_drc",
+            "description": "Executes automated Design Rule Checking (DRC) and DFM analysis: detects acid traps (< 85 deg), clearance violations (< 0.15 mm), sensitive node shielding, and trace necking.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "board_filepath": {
+                        "type": "string",
+                        "description": "Path to target .kicad_pcb file. If omitted, inspects active board."
+                    }
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "auto_fix_drc_and_push",
+            "description": "Applies 1-click automated layout repair (chamfers acid traps to 45 degree miters, widens trace bottlenecks) and saves safely to .kicad_pcb with backup.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "violation_id": {
+                        "type": "string",
+                        "description": "ID of the violation to fix (e.g. DRC-AT-1, DRC-BNK-1).",
+                        "default": "DRC-AT-1"
+                    },
+                    "board_filepath": {
+                        "type": "string",
+                        "description": "Path to target .kicad_pcb file."
+                    }
+                },
+                "required": ["violation_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_fdtd_em_slice",
+            "description": "Executes 2.5D Yee-cell Full-Wave FDTD time-stepping to simulate propagating electromagnetic wavefronts, substrate fringing, and radiation.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "net_name": {
+                        "type": "string",
+                        "description": "Target net or trace to excite.",
+                        "default": "/Signal_AMP"
+                    },
+                    "frequency_ghz": {
+                        "type": "number",
+                        "description": "RF excitation frequency in GHz.",
+                        "default": 5.0
+                    }
+                }
+            }
+        }
     }
 ]
 
@@ -177,6 +358,20 @@ class EDAAgentToolRegistry:
                 return self._tool_evaluate_rf_transmission(arguments)
             elif name == "generate_kicad_pcb":
                 return self._tool_generate_kicad_pcb(arguments)
+            elif name == "push_trace_width_to_kicad":
+                return self._tool_push_trace_width_to_kicad(arguments)
+            elif name == "run_tdr_simulation":
+                return self._tool_run_tdr_simulation(arguments)
+            elif name == "simulate_nanopore_signal":
+                return self._tool_simulate_nanopore_signal(arguments)
+            elif name == "calculate_ir_drop":
+                return self._tool_calculate_ir_drop(arguments)
+            elif name == "inspect_board_drc":
+                return self._tool_inspect_board_drc(arguments)
+            elif name == "auto_fix_drc_and_push":
+                return self._tool_auto_fix_drc_and_push(arguments)
+            elif name == "run_fdtd_em_slice":
+                return self._tool_run_fdtd_em_slice(arguments)
             else:
                 return {"error": f"Unknown EDA tool: '{name}'"}
         except Exception as e:
@@ -331,6 +526,120 @@ class EDAAgentToolRegistry:
             "message": f"Successfully synthesized multi-format EM deliverables: KiCad ({written_pcb}), 3D Solid ({written_scad}), HyperLynx ({written_hyp}), and OpenEMS FDTD ({written_openems})"
         }
 
+    def _tool_push_trace_width_to_kicad(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        net_name = args.get("net_name", "/Signal_AMP")
+        new_w = float(args.get("new_width_mm", 2.43))
+        board_path = args.get("board_filepath")
+        if not board_path:
+            candidate = r"C:\Users\Loki-VR\Documents\projects\Daemon Pore\daemon-pore\Amplifier\amplifier.kicad_pcb"
+            if os.path.exists(candidate):
+                board_path = candidate
+            else:
+                return {"success": False, "error": "No active KiCad board filepath provided or discovered."}
+
+        import sys
+        kicad_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "kicad_plugin"))
+        if kicad_dir not in sys.path:
+            sys.path.insert(0, kicad_dir)
+
+        from kicad_modifier import KiCadLayoutModifier
+        modifier = KiCadLayoutModifier(board_path)
+        return modifier.update_net_trace_width(net_name, new_w, create_backup=True)
+
+
+
+
+    def _tool_run_tdr_simulation(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        net_name = args.get("net_name", "/Signal_AMP")
+        rise_time = float(args.get("rise_time_ps", 25.0))
+        engine = TDRCrosstalkEngine()
+        tdr_res = engine.simulate_tdr_profile(
+            trace_width_mm=0.25,
+            substrate_height_mm=0.8,
+            total_length_mm=45.0,
+            dielectric_constant=2.1,
+            copper_thickness_um=35.0,
+            rise_time_ps=rise_time
+        )
+        xtalk = engine.simulate_crosstalk_spectra(
+            trace_width_mm=0.25,
+            trace_spacing_mm=0.35,
+            substrate_height_mm=0.8,
+            line_length_mm=45.0,
+            dielectric_constant=2.1,
+            copper_thickness_um=35.0
+        )
+        tdr_res["net_name"] = net_name
+        tdr_res["crosstalk"] = xtalk
+        return tdr_res
+
+    def _tool_simulate_nanopore_signal(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        pore_d = float(args.get("pore_diameter_nm", 4.0))
+        bias = float(args.get("bias_voltage_mv", 100.0))
+        rate = float(args.get("event_rate_hz", 3000.0))
+        engine = NanoporeElectrophysiologyEngine()
+        return engine.simulate_translocation_stream(
+            pore_diameter_nm=pore_d,
+            bias_voltage_mv=bias,
+            target_event_rate_hz=rate
+        )
+
+    def _tool_calculate_ir_drop(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        net_name = args.get("net_name", "/Signal_AMP")
+        current_a = float(args.get("load_current_a", 0.50))
+        v_sup = float(args.get("supply_voltage_v", 3.3))
+        board_path = r"C:\Users\Loki-VR\Documents\projects\Daemon Pore\daemon-pore\Amplifier\amplifier.kicad_pcb"
+        parser = KiCadPcbParser(board_path) if os.path.exists(board_path) else None
+        segments = parser.segments if parser else []
+
+        engine = PowerThermalEngine()
+        ir_res = engine.calculate_ir_drop(
+            net_name=net_name,
+            segments=segments,
+            load_current_a=current_a,
+            supply_voltage_v=v_sup
+        )
+        thermal_res = engine.simulate_board_thermal_grid(
+            board_width_mm=55.0,
+            board_height_mm=52.0,
+            traces_dissipation_mw=ir_res.get("total_dissipation_mw", 45.0)
+        )
+        ir_res["thermal_summary"] = {
+            "peak_temp_c": thermal_res["t_max_c"],
+            "mean_temp_c": thermal_res["t_mean_c"],
+            "hotspots": thermal_res["hotspots"]
+        }
+        return ir_res
+
+    def _tool_inspect_board_drc(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        board_path = args.get("board_filepath") or r"C:\Users\Loki-VR\Documents\projects\Daemon Pore\daemon-pore\Amplifier\amplifier.kicad_pcb"
+        if not os.path.exists(board_path):
+            return {"error": f"Board file not found: {board_path}"}
+        parser = KiCadPcbParser(board_path)
+        drc = DRCEngine(board_path)
+        return drc.inspect_layout(parser.segments, parser.board_bounds)
+
+    def _tool_auto_fix_drc_and_push(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        violation_id = args.get("violation_id", "DRC-AT-1")
+        board_path = args.get("board_filepath") or r"C:\Users\Loki-VR\Documents\projects\Daemon Pore\daemon-pore\Amplifier\amplifier.kicad_pcb"
+        drc = DRCEngine(board_path)
+        return drc.execute_autofix(violation_id, board_path)
+
+    def _tool_run_fdtd_em_slice(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        freq = float(args.get("frequency_ghz", 5.0))
+        board_path = r"C:\Users\Loki-VR\Documents\projects\Daemon Pore\daemon-pore\Amplifier\amplifier.kicad_pcb"
+        parser = KiCadPcbParser(board_path) if os.path.exists(board_path) else None
+        segments = parser.segments if parser else []
+
+        engine = FullWaveFDTDEngine()
+        return engine.run_fdtd_simulation(
+            board_width_mm=55.0,
+            board_height_mm=52.0,
+            trace_segments=segments[:25],
+            frequency_ghz=freq,
+            dielectric_constant=2.1
+        )
+
 
 # =====================================================================
 # Autonomous EDA Reasoning Agent
@@ -349,11 +658,129 @@ class EDAReasoningAgent:
 
     def run_goal(self, goal_description: str) -> Dict[str, Any]:
         """
-        Executes a multi-turn design loop for high-speed transmission lines or chip interconnects.
+        Executes an autonomous multi-turn reasoning and tool invocation loop
+        spanning RF interconnects, DRC/DFM verification, Power/Thermal integrity,
+        TDR reflectometry, Nanopore electrophysiology, and full-wave FDTD fields.
         """
         print(f"\n[EDAAgent] Received EDA engineering goal:\n  \"{goal_description}\"")
         trace = []
+        gl = goal_description.lower()
 
+        # Branch 1: Design Rule Checking (DRC) & Auto-Fix
+        if any(k in gl for k in ["drc", "acid trap", "spacing", "violation", "clearance", "dfm"]):
+            print("[EDAAgent Turn 1] Running automated PCB DRC / DFM inspection...")
+            t1_res = self.registry.execute_tool("inspect_board_drc", {})
+            trace.append({"tool": "inspect_board_drc", "args": {}, "result": t1_res})
+
+            violations = t1_res.get("violations", [])
+            summary = (
+                f"DRC / DFM Inspection Complete:\n"
+                f"  - Total Violations: {t1_res.get('total_violations', 0)}\n"
+                f"  - Critical: {t1_res.get('critical_count', 0)}, Warnings: {t1_res.get('warning_count', 0)}, Advisory: {t1_res.get('advisory_count', 0)}\n"
+            )
+
+            if violations:
+                first_v = violations[0]
+                summary += f"  - Top Defect: {first_v.get('id')} ({first_v.get('rule')}) on net '{first_v.get('net_name')}' at ({first_v.get('x_mm')}, {first_v.get('y_mm')}) mm\n"
+
+                # Check if auto-fix requested or recommended
+                if any(f in gl for f in ["fix", "autofix", "repair", "resolve", "chamfer", "clean"]):
+                    print(f"[EDAAgent Turn 2] Auto-fixing defect {first_v.get('id')}...")
+                    t2_res = self.registry.execute_tool("auto_fix_drc_and_push", {"violation_id": first_v.get("id")})
+                    trace.append({"tool": "auto_fix_drc_and_push", "args": {"violation_id": first_v.get("id")}, "result": t2_res})
+                    summary += f"  - Auto-Fix Action: {t2_res.get('message', 'Resolved')}\n  - Backup Created: {t2_res.get('backup_created')}"
+
+            return {
+                "status": "completed",
+                "domain": "DRC_DFM",
+                "goal": goal_description,
+                "drc_results": t1_res,
+                "trace": trace,
+                "summary": summary
+            }
+
+        # Branch 2: Power Integrity & Thermal Simulation
+        if any(k in gl for k in ["power", "thermal", "ir drop", "voltage drop", "current density", "bottleneck", "heat", "hotspot"]):
+            net = "/Signal_AMP"
+            for candidate in ["vssa", "gnd", "3.3", "5v", "vdd"]:
+                if candidate in gl:
+                    net = candidate.upper()
+                    break
+
+            print(f"[EDAAgent Turn 1] Simulating DC IR drop and current density for net '{net}'...")
+            t1_args = {"net_name": net, "load_current_a": 0.50, "supply_voltage_v": 3.3}
+            t1_res = self.registry.execute_tool("calculate_ir_drop", t1_args)
+            trace.append({"tool": "calculate_ir_drop", "args": t1_args, "result": t1_res})
+
+            thermal = t1_res.get("thermal_summary", {})
+            summary = (
+                f"Power & Thermal Integrity Analysis Complete for net '{net}':\n"
+                f"  - Supply Voltage: {t1_res.get('supply_voltage_v')} V -> Final: {t1_res.get('final_voltage_v')} V\n"
+                f"  - Total IR Drop: {t1_res.get('total_ir_drop_mv')} mV ({t1_res.get('ir_drop_percent')}%, Status: {t1_res.get('status')})\n"
+                f"  - Max Current Density: {t1_res.get('max_current_density_a_mm2')} A/mm^2 (IPC-2152 Limit: 35.0 A/mm^2)\n"
+                f"  - Conductor Dissipation: {t1_res.get('total_dissipation_mw')} mW\n"
+                f"  - Board Peak Temperature: {thermal.get('peak_temp_c', 22.0)} °C across {len(thermal.get('hotspots', []))} IC thermal sources."
+            )
+
+            return {
+                "status": "completed",
+                "domain": "POWER_THERMAL",
+                "goal": goal_description,
+                "ir_drop_results": t1_res,
+                "trace": trace,
+                "summary": summary
+            }
+
+        # Branch 3: Time-Domain Reflectometry (TDR) & Crosstalk
+        if any(k in gl for k in ["tdr", "reflectometry", "crosstalk", "next", "fext", "discontinuity"]):
+            print("[EDAAgent Turn 1] Simulating high-speed TDR profile and crosstalk...")
+            t1_args = {"net_name": "/Signal_AMP", "rise_time_ps": 25.0}
+            t1_res = self.registry.execute_tool("run_tdr_simulation", t1_args)
+            trace.append({"tool": "run_tdr_simulation", "args": t1_args, "result": t1_res})
+
+            xtalk = t1_res.get("crosstalk", {})
+            summary = (
+                f"TDR & Coupled Crosstalk Analysis Complete for net '/Signal_AMP':\n"
+                f"  - Characteristic Impedance Z0: {t1_res.get('z0_ohms')} Ohms (Min: {t1_res.get('z_min_ohms')} Ohms, Max: {t1_res.get('z_max_ohms')} Ohms)\n"
+                f"  - Discontinuities Identified: {len(t1_res.get('discontinuities', []))} physical markers (SMA launch dip, trace plateau, via spike)\n"
+                f"  - Peak NEXT: {xtalk.get('peak_next_db')} dB, Peak FEXT: {xtalk.get('peak_fext_db')} dB\n"
+                f"  - Isolation Status: {xtalk.get('isolation_status', 'GOOD')}"
+            )
+
+            return {
+                "status": "completed",
+                "domain": "TDR_CROSSTALK",
+                "goal": goal_description,
+                "tdr_results": t1_res,
+                "trace": trace,
+                "summary": summary
+            }
+
+        # Branch 4: Biophysical Nanopore Electrophysiology Digital Twin
+        if any(k in gl for k in ["nanopore", "translocation", "electrophysiology", "femtoamp", "dna", "blockade"]):
+            print("[EDAAgent Turn 1] Simulating nanopore electrophysiology stream...")
+            t1_args = {"pore_diameter_nm": 4.0, "bias_voltage_mv": 100.0, "event_rate_hz": 3000.0}
+            t1_res = self.registry.execute_tool("simulate_nanopore_signal", t1_args)
+            trace.append({"tool": "simulate_nanopore_signal", "args": t1_args, "result": t1_res})
+
+            summary = (
+                f"Nanopore Electrophysiology Digital Twin Stream Simulated:\n"
+                f"  - Open-Channel Baseline Current I0: {t1_res.get('baseline_current_na')} nA in 1M KCl at 100 mV\n"
+                f"  - Analog Frontend Bandwidth: {t1_res.get('tia_bandwidth_khz')} kHz (R1=1M, C1=2pF)\n"
+                f"  - Integrated Frontend RMS Noise: {t1_res.get('rms_noise_pa')} pA\n"
+                f"  - Translocation Blockades Detected: {t1_res.get('events_detected')} events (Mean Dwell: {t1_res.get('mean_dwell_us')} us, SNR: {t1_res.get('snr_db')} dB)"
+            )
+
+            return {
+                "status": "completed",
+                "domain": "BIO_NANOPORE",
+                "goal": goal_description,
+                "nanopore_results": t1_res,
+                "trace": trace,
+                "summary": summary
+            }
+
+        # Branch 5: Default RF Interconnect Optimization Loop
         # Turn 1: Optimize Trace Impedance (Target 50 Ohm Single-Ended or 100 Ohm Differential)
         is_diff = "diff" in goal_description.lower() or "100" in goal_description
         target_z = 100.0 if is_diff else 50.0
